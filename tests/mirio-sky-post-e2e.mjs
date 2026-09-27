@@ -5,7 +5,7 @@ const browser=await chromium.launch({executablePath:process.env.CHROMIUM,args:['
 const page=await browser.newPage({viewport:{width:800,height:600}}),errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 try {
-await page.goto(`${process.env.BASE_URL ?? 'http://127.0.0.1:8766/'}?test`);await page.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled,null,{timeout:120000});
+await page.goto(`${process.env.BASE_URL ?? 'http://127.0.0.1:8766/'}?test&menu`);await page.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled,null,{timeout:120000});
 await page.click('[data-level="sky"]');await page.click('#start');await page.waitForFunction(()=>window.__mirio.snapshot().chapterRun?.countdown===0);
 // Steer through the actual keyboard pipeline; no simulation seeks or state writes.
 await page.evaluate(()=>{

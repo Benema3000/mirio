@@ -11,7 +11,7 @@ try {
     const name=route.request().url().split('three@0.186.0/')[1];
     await route.fulfill({body:await readFile(fileURLToPath(new URL('../node_modules/three/',import.meta.url))+name),contentType:'text/javascript',headers:{'access-control-allow-origin':'*'}});
   });
-  await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8767/'}?test`);
+  await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8767/'}?test&menu`);
   await page.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled);
   await page.click('[data-level="kart"]');await page.click('#start');
   await page.waitForFunction(()=>window.__mirio.snapshot().race.state==='race',null,{timeout:180000});

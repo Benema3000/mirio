@@ -7,6 +7,7 @@ import { Adventure } from './adventure.js';
 import { SpringGarden } from './garden.js';
 import { MeadowPlayground } from './meadow-playground.js';
 import { MoonPlayground } from './moon-playground.js';
+import { HubWorld } from './hub-world.js';
 import { EnemySystem } from './enemies.js';
 import { Wildlife } from './wildlife.js';
 import { Biplane, chooseBiplaneHome } from './biplane.js';
@@ -37,6 +38,8 @@ const CUTSCENE_FLY = 1.8;
 const CUTSCENE_KART = 2.8;
 const MAX_FRAME = 1 / 15;
 const TEST_MODE = new URLSearchParams(location.search).has('test');
+// Focused level suites keep their old navigation fixture; real play starts in the hub.
+const TEST_MENU = TEST_MODE && new URLSearchParams(location.search).has('menu');
 
 const BIT_RADIUS = 1.3;
 const FLAG_RADIUS = 2.4;
@@ -176,6 +179,7 @@ async function main() {
 
   const adventure = new Adventure(scene, level);
   const chapterGames = new Map();
+  let hub = null;
   let selectedLevel = 'adventure';
   let chapterGame = null;
   let chapterCountdown = 0;
@@ -461,6 +465,13 @@ async function main() {
   // ---- HUD ---------------------------------------------------------------
   const hud = { bits: -1, hearts: -1, hp: -1 };
   function renderHud(force = false) {
+    if (state === 'hub') {
+      const visit = hub.snapshot();
+      for (const id of ['hearts', 'ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud', 'chapter-hud']) $(id).hidden = true;
+      $('chapter').textContent = 'STERNENHOF';
+      $('objective').textContent = visit.near ? `→ ${visit.near.label}` : 'Vier Tore · Deine Reise';
+      return;
+    }
     if (chapterGame && (state === 'chapter' || state === 'win')) {
       const run = chapterGame.snapshot();
       $('hearts').hidden = true;
@@ -1070,7 +1081,7 @@ async function main() {
     }
   }
 
-  function start() {
+  function startLevel() {
     paused = false;
     $('pause').classList.add('hidden');
     document.body.classList.remove('paused');
@@ -1082,7 +1093,8 @@ async function main() {
     sound.biplane(null);
     sound.ambience({active: false});
     chapterGame = null;
-    document.body.classList.remove('chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    document.body.classList.remove('hub-mode', 'chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    $('pause-menu').hidden = false;
     input.reset();
     resetGame();
     newRun();
@@ -1133,7 +1145,49 @@ async function main() {
     renderHud(true);
   }
 
-  function returnToMenu() {
+  function enterHub(lastLevel = null) {
+    ++runGeneration;
+    runToken = finishedRun = null;
+    paused = false;
+    chapterGame = null;
+    input.enabled = false;
+    input.reset();
+    sound.unlock();
+    sound.startMusic();
+    sound.setPaused(false);
+    sound.engine(null);
+    sound.biplane(null);
+    sound.stopVoices();
+    sound.setScene('explore');
+    resetGame();
+    state = 'hub';
+    hub ??= new HubWorld(art);
+    hub.reset({completed: Object.keys(CHAPTERS).filter(id => readPersonalBest(id)), lastLevel});
+    camera.fov = baseFov();
+    camera.updateProjectionMatrix();
+    document.body.classList.remove('paused', 'racing', 'flying', 'chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    document.body.classList.add('playing', 'hub-mode');
+    for (const id of ['title', 'win', 'pause']) $(id).classList.add('hidden');
+    $('toast').classList.remove('show');
+    $('pause-menu').hidden = true;
+    $('chapter-guide').hidden = false;
+    $('chapter-guide').textContent = 'Laufe in ein Tor. Jede Reise hat ihre eigene Bestzeit. Im Sternenhof läuft keine Uhr.';
+    $('btn-jump').textContent = '↑';
+    $('btn-jump').setAttribute('aria-label', 'Springen');
+    $('btn-spin').textContent = '⟳';
+    $('btn-spin').setAttribute('aria-label', 'Drehen');
+    const hubHint = input.gamepadConnected ? 'Linker Stick laufen · A springen · Laufe in ein Tor'
+      : document.body.classList.contains('touch') ? 'Links laufen · ↑ springen · Laufe in ein Tor'
+      : 'WASD / Pfeile laufen · Leertaste springen · Laufe in ein Tor';
+    hint(hubHint, 9);
+    hub.render(camera, 0, {reducedMotion});
+    input.enabled = true;
+    renderHud(true);
+    $('game').focus();
+  }
+
+  function leaveLevel() {
+    if (!TEST_MENU) { enterHub(selectedLevel); return; }
     ++runGeneration;
     runToken = finishedRun = null;
     paused = false;
@@ -1161,12 +1215,25 @@ async function main() {
     document.querySelector(`[data-level="${selectedLevel}"]`).focus();
   }
 
+  function start() {
+    enterFullscreen();
+    if (TEST_MENU) startLevel();
+    else enterHub();
+  }
   startButton.addEventListener('click', start);
-  $('again').addEventListener('click', start);
+  $('again').addEventListener('click', startLevel);
   $('score-form').addEventListener('submit', sendHighScore);
-  $('pause-menu').addEventListener('click', returnToMenu);
-  $('win-menu').addEventListener('click', returnToMenu);
-  for (const button of document.querySelectorAll('[data-level]')) button.addEventListener('click', () => { sound.play('click'); selectLevel(button.dataset.level); });
+  $('pause-menu').addEventListener('click', leaveLevel);
+  $('win-menu').addEventListener('click', leaveLevel);
+  for (const button of document.querySelectorAll('[data-level]')) button.addEventListener('click', () => {
+    sound.play('click');
+    selectLevel(button.dataset.level);
+    if (!TEST_MENU) { $('quick-dialog').close(); startLevel(); }
+  });
+  if (TEST_MENU) $('start').before($('chapter-select'));
+  const showQuick = () => { updatePersonalBests(); $('quick-dialog').showModal(); };
+  $('title-quick').addEventListener('click', showQuick);
+  $('pause-quick').addEventListener('click', showQuick);
   selectLevel('adventure');
   $('show-times').addEventListener('click', () => $('scores-dialog').showModal());
   $('show-help').addEventListener('click', () => $('help-dialog').showModal());
@@ -1196,6 +1263,7 @@ async function main() {
     player.spinRequest = false;
     player.poundRequest = false;
     biplane.clearIntent();
+    hub?.clearIntent();
     sound.setPaused(paused);
     document.body.classList.toggle('paused', paused);
     $('pause').classList.toggle('hidden', !paused);
@@ -1205,7 +1273,12 @@ async function main() {
       $('resume').focus();
     } else $('pause-button').focus();
   }
-  input.onPause = () => setPaused(!paused);
+  input.onPause = () => {
+    if (document.querySelector('dialog[open]')) return;
+    if (state === 'title') { start(); return; }
+    if (state === 'win') { leaveLevel(); return; }
+    setPaused(!paused);
+  };
   $('pause-button').addEventListener('click', () => setPaused(true));
   $('resume').addEventListener('click', () => setPaused(false));
   $('ride-action').addEventListener('click', e => {
@@ -1263,6 +1336,11 @@ async function main() {
   startButton.disabled = false;
   startButton.textContent = 'Spielen';
   $('status').textContent = '';
+  if (!TEST_MENU) {
+    $('chapter-description').textContent = 'Vier Tore führen vom Sternenhof zu vier Reisen.';
+    $('chapter-keys').textContent = 'WASD / Pfeile laufen · Leertaste springen · Laufe in ein Tor';
+    $('chapter-touch').textContent = 'Links laufen · ↑ springen · Laufe in ein Tor';
+  }
 
   // ---- Loop ------------------------------------------------------------------
   let last = performance.now();
@@ -1270,6 +1348,43 @@ async function main() {
   let frames = 0;
   let fpsT = 0;
   let fps = 0;
+  const menuPad = {jump: false, spin: false};
+
+  function menuController() {
+    const jump = Boolean(input.padButtons[0]), spin = Boolean(input.padButtons[1]);
+    const jumpPressed = jump && !menuPad.jump, spinPressed = spin && !menuPad.spin;
+    menuPad.jump = jump; menuPad.spin = spin;
+    if (document.querySelector('dialog[open]')) return;
+    if (spinPressed && (paused || state === 'win')) {
+      if (state === 'hub') setPaused(false);
+      else leaveLevel();
+      return;
+    }
+    if (!jumpPressed) return;
+    if (state === 'title') start();
+    else if (state === 'win') startLevel();
+    else if (paused) setPaused(false);
+  }
+
+  function hubFrame(dt, raw) {
+    sound.setScene('explore');
+    for (const event of hub.update(dt, input, camera, {reducedMotion})) {
+      if (event.type === 'enter') {
+        selectLevel(event.level);
+        startLevel();
+        return;
+      }
+      sound.play(event.type === 'jump' ? ['jump', 'jump2', 'triple'][(event.level ?? 1) - 1] : event.type);
+    }
+    const visit = hub.snapshot();
+    sound.footstep({dt, speed: Math.hypot(...visit.velocity), grounded: visit.grounded, surface: 'grass'});
+    sound.ambience({active: true, dt});
+    if (hintTimer > 0) { hintTimer -= dt; if (hintTimer <= 0) $('hint').classList.remove('show'); }
+    hub.render(camera, dt, {reducedMotion});
+    governor.update(raw);
+    renderer.render(hub.scene, camera);
+    renderHud();
+  }
 
   function chapterFrame(dt, raw) {
     const runBefore = chapterGame.snapshot();
@@ -1313,7 +1428,9 @@ async function main() {
     }
 
     input.update(paused ? 0 : dt);
+    menuController();
     if (paused || document.hidden) return;
+    if (state === 'hub') { hubFrame(dt, raw); return; }
     if (chapterGame && (state === 'chapter' || state === 'win')) {
       chapterFrame(dt, raw);
       return;
@@ -1409,6 +1526,7 @@ async function main() {
     window.__mirio = {
       snapshot: () => ({
         state,
+        hub: hub?.snapshot() ?? null,
         selectedLevel,
         cameraUp: camera.up.toArray(),
         chapterRun: chapterGame ? {...chapterGame.snapshot(), countdown: chapterCountdown} : null,
@@ -1448,6 +1566,7 @@ async function main() {
         winVisible: !$('win').classList.contains('hidden'),
       }),
       layout: () => ({
+        hub: hub?.layout() ?? null,
         planets: level.planets.map((p) => ({ id: p.id, center: p.center.toArray(), radius: p.radius })),
         flags: level.flags.map((f) => ({ planet: f.planet.id, dir: f.dir.toArray() })),
         stones: level.stones.map((s) => ({ planet: s.planet.id, dir: s.dir.toArray(), top: s.top })),

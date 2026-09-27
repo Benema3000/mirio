@@ -52,7 +52,7 @@ try {
     if (url.origin !== origin.origin) errors.push(`unexpected external POST: ${url.origin}`);
     if (url.pathname.endsWith('/api/times.php')) posts.push(request.postDataJSON());
   });
-  await page.goto(`${BASE}?test`, {waitUntil: 'domcontentloaded', timeout: 120000});
+  await page.goto(`${BASE}?test&menu`, {waitUntil: 'domcontentloaded', timeout: 120000});
   await until(page, () => window.__mirio && !document.getElementById('start').disabled);
   let firstBest = null;
 

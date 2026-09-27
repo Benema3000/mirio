@@ -45,7 +45,7 @@ async function open(browser, options) {
     };
     Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [window.__testPad] });
   });
-  await page.goto(`${BASE}?test`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}?test&menu`, { waitUntil: 'domcontentloaded' });
   await ready(page);
   return { context, page, errors };
 }

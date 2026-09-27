@@ -13,7 +13,7 @@ const snap=()=>page.evaluate(()=>window.__mirio.snapshot());
 const wait=fn=>page.waitForFunction(fn,null,{timeout:60000});
 const gameTime=async seconds=>{const target=(await snap()).chapterRun.time+seconds;await page.waitForFunction(t=>window.__mirio.snapshot().chapterRun.time>=t,target,{timeout:60000});};
 try{
-  await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8766/'}?test`);
+  await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8766/'}?test&menu`);
   await wait(()=>window.__mirio&&!document.querySelector('#start').disabled);
   await page.tap('[data-level="ribbon"]');await page.tap('#start');await wait(()=>window.__mirio.snapshot().chapterRun?.countdown===0);
   for(const id of ['#btn-spin','#btn-jump','#pause-button']){

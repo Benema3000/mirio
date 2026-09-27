@@ -35,7 +35,7 @@ try {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto(`${BASE}?test`, {waitUntil: 'domcontentloaded', timeout: 120000});
+  await page.goto(`${BASE}?test&menu`, {waitUntil: 'domcontentloaded', timeout: 120000});
   await until(page, () => window.__mirio && !document.getElementById('start').disabled, null, 120000);
   await page.click('#start');
   await until(page, () => window.__mirio.snapshot().state === 'play');

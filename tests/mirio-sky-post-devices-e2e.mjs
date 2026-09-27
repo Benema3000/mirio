@@ -5,7 +5,7 @@ const context=await b.newContext({viewport:{width:390,height:844},isMobile:true,
 const p=await context.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
 try {
 await p.addInitScript(()=>{window.pad={connected:false,mapping:'standard',axes:[0,0,0,0],buttons:Array.from({length:16},()=>({pressed:false,value:0}))};Object.defineProperty(navigator,'getGamepads',{value:()=>[window.pad]});});
-await p.goto(`${process.env.BASE_URL ?? 'http://127.0.0.1:8766/'}?test`);await p.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled,null,{timeout:120000});
+await p.goto(`${process.env.BASE_URL ?? 'http://127.0.0.1:8766/'}?test&menu`);await p.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled,null,{timeout:120000});
 await p.tap('[data-level=sky]');await p.tap('#start');await p.waitForFunction(()=>window.__mirio.snapshot().chapterRun?.countdown===0);
 await p.tap('#btn-spin');await p.waitForFunction(()=>window.__mirio.snapshot().chapterRun.boost>0);
 await p.tap('#btn-jump');await p.waitForFunction(()=>window.__mirio.snapshot().chapterRun.roll>0);

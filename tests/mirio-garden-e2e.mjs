@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const {chromium}=await import(process.env.PLAYWRIGHT??'playwright');
 const browser=await chromium.launch({...(process.env.CHROMIUM?{executablePath:process.env.CHROMIUM}:{}),args:['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:960,height:640}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
-await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8766/'}?test`);await page.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled);await page.click('[data-level="ribbon"]');await page.click('#start');await page.waitForFunction(()=>window.__mirio.snapshot().chapterRun?.countdown===0);
+await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8766/'}?test&menu`);await page.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled);await page.click('[data-level="ribbon"]');await page.click('#start');await page.waitForFunction(()=>window.__mirio.snapshot().chapterRun?.countdown===0);
 await page.evaluate(()=>{
  const keys=new Set();window.pilot={target:null,done:false,failure:null};
  const key=(code,down)=>{if(keys.has(code)===down)return;if(down)keys.add(code);else keys.delete(code);window.dispatchEvent(new KeyboardEvent(down?'keydown':'keyup',{code,bubbles:true}));};

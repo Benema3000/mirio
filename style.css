@@ -633,6 +633,15 @@ body.flying #toast { top: max(130px, 18%); }
 #title #start { min-width: 224px; font-size: 23px; }
 .menu-links { margin-top: 17px; display: flex; justify-content: center; gap: 20px; }
 .menu-links .text-button { text-decoration: none; border: 1px solid #fff2; border-radius: 22px; padding: 9px 18px; color: #d2e2ed; background: #10263b85; }
+.quick-link { margin-top: 14px; font-size: 11px; opacity: .8; }
+#quick-dialog { width: min(760px,calc(100% - 40px)); }
+#quick-dialog .chapter-select { grid-template-columns: repeat(2,minmax(0,1fr)); margin: 24px 0 0; }
+.controller-menu { display: block; margin-top: 14px; font-size: 11px; color: #adc3d5; }
+body.hub-mode #hud > .pill, body.hub-mode #journey .compass { display: none; }
+body.hub-mode #hud { justify-content: flex-end; }
+body.hub-mode #journey { top: max(25px,calc(env(safe-area-inset-top) + 16px)); max-width: calc(100% - 180px); }
+body.hub-mode #journey strong { font-size: 12px; }
+body.hub-mode .field-guide, body.hub-mode .move-guide, body.hub-mode .trail-tip, body.hub-mode .plane-guide { display: none; }
 .menu-dialog { width: min(470px,calc(100% - 40px)); max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid #c6e5e840; border-radius: 24px; padding: 36px 30px 28px; color: #edf6f0; background: #10283af8; box-shadow: 0 25px 100px #0008; }
 .menu-dialog::backdrop { background: #07121fb8; backdrop-filter: blur(8px); }
 .menu-dialog h2 { font-size: 28px; color: #ffe3a0; padding-right: 20px; }

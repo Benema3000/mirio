@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 
 const { chromium, webkit } = await import(process.env.PLAYWRIGHT ?? 'playwright');
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:8766/';
-const GAME_URL = `${BASE}?test`;
+const GAME_URL = `${BASE}?test&menu`;
 const SHOTS = process.env.SHOTS;
 // Software WebGL for headless Chromium on a box without a GPU.
 const GL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];

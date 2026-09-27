@@ -9,7 +9,7 @@ async function gameTime(delta){const target=(await snap()).time+delta;await wait
 async function placeWorld(pos){await page.evaluate(pos=>{const moon=window.__mirio.layout().planets.find(p=>p.id==='mond'),r=pos.map((v,i)=>v-moon.center[i]),length=Math.hypot(...r);window.__mirio.teleport('mond',r.map(v=>v/length),length-moon.radius);},pos);}
 const raised=(p,h)=>p.pos.map((v,i)=>v+p.up[i]*h);
 try{
-  await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8766/'}?test`);await wait(()=>window.__mirio&&!document.querySelector('#start').disabled);await page.click('#start');
+  await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8766/'}?test&menu`);await wait(()=>window.__mirio&&!document.querySelector('#start').disabled);await page.click('#start');
   let map=await page.evaluate(()=>window.__mirio.layout());
   await placeWorld(raised(map.moon.platforms[0],.3));await wait(()=>window.__mirio.snapshot().moon.visited.length===1);
   const before=(await snap()).player.pos;await gameTime(.6);assert.ok(Math.hypot(...(await snap()).player.pos.map((v,i)=>v-before[i]))>.1);

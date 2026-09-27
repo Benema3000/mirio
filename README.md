@@ -67,10 +67,13 @@ round with the kart and widens when it goes fast.
 
 ## Four adventures
 
-The start screen is a compact game menu: the original **Mirio** logo, four
-actual gameplay previews and a Play button. Help/credits and the selected
-level's time board open on demand. Every level is available immediately; pause
-or the result screen can return to the selector.
+The original **Mirio** logo opens into **Sternenhof**, a playable garden hub.
+Walk into one of four landmark portals to start an adventure. Every level is
+available immediately; pause and results return to the hub, while replay
+restarts the same level. Completed adventures light their portal medals.
+The hub has no timer or score. Help, time boards and an optional quick selector
+open on demand. Spin at its musical flower to summon birds, or ground-pound
+for a spring jump; the soft garden rim keeps practice safe.
 
 | Level | What you play | Main controls |
 | --- | --- | --- |
@@ -350,11 +353,16 @@ optional and only happens when the player submits a nickname.
   names, tokens, replays, the rate limit, ordering, the top 100, and that a
   damaged file is left alone.
 
-`?test` adds `window.__mirio` (state snapshot, layout, teleport, raceSkip and chapterSeek). It is a
-cheat for tests, harmless in a kid's game, and absent without the parameter.
+`?test` adds `window.__mirio` (state snapshot, layout, teleport, raceSkip and
+chapterSeek). It is absent without the parameter. Focused level suites use
+`?test&menu` to enter levels directly; the hub suite follows normal navigation.
 
 The playground update adds:
 
+- `tests/mirio-hub-e2e.mjs`: normal start, portal travel, returns, replay,
+  completion markers and keyboard/controller/touch hub controls.
+- `tests/mirio-hub-toys-e2e.mjs`: walk, spin and ground-pound at the hub flower;
+  verify its spring and the garden's safe boundary.
 - `tests/mirio-meadow-e2e.mjs`: flight errands, landing, bridge exploration,
   squirrel guide, picnic, recovery and replay.
 - `tests/mirio-moon-e2e.mjs`: moving-island jump, guardian launch, fixed boss

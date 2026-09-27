@@ -4,7 +4,7 @@ const b=await chromium.launch({executablePath:process.env.CHROMIUM,args:['--no-s
 const shot = async name => {if(process.env.SHOTS)await p.screenshot({path:`${process.env.SHOTS}/${name}.png`});};
 const p=await b.newPage({viewport:{width:800,height:600}}), errors=[];p.on('pageerror',e=>errors.push(e.message));
 try{
-await p.goto(`${process.env.BASE_URL ?? 'http://127.0.0.1:8766/'}?test`);await p.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled,null,{timeout:120000});
+await p.goto(`${process.env.BASE_URL ?? 'http://127.0.0.1:8766/'}?test&menu`);await p.waitForFunction(()=>window.__mirio&&!document.querySelector('#start').disabled,null,{timeout:120000});
 await p.click('#start');await p.waitForFunction(()=>window.__mirio.snapshot().player.onGround);await p.keyboard.press('KeyF');await p.waitForFunction(()=>window.__mirio.snapshot().biplane.mounted);
 await p.evaluate(()=>{
 const held=new Set(),set=(code,on)=>{if(held.has(code)===on)return;window.dispatchEvent(new KeyboardEvent(on?'keydown':'keyup',{code,key:code,bubbles:true}));on?held.add(code):held.delete(code);};

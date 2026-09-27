@@ -23,7 +23,7 @@ async function load(context) {
     const path=route.request().url().split('three@0.186.0/')[1];
     await route.fulfill({body:await readFile(fileURLToPath(new URL('../node_modules/three/',import.meta.url))+path),contentType:'text/javascript',headers:{'access-control-allow-origin':'*'}});
   });
-  await page.goto(`${base}?test`);await wait(page,()=>window.__mirio&&!document.querySelector('#start').disabled);
+  await page.goto(`${base}?test&menu`);await wait(page,()=>window.__mirio&&!document.querySelector('#start').disabled);
   await page.click('[data-level="kart"]');await page.click('#start');
   await wait(page,()=>window.__kartRace.state==='race');return page;
 }
