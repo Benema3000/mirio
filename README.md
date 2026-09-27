@@ -125,6 +125,31 @@ lakeside reeds, falling petals and soft cloud wisps. Decorative batches are
 horizon-culled and reduced on slower devices. Miro's original images, sampled
 textures, character, rocket, and floor construction remain unchanged.
 
+## Ride the Wiesensummer
+
+A little turquoise-and-cream biplane waits beside the starting meadow. Press
+**F**, controller **Y**, or its on-screen boarding button to hop in. Mirio's
+original model sits in the cockpit; the aircraft is original procedural geometry.
+
+- **Steer:** WASD / arrows, the left stick, or the touch joystick. Releasing the
+  controls slows the plane into a gentle low hover.
+- **Climb:** hold Space / A / ↑. The wheels never rise above 4.5 metres over the
+  planet's surface. Release to return towards a low hover; the rocket remains
+  the way to the moon.
+- **Descend:** hold C / B / ↓ to brake and settle. Over the lake, the plane keeps
+  safe clearance above the water. Trees, hills and blocks cause soft bumps.
+- **Boost:** Shift / X / ✦ gives a one-second propeller burst, followed by a
+  short cooldown. The flight display shows height, speed and boost readiness.
+- **Step out:** F / Y / the landing button automatically lands in a clear, dry
+  spot before Mirio steps out. Press again to cancel. Unsafe landing attempts
+  explain that a meadow clearing is needed. The plane stays where it was parked
+  and can be boarded again; checkpoint rescue also brings it back to its home.
+
+Flying can collect the existing gems. Checkpoints and story encounters still
+require Mirio on foot, and a 150-metre flight earns the optional **Wiesenpilot**
+badge. The score rules and gem total are unchanged. Pause freezes the aircraft,
+releases held controls and silences its propeller; replay resets the ride.
+
 ## Layout
 
 Plain ES modules, no build step; PHP only for the high score list. `index.html` holds the import map for
@@ -145,6 +170,7 @@ three.js and loads `js/main.js`.
 | `js/wildlife.js`, `js/wildlife-models.js` | Reactive birds and squirrels, shared articulated geometry, discovery and culling |
 | `js/enemies.js`, `js/enemy-rules.js` | Original optional guardians, safe placements, readable attacks and renderer-independent rules |
 | `js/garden.js`, `js/scenery.js` | Spring blossoms; batched plants, petals and cloud wisps |
+| `js/biplane.js`, `js/biplane-physics.js`, `js/biplane-model.js` | Boarding and safe landing; bounded spherical flight; the original Wiesensummer model |
 | `js/adventure.js` | Optional ring-trail rules, gates, badges and magnet effect |
 | `js/environment-art.js` | Original seamless environment textures and gem reflection maps; no child artwork |
 | `js/art.js`, `js/materials.js` | Canvas helpers (crop, sticker border, filled face, scribble textures) and the shared toon and outline materials |
@@ -225,6 +251,10 @@ the points out itself from the run's Glitzersteine, time and place.
 - `node tests/mirio-living-e2e.mjs` checks spring launches, wildlife discoveries
   and reactions, enemy stomps/contact/spin combat, health restoration, pause and
   replay resets, and browser/shader errors. It uses the same server and variables.
+
+- `node tests/mirio-biplane-e2e.mjs` checks keyboard/controller/touch boarding,
+  the flight ceiling, boost, safe landings and water crossings, pause, rescue,
+  replay and phone layouts. It uses the same server and variables.
 
 - `node tests/mirio-audio-e2e.mjs` verifies all eleven sample decodes, mixer
   persistence, pause/resume cleanup, every soundtrack arrangement and sound

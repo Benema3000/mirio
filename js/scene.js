@@ -1003,6 +1003,7 @@ function freeGround(level, planet) {
   for (const f of level.flags) if (f.planet === planet) add(f.dir, 0.7);
   if (level.plateau?.planet === planet) add(level.plateau.dir, level.plateau.radius + 0.7);
   if (level.spawn?.planet === planet) add(level.spawn.dir, 1.2);
+  if (level.biplaneHome?.planet === planet) add(level.biplaneHome.dir, 2.5);
   if (level.moonSpawn?.planet === planet) add(level.moonSpawn.dir, 1.2);
   if (level.rocket?.to === planet) add(level.rocket.flight.landing, 2.6);
   if (level.course?.finish?.planet === planet) add(level.course.finish.dir, 4);

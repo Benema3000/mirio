@@ -582,3 +582,31 @@ body.playing .pill { gap: 10px; }
 .field-guide span.found { color: #ffe6a7; border-style: solid; border-color: #ffda8366; background: #ffdb830d; }
 .field-guide span.found::before { content: '✓ '; }
 .field-guide small { width: 100%; color: #a8c5ce; font-size: 10px; margin-top: 2px; }
+
+/* The optional meadow ride reuses familiar movement buttons. */
+#ride-action { position: fixed; z-index: 4; left: 50%; bottom: max(86px, calc(env(safe-area-inset-bottom) + 72px)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; border: 1px solid #ffe3a2a8; border-radius: 26px; padding: 11px 17px; color: #fff1ca; background: #153b43ed; box-shadow: 0 6px 24px #001c264a; font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; touch-action: manipulation; }
+#ride-action:hover { background: #24575d; }
+#ride-action:focus-visible { outline: 3px solid #fff1ba; outline-offset: 4px; }
+#ride-action[hidden], #plane-hud[hidden] { display: none; }
+body.touch #ride-key { display: none; }
+body.paused #ride-action, body.paused #plane-hud { display: none; }
+#plane-hud { position: fixed; z-index: 2; top: 18px; left: 50%; transform: translateX(-50%); width: 228px; display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; padding: 11px 15px; border: 1px solid #b0e8df66; border-radius: 15px; color: #d6f6eb; background: #102e3aeb; font-size: 11px; }
+.plane-name { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: #ffe4a2; }
+#plane-height { width: 100%; height: 6px; align-self: center; accent-color: #96e2d3; }
+#plane-speed { text-align: right; }
+#plane-boost { grid-column: 1 / -1; font-size: 10px; color: #c3dbd6; }
+#plane-hud.boosting { border-color: #ffe095; box-shadow: 0 0 18px #ffd48822; }
+#plane-hud.boosting #plane-boost { color: #ffe095; }
+.plane-guide { margin: 14px 0; font-size: 11px; line-height: 1.7; color: #b7dcd8; }
+body.flying #btn-jump { border-color: #a3ecdc; }
+body.flying #btn-spin { color: #ffdf91; }
+body.flying #toast { top: max(130px, 18%); }
+@media (max-width: 700px) {
+  #plane-hud { top: 122px; width: 218px; }
+  body.flying #toast { top: max(230px, 26%); }
+}
+@media (orientation: portrait) {
+  body.touch #ride-action { left: 18px; transform: none; bottom: max(32px, calc(env(safe-area-inset-bottom) + 24px)); max-width: 155px; padding: 11px 13px; font-size: 11px; white-space: normal; text-align: left; }
+  body.touch #ride-action > span:first-child { display: none; }
+  body.flying.touch #hint { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 195px); }
+}

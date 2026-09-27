@@ -7,6 +7,7 @@ import { Adventure } from './adventure.js';
 import { SpringGarden } from './garden.js';
 import { EnemySystem } from './enemies.js';
 import { Wildlife } from './wildlife.js';
+import { Biplane, chooseBiplaneHome } from './biplane.js';
 import { Sound } from './audio.js';
 import { Boss } from './boss.js';
 import { CameraRig } from './camera.js';
@@ -39,7 +40,7 @@ const CONFETTI = [0xffe14d, 0xff6fb5, 0x5fe3ff, 0x8dff6a, 0xc58bff, 0xffffff];
 const SPLASH = [0x7fd0ff, 0xffffff, 0x3aa7e8];
 
 const HINTS = {
-  startKeys: 'Laufen: Pfeiltasten oder WASD · Springen: Leertaste · Drehen: Shift · Stampfen: C',
+  startKeys: 'Laufen: Pfeiltasten oder WASD · Springen: Leertaste · Drehen: Shift · Stampfen: C · Flugzeug: F',
   startTouch: 'Links wischen: laufen · ↑ springen · ⟳ drehen · ⤓ stampfen',
   lake: 'Spring von Stein zu Stein. Nicht ins Wasser fallen!',
   longJump: 'Tipp: Springen gedrückt halten, dann springt Mirio weiter.',
@@ -139,6 +140,7 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 2000);
 
   const level = makeLevel();
+  level.biplaneHome = chooseBiplaneHome(level);
   const [welt, mond] = level.planets;
   const colliders = collidersFor(level);
   const world = buildScene(scene, level, art);
@@ -149,6 +151,7 @@ async function main() {
   const governor = new QualityGovernor(renderer, { onChange: (l) => { world.setQuality(l); enemies.setQuality(l); wildlife.setQuality(l); } });
   const particles = new Particles(scene, art.sparkle);
   const player = new Player(scene, art, level.planets, colliders);
+  const biplane = new Biplane(scene, level, art, colliders);
   const rig = new CameraRig(camera, level.planets);
   const sound = new Sound();
   const input = new Input({
@@ -381,7 +384,8 @@ async function main() {
 
   // ---- Reset -----------------------------------------------------------------
   function resetGame() {
-    document.body.classList.remove('racing');
+    document.body.classList.remove('racing', 'flying');
+    biplane.reset(player);
     adventure.reset();
     garden.reset();
     enemies.reset();
@@ -447,6 +451,27 @@ async function main() {
       $('race-time').textContent = formatTime(race.state === 'race' ? stats.raceTime : result?.time ?? 0);
     }
     updateJourney();
+    const riding = biplane.mounted && state === 'play';
+    document.body.classList.toggle('flying', riding);
+    if (hud.riding !== riding) {
+      hud.riding = riding;
+      $('btn-jump').setAttribute('aria-label', riding ? 'Steigen' : 'Springen');
+      $('btn-pound').textContent = riding ? '↓' : '⤓';
+      $('btn-pound').setAttribute('aria-label', riding ? 'Sinken' : 'Stampfen');
+      $('btn-spin').textContent = riding ? '✦' : '⟳';
+      $('btn-spin').setAttribute('aria-label', riding ? 'Propeller-Turbo' : 'Drehen');
+    }
+    $('ride-action').hidden = state !== 'play' || fight.on || (!riding && !biplane.canBoard(player));
+    $('ride-label').textContent = riding ? (biplane.landing ? 'Landung abbrechen' : 'Landen & aussteigen') : 'Wiesensummer fliegen';
+    $('ride-key').textContent = input.gamepadConnected ? 'Y' : 'F';
+    $('plane-hud').hidden = !riding;
+    if (riding) {
+      $('plane-altitude').textContent = `${biplane.flight.altitude.toFixed(1)} m`;
+      $('plane-height').value = biplane.flight.altitude;
+      $('plane-speed').textContent = `${Math.round(biplane.flight.speed * 3.6)} km/h`;
+      $('plane-boost').textContent = biplane.flight.boost > 0 ? '✦ Rückenwind!' : biplane.flight.cooldown > 0 ? `Turbo in ${Math.ceil(biplane.flight.cooldown)} s` : '✦ Turbo bereit';
+      $('plane-hud').classList.toggle('boosting', biplane.flight.boost > 0);
+    }
     const trail = adventure.activeTrail;
     $('trail-hud').hidden = !trail || state !== 'play';
     if (trail) {
@@ -454,7 +479,7 @@ async function main() {
       $('trail-time').textContent = `${Math.ceil(trail.run.time)} s`;
       $('trail-progress').value = trail.run.next;
     }
-    $('magnet-hud').hidden = adventure.magnet <= 0 || state !== 'play';
+    $('magnet-hud').hidden = adventure.magnet <= 0 || state !== 'play' || riding;
     $('magnet-time').textContent = `${Math.ceil(adventure.magnet)} s`;
     if (force || hud.hp !== boss.hp) {
       hud.hp = boss.hp;
@@ -469,7 +494,8 @@ async function main() {
     let label = 'Folge den Glitzersteinen';
     let chapter = '01 / WIESENWELT';
     let target = null;
-    if (state === 'race' || state === 'raceEnd') { chapter = '03 / STERNENRENNEN'; label = 'Hol dir den Kristall!'; }
+    if (biplane.mounted) { chapter = 'WIESENSUMMER / TIEFFLUG'; label = biplane.landing ? 'Wir landen auf der Wiese …' : 'Gleite über Wiesen und Wasser'; }
+    else if (state === 'race' || state === 'raceEnd') { chapter = '03 / STERNENRENNEN'; label = 'Hol dir den Kristall!'; }
     else if (state === 'rocket') { chapter = '02 / AUF ZUM MOND'; label = 'Nächster Halt: Miros Mond'; }
     else if (state === 'cutscene') { chapter = '03 / STERNENRENNEN'; label = 'Dem Kristall hinterher!'; }
     else if (player.body.planet === mond) {
@@ -522,10 +548,13 @@ async function main() {
   const bossEvents = [];
   const natureEvents = [];
   function simulate(h) {
-    natureEvents.push(...garden.step(h, player, state === 'play' && !fight.on));
-    player.step(h);
+    if (biplane.mounted) natureEvents.push(...biplane.step(h, player));
+    else {
+      natureEvents.push(...garden.step(h, player, state === 'play' && !fight.on));
+      player.step(h);
+    }
     natureEvents.push(...enemies.step(h, player, {active: state === 'play' && !fight.on}));
-    if (state === 'play' && !fight.on && !boss.defeated && onArena()) {
+    if (state === 'play' && !biplane.mounted && !fight.on && !boss.defeated && onArena()) {
       fight.on = true;
       boss.start();
       $('boss-bar').hidden = false;
@@ -533,9 +562,10 @@ async function main() {
       renderHud(true);
     }
     if (state === 'play') bossEvents.push(...boss.update(h, player));
-    if (state !== 'play' || player.state !== 'play') return;
+    if (state !== 'play' || !['play', 'biplane'].includes(player.state)) return;
 
-    playerMid.copy(player.body.pos).addScaledVector(player.body.up, 1);
+    if (biplane.mounted) playerMid.copy(biplane.flight.pos).addScaledVector(biplane.flight.up, .65);
+    else playerMid.copy(player.body.pos).addScaledVector(player.body.up, 1);
 
     for (const bit of world.bits) {
       if (bit.taken || bit.mesh.position.distanceTo(playerMid) > (adventure.magnet > 0 ? 3.8 : BIT_RADIUS)) continue;
@@ -545,6 +575,10 @@ async function main() {
       sound.play('bit');
       particles.burst(bit.mesh.position, { count: 6, color: bit.color, speed: 3, size: 0.45, life: 0.4 });
     }
+
+    // Flying can collect existing gems; checkpoints and story boarding still
+    // belong to Mirio on foot, so the plane cannot trigger the rocket or boss.
+    if (biplane.mounted) return;
 
     for (const [i, f] of world.flags.entries()) {
       if (f.reached || f.center.distanceTo(player.body.pos) > FLAG_RADIUS) continue;
@@ -637,6 +671,17 @@ async function main() {
 
     for (const ev of natureEvents) {
       sound.play(ev.type);
+      if (ev.type === 'planeBoard') {
+        toast('Wiesensummer!');
+        const keys = input.gamepadConnected ? 'Stick lenken · A steigen · B sinken · X Turbo · Y landen' : document.body.classList.contains('touch') ? 'Links lenken · ↑ steigen · ↓ sinken · ✦ Turbo · Tippen zum Landen' : 'WASD lenken · Leertaste steigen · C sinken · Shift Turbo · F landen';
+        hint(keys, 12);
+      }
+      if (ev.type === 'planeLanding') hint('Sanft landen … F / Y oder die Landetaste bricht ab.', 5);
+      if (ev.type === 'planeCancelLanding') hint('Weiter geht der Rundflug!', 4);
+      if (ev.type === 'planeNoLanding') hint('Such dir eine freie Wiese zum Aussteigen. Über Wasser und Bäumen fliegst du weiter.', 7);
+      if (ev.type === 'planeExit') { toast('Sanft gelandet!'); hint('Dein Wiesensummer wartet hier auf dich. F / Y: wieder einsteigen.', 6); }
+      if (ev.type === 'planeBoost') particles.burst(ev.pos, {count: 10, color: [0xffe4a4, 0xc1f6f4, 0xffffff], speed: 2, size: .25, life: .45});
+      if (ev.type === 'planeBump') particles.burst(ev.pos, {count: 5, color: [0xffdd95, 0xffffff], speed: 2, size: .25, life: .35});
       if (ev.type === 'enemyNotice') hintOnce('creatures', 8);
       if (ev.type === 'enemyStun') {
         particles.burst(ev.pos, {count: 8, color: [0xffde81, 0xffffff], speed: 2, size: .3, life: .6});
@@ -791,6 +836,7 @@ async function main() {
       ...(stats.creatures >= 3 ? ['✦ Wiesenwächter'] : []),
       ...(friends.size === 2 ? ['♡ Tierfreund'] : []),
       ...(garden.used.size === 3 ? ['❀ Blütenflieger'] : []),
+      ...(biplane.distance >= 150 ? ['✈ Wiesenpilot'] : []),
     ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
     offerHighScore();
     $('win').classList.remove('hidden');
@@ -897,10 +943,11 @@ async function main() {
     player.jumpHeld = false;
     player.spinRequest = false;
     player.poundRequest = false;
+    biplane.clearIntent();
     sound.setPaused(paused);
     document.body.classList.toggle('paused', paused);
     $('pause').classList.toggle('hidden', !paused);
-    $('rescue').hidden = state !== 'play' || player.state !== 'play';
+    $('rescue').hidden = state !== 'play' || !['play', 'biplane'].includes(player.state);
     if (paused) {
       $('pause-objective').textContent = $('objective').textContent;
       $('resume').focus();
@@ -909,8 +956,13 @@ async function main() {
   input.onPause = () => setPaused(!paused);
   $('pause-button').addEventListener('click', () => setPaused(true));
   $('resume').addEventListener('click', () => setPaused(false));
+  $('ride-action').addEventListener('click', e => {
+    e.preventDefault();
+    if (input.enabled) input.rideQueued = true;
+  });
   $('rescue').addEventListener('click', () => {
-    if (state !== 'play' || player.state !== 'play') return;
+    if (state !== 'play' || !['play', 'biplane'].includes(player.state)) return;
+    biplane.recall(player);
     player.respawn();
     boss.reset();
     endFight();
@@ -973,11 +1025,15 @@ async function main() {
 
     input.update(paused ? 0 : dt);
     if (paused || document.hidden) return;
+    if (input.consumeRide() && state === 'play' && !fight.on) {
+      natureEvents.push(...biplane.toggle(player));
+      input.consumeJump(); input.consumeSpin(); input.consumePound();
+    }
     elapsed += dt;
     sound.setScene(state === 'win' ? 'victory' : state === 'race' || state === 'raceEnd' ? 'race' : fight.on ? 'boss' : player.body.planet === mond || state === 'rocket' ? 'moon' : 'explore');
     sound.footstep({ dt, speed: player.body.vel.length(), grounded: state === 'play' && player.state === 'play' && player.body.onGround, surface: player.body.planet === mond ? 'stone' : 'grass' });
     if (finishDelay > 0) { finishDelay -= dt; if (finishDelay <= 0) win(); }
-    for (const ev of adventure.update(dt, player, state === 'play' && !fight.on, elapsed)) {
+    for (const ev of adventure.update(dt, player, state === 'play' && !fight.on && !biplane.mounted, elapsed)) {
       sound.play(ev.type);
       if (ev.pos) particles.burst(ev.pos, {count: ev.type === 'trailWin' ? 28 : 10, color: ev.color, speed: 4, size: .4, life: .65});
       if (ev.type === 'trailStart') hint('Folge den leuchtenden Ringen! Alle sechs schenken dir einen Glitzermagneten.', 6);
@@ -985,7 +1041,8 @@ async function main() {
       if (ev.type === 'trailFail') hint('Fast geschafft! Der erste Ring startet die Spur neu.', 5);
     }
     if (state === 'play') {
-      player.readInput(input, rig);
+      if (biplane.mounted) biplane.readInput(input, rig);
+      else player.readInput(input, rig);
       stats.time += dt;
     }
     if (state === 'rocket' || state === 'cutscene') stats.time += dt;
@@ -1001,6 +1058,7 @@ async function main() {
     // The engine runs from the start signal until the win screen.
     const engineOn = racing && (race.state === 'race' || (race.state === 'finished' && state === 'raceEnd'));
     sound.engine(engineOn ? { speed: Math.abs(race.player.v), gas: race.player.throttle } : null);
+    sound.biplane(biplane.mounted ? {active: true, speed: biplane.flight.speed, throttle: biplane.intent.throttle, boost: biplane.flight.boost > 0} : null);
     if (state === 'title') rig.forward.applyAxisAngle(rig.up, dt * 0.2);
 
     acc += dt;
@@ -1017,7 +1075,7 @@ async function main() {
     }
 
     animateWorld(dt, elapsed);
-    if (state === 'play') rig.distance = playDistance() + (fight.on ? 4 : 0);
+    if (state === 'play') rig.distance = playDistance() + (fight.on ? 4 : biplane.mounted ? 3 : 0);
     if (racing) race.updateCamera(camera, dt);
     else rig.update(dt, player, input);
     const fov = baseFov() + (racing && !reducedMotion ? race.fovKick : 0);
@@ -1031,6 +1089,7 @@ async function main() {
       shake = Math.max(0, shake - dt * 1.5);
     }
     player.render(dt);
+    biplane.update(dt, elapsed, camera, player, reducedMotion);
     enemies.update(elapsed, camera);
     garden.update(elapsed, camera);
     for (const ev of wildlife.update(dt, elapsed, player, {active: state === 'play' && !fight.on, camera})) {
@@ -1063,6 +1122,7 @@ async function main() {
         enemies: enemies.snapshot(),
         wildlife: wildlife.snapshot(),
         garden: garden.snapshot(),
+        biplane: biplane.snapshot(),
         player: {
           state: player.state,
           planet: player.body.planet?.id ?? null,
@@ -1097,6 +1157,7 @@ async function main() {
         enemies: enemies.layout(),
         wildlife: wildlife.layout(),
         garden: garden.layout(),
+        biplane: biplane.layout(),
         lake: welt.water,
         arena: { planet: ar.planet.id, dir: ar.dir.toArray(), top: ar.top, radius: ar.radius, center: arenaCenter.toArray() },
       }),
@@ -1115,6 +1176,7 @@ async function main() {
         if (d) rig.snap(player, d);
       },
       teleport(id, dir, height = 0.2) {
+        if (biplane.mounted) biplane.recall(player);
         const p = planetById(id);
         const d = new THREE.Vector3(...dir).normalize();
         surfacePoint(p, d, height, player.body.pos);

@@ -65,6 +65,8 @@ export class Sound {
     this.voices = new Set();
     this.cooldowns = new Map();
     this.ambient = null;
+    this.planeMotor = null;
+    this.planeTails = new Set();
     this.ambienceTime = 0;
     this.leafWait = 7;
   }
@@ -169,6 +171,7 @@ export class Sound {
       clearInterval(this.timer);
       this.timer = null;
       this.engine(null);
+      this.biplane(null);
       this.ambience({ active: false });
       this.stopVoices();
       this.ctx.suspend().catch(() => {});
@@ -342,7 +345,7 @@ export class Sound {
   play(name) {
     if (!this.audible || this.muted) return;
     const now = this.ctx.currentTime;
-    const cooldown = { skid: 0.2, bump: 0.12, land: 0.08, bit: 0.035, ring: 0.08 }[name] ?? 0;
+    const cooldown = { skid: 0.2, bump: 0.12, land: 0.08, bit: 0.035, ring: 0.08, planeBump: 0.2, planeBoost: 0.25 }[name] ?? 0;
     if (now - (this.cooldowns.get(name) ?? -10) < cooldown) return;
     this.cooldowns.set(name, now);
     const variation = 0.96 + Math.random() * 0.08;
@@ -497,6 +500,26 @@ export class Sound {
         this.noise(0.22, { vol: 0.09, from: 800, to: 1800 });
         this.chime([76, 79, 84], { gap: 0.065, vol: 0.17 });
         break;
+      case 'planeBoard':
+        this.sample('tap', { vol: .24, rate: .85 });
+        this.sample('cloth', { vol: .1, rate: 1.3, at: .05 });
+        this.chime([67, 72, 76], { gap: .07, vol: .12 });
+        break;
+      case 'planeExit':
+        this.sample('land', { vol: .18, rate: 1.15 });
+        this.chime([76, 72], { gap: .1, vol: .1 });
+        break;
+      case 'planeBoost':
+        this.sample('swish', { vol: .15, rate: 1.1 });
+        this.noise(.42, { vol: .08, from: 600, to: 2100, q: .55 });
+        this.tone(260, .36, { type: 'triangle', to: 620, vol: .085 });
+        this.chime([79, 84, 88], { gap: .06, at: .05, vol: .075 });
+        break;
+      case 'planeBump':
+        this.sample('land', { vol: .24, rate: .9 });
+        this.sample('tap', { vol: .14, rate: 1.1 });
+        this.tone(140, .15, { to: 70, vol: .08 });
+        break;
       case 'click':
         this.sample('tap', { vol: 0.15, rate: 1.7 });
         break;
@@ -644,6 +667,86 @@ export class Sound {
     motor.gain.gain.setTargetAtTime(0.026 + gas * 0.045, t, 0.08);
   }
 
+  /** A gentle wooden propeller: a rounded hum, soft blade pulses and air.
+   * Pass world speed plus throttle/boost in 0..1 while riding; null or
+   * active:false fades out. This has its own graph, independent of the kart. */
+  biplane(state) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (!state || state.active === false || this.paused) {
+      if (this.planeMotor) {
+        const old = this.planeMotor;
+        this.planeMotor = null;
+        old.gain.gain.setTargetAtTime(0, t, .045);
+        this.planeTails.add(old);
+        old.sources[0].onended = old.release;
+        for (const source of old.sources) source.stop(this.paused ? t : t + .22);
+      }
+      if (this.paused) {
+        // A normal exit keeps a short release tail. A pause/teardown also
+        // releases tails from a recent exit before the audio clock stops.
+        for (const motor of [...this.planeTails]) {
+          for (const source of motor.sources) { try { source.stop(t); } catch { /* Already finished. */ } }
+          motor.release();
+        }
+      }
+      return;
+    }
+    if (!this.planeMotor) {
+      const low = this.ctx.createOscillator();
+      low.type = 'triangle'; low.frequency.value = 40;
+      const harmonic = this.ctx.createOscillator();
+      harmonic.type = 'sine'; harmonic.frequency.value = 80.12;
+      const harmonicGain = this.ctx.createGain();
+      harmonicGain.gain.value = .18;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass'; filter.Q.value = .4; filter.frequency.value = 220;
+      const pulse = this.ctx.createOscillator();
+      pulse.type = 'sine'; pulse.frequency.value = 11;
+      const pulseDepth = this.ctx.createGain();
+      pulseDepth.gain.value = .16;
+      const bladeGain = this.ctx.createGain();
+      bladeGain.gain.value = .78;
+      const wind = this.ctx.createBufferSource();
+      wind.buffer = this.noiseBuffer; wind.loop = true;
+      const windFilter = this.ctx.createBiquadFilter();
+      windFilter.type = 'bandpass'; windFilter.Q.value = .45; windFilter.frequency.value = 520;
+      const windGain = this.ctx.createGain();
+      windGain.gain.value = 0;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0;
+      low.connect(filter);
+      harmonic.connect(harmonicGain).connect(filter);
+      filter.connect(bladeGain).connect(gain);
+      pulse.connect(pulseDepth).connect(bladeGain.gain);
+      wind.connect(windFilter).connect(windGain).connect(gain);
+      gain.connect(this.effectsBus);
+      const sources = [low, harmonic, pulse, wind];
+      const nodes = [...sources, harmonicGain, filter, pulseDepth, bladeGain, windFilter, windGain, gain];
+      const motor = { low, harmonic, pulse, filter, pulseDepth, windFilter, windGain, gain, sources, nodes };
+      motor.release = () => {
+        for (const source of sources) source.onended = null;
+        for (const node of nodes) node.disconnect();
+        this.planeTails.delete(motor);
+      };
+      this.planeMotor = motor;
+      for (const source of sources) source.start(t);
+    }
+    const speed = clamp(Math.abs(Number(state.speed) || 0), 0, 50);
+    const throttle = clamp(Number(state.throttle) || 0);
+    const boost = clamp(Number(state.boost) || 0);
+    const pitch = 40 + speed * 1.05 + throttle * 10 + boost * 12;
+    const motor = this.planeMotor;
+    motor.low.frequency.setTargetAtTime(pitch, t, .16);
+    motor.harmonic.frequency.setTargetAtTime(pitch * 2.003, t, .2);
+    motor.pulse.frequency.setTargetAtTime(11 + speed * .38 + throttle * 4 + boost * 5, t, .16);
+    motor.pulseDepth.gain.setTargetAtTime(.16 + throttle * .04 + boost * .025, t, .18);
+    motor.filter.frequency.setTargetAtTime(220 + speed * 9 + throttle * 90 + boost * 110, t, .2);
+    motor.windFilter.frequency.setTargetAtTime(520 + speed * 16 + boost * 260, t, .25);
+    motor.windGain.gain.setTargetAtTime(.008 + speed * .0014 + boost * .035, t, .22);
+    motor.gain.gain.setTargetAtTime(.012 + throttle * .026 + speed * .00024 + boost * .012, t, .12);
+  }
+
   startMusic() {
     if (this.musicOn) return;
     this.musicOn = true;
@@ -725,6 +828,7 @@ export class Sound {
     this.paused = true;
     this.stopMusic();
     this.engine(null);
+    this.biplane(null);
     this.ambience({ active: false });
     this.stopVoices();
     if (this.ctx) this.ctx.close().catch(() => {});

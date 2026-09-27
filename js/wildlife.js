@@ -100,6 +100,7 @@ export class Wildlife {
     // Springflower landings are reserved for the player, even when another
     // scenery implementation has not added them to the level data yet.
     for (const [lat, lon] of [[81, 35], [24, 43], [-14, -28]]) add(dirFromLatLon(lat, lon), 1.0);
+    if (this.level.biplaneHome?.planet === this.planet) add(this.level.biplaneHome.dir, 1.65);
   }
 
   /** Conservatively avoids shores, trunks and the footprints of solid props. */

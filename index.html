@@ -17,7 +17,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="img/mirio.png">
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
   <canvas id="game" aria-label="Spielfeld"></canvas>
@@ -52,6 +52,8 @@
   </div>
   <div id="trail-hud" hidden><span id="trail-label"></span><strong id="trail-time"></strong><progress id="trail-progress" max="6" value="0"></progress></div>
   <div id="magnet-hud" hidden>✦ Glitzermagnet <span id="magnet-time"></span></div>
+  <div id="plane-hud" hidden aria-label="Wiesensummer Fluganzeige"><span class="plane-name">✈ WIESENSUMMER</span><span id="plane-altitude">0.0 m</span><progress id="plane-height" value="0" max="4.5" aria-label="Flughöhe, maximal 4,5 Meter"></progress><span id="plane-speed">0 km/h</span><span id="plane-boost">✦ Turbo bereit</span></div>
+  <button id="ride-action" hidden><span aria-hidden="true">✈</span><span id="ride-label">Wiesensummer fliegen</span><kbd id="ride-key">F</kbd></button>
 
   <div id="boss-bar" hidden>
     <span class="boss-name">Finster-Mirio</span>
@@ -82,7 +84,7 @@
         <p class="eyebrow">MIROS KLEINES WELTRAUMABENTEUER</p>
         <h1><span class="word">Mirio</span><span class="title-dot">.</span></h1>
         <p class="tagline">Kleine Schritte. <br>Riesengrosses Abenteuer.</p>
-        <p class="intro">Wiesenvögel treffen, über Riesenblüten hüpfen und zum Mond fliegen. Deine Reise beginnt mit einer Zeichnung.</p>
+        <p class="intro">Über Riesenblüten hüpfen, im Wiesensummer fliegen und zum Mond reisen. Deine Reise beginnt mit einer Zeichnung.</p>
         <div class="journey-chips" aria-label="Deine Reise"><span>01 <b>Entdecken</b></span><span>02 <b>Abheben</b></span><span>03 <b>Losrasen</b></span></div>
         <button id="start" class="big" disabled>Lädt …</button>
         <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
@@ -112,6 +114,7 @@
       <div class="field-guide" aria-label="Entdeckte Tierfreunde"><span id="friend-bird">Wiesenvogel</span><span id="friend-squirrel">Eichhörnchen</span><small id="garden-guide">0 / 3 Sprungblüten</small></div>
       <div class="move-guide"><p><kbd>WASD / ↑↓←→</kbd> Laufen <kbd>Leertaste</kbd> Springen</p><p><kbd>Shift</kbd> Drehen <kbd>C</kbd> Stampfen <kbd>Q / E</kbd> Kamera</p><p>Controller: linker Stick · A springen · X drehen · B stampfen<br>Kart: RT Gas · LT Bremse · A + lenken driften</p></div>
       <p class="trail-tip">✦ Entdecke die leuchtenden Ringe! Eine ganze Spur schenkt dir 12 Sekunden Glitzermagnet.<br>❀ Grosse Blüten federn dich hoch. Kleine Wächter: von oben hüpfen oder drehen!</p>
+      <p class="plane-guide">✈ <b>Wiesensummer</b> · F / Y: einsteigen und landen<br>Leertaste / A: steigen · C / B: sinken · Shift / X: Turbo<br>Bleibt nah an der Wiese. Zum Mond geht es mit der Rakete!</p>
       <button id="rescue" class="text-button">Zurück zum Checkpoint</button>
     </div>
   </section>
@@ -152,6 +155,6 @@
     }
   }
   </script>
-  <script type="module" src="js/main.js?v=15"></script>
+  <script type="module" src="js/main.js?v=16"></script>
 </body>
 </html>

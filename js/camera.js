@@ -59,7 +59,7 @@ export class CameraRig {
 
     if (player.state === 'flight') {
       this.follow(player.flightDir, 3, dt);
-    } else if (this.idle > AUTO_FOLLOW_DELAY && player.state === 'play') {
+    } else if (this.idle > AUTO_FOLLOW_DELAY && (player.state === 'play' || player.state === 'biplane')) {
       // Lazy follow, like the camera in the platformers kids know: running
       // sideways slowly swings the view round behind you.
       const speed = tmp.copy(player.body.vel).addScaledVector(this.up, -player.body.vel.dot(this.up)).length();

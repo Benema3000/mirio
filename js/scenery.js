@@ -158,6 +158,8 @@ function gardenClear(level, planet, dir) {
   }
   const close = (other, radius) => other && dir.dot(other) > Math.cos(radius / planet.radius);
   if (level.spawn.planet === planet && close(level.spawn.dir, 2.2)) return false;
+  // Plant centres need a little extra room for spreading fern/flower leaves.
+  if (level.biplaneHome?.planet === planet && close(level.biplaneHome.dir, 3.2)) return false;
   if (level.plateau.planet === planet && close(level.plateau.dir, level.plateau.radius + 1.1)) return false;
   for (const item of [...level.stumps, ...level.stones, ...level.flags, ...level.blocks]) {
     if (item.planet !== planet || item.bottom > 1) continue;
