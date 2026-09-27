@@ -8,6 +8,10 @@ import { SpringGarden } from './garden.js';
 import { EnemySystem } from './enemies.js';
 import { Wildlife } from './wildlife.js';
 import { Biplane, chooseBiplaneHome } from './biplane.js';
+import { SkyFlight } from './sky-flight.js';
+import { RibbonRun } from './ribbon-run.js';
+import { CHAPTERS, medalFor, MEDALS } from './chapters.js';
+import { formatRunTime, readPersonalBest, savePersonalBest } from './time-records.js';
 import { Sound } from './audio.js';
 import { Boss } from './boss.js';
 import { CameraRig } from './camera.js';
@@ -67,13 +71,13 @@ function formatTime(seconds) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-const SCORES_URL = 'api/scores.php';
+const SCORES_URL = 'api/times.php';
 const NAME_KEY = 'mirio-name';
 const SCORES_DOWN = 'Die Bestenliste ist gerade nicht erreichbar.';
 const TITLE_SCORES = 5;
 
-async function fetchScores() {
-  const body = await (await fetch(SCORES_URL, { cache: 'no-store' })).json();
+async function fetchScores(level) {
+  const body = await (await fetch(`${SCORES_URL}?level=${encodeURIComponent(level)}`, { cache: 'no-store' })).json();
   if (!body.ok) throw new Error(body.message);
   return body;
 }
@@ -96,7 +100,7 @@ function showBoard(list, top, mine = null) {
     name.className = 'name';
     name.textContent = entry.name;
     const points = document.createElement('span');
-    points.textContent = entry.points;
+    points.textContent = formatRunTime(entry.timeMs);
     row.append(name, points);
     li.append(row);
     return li;
@@ -166,6 +170,12 @@ async function main() {
   });
 
   const adventure = new Adventure(scene, level);
+  const chapterGames = new Map();
+  let selectedLevel = 'adventure';
+  let chapterGame = null;
+  let chapterCountdown = 0;
+  let countdownNumber = -1;
+  let finishedRun = null;
   let state = 'title';
   let paused = false;
   let finishDelay = 0;
@@ -285,7 +295,7 @@ async function main() {
 
   // ---- The kart race -----------------------------------------------------------
   const race = new KartRace(scene, art, { planets: level.planets, start: level.course.start, finish: level.course.finish });
-  const totalBits = () => world.bits.length + race.bitCount;
+  const totalBits = () => selectedLevel === 'kart' ? race.bitCount : world.bits.length + race.bitCount;
   const cut = { t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), called: false };
   let timeScale = 1;
   let result = null;
@@ -430,6 +440,24 @@ async function main() {
   // ---- HUD ---------------------------------------------------------------
   const hud = { bits: -1, hearts: -1, hp: -1 };
   function renderHud(force = false) {
+    if (chapterGame && (state === 'chapter' || state === 'win')) {
+      const run = chapterGame.snapshot();
+      $('hearts').hidden = true;
+      $('bits').textContent = `${run.collectibles} / ${run.totalCollectibles}`;
+      for (const id of ['ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud']) $(id).hidden = true;
+      $('chapter-hud').hidden = state !== 'chapter';
+      $('chapter-timer').textContent = formatRunTime(Math.round(run.time * 1000));
+      const best = readPersonalBest(selectedLevel);
+      $('chapter-best').textContent = best ? `BESTE ZEIT\n${formatRunTime(best)}` : 'DEIN ERSTER LAUF';
+      $('chapter-progress').value = run.progress;
+      const cooldown = run.cooldown ?? 0;
+      const touchKeys = document.body.classList.contains('touch');
+      $('chapter-ability').textContent = chapterCountdown > 0 ? 'Bereit für dein Abenteuer?' : run.boost > 0 ? '✦ Rückenwind!' : selectedLevel === 'sky' ? (cooldown > 0 ? `Turbo in ${Math.ceil(cooldown)} s` : `✦ Turbo bereit · ${touchKeys ? '↻' : 'Leertaste / A'}: Rolle`) : `✦ Luftwirbel · ${touchKeys ? '↑' : 'Leertaste / A'}: springen`;
+      $('chapter').textContent = CHAPTERS[selectedLevel].eyebrow;
+      $('objective').textContent = CHAPTERS[selectedLevel].goal;
+      return;
+    }
+    $('chapter-hud').hidden = true;
     $('hearts').hidden = state !== 'play';
     if (force || hud.bits !== stats.bits) {
       hud.bits = stats.bits;
@@ -739,74 +767,114 @@ async function main() {
     bossEvents.length = 0;
   }
 
-  // ---- High scores (api/scores.php) ---------------------------------------
-  // Each run takes a token from the server when it starts and hands it back
-  // with its result; the server keeps the list and works out the points.
+  // ---- Separate time boards, with local bests even when the server is offline.
   let runToken = null;
+  let runGeneration = 0;
+  let boardRequest = 0;
+  let resultBoardRevision = 0;
 
   function newRun() {
     runToken = null;
-    fetchScores().then((b) => {
+    finishedRun = null;
+    const generation = ++runGeneration, levelId = selectedLevel;
+    fetchScores(levelId).then(b => {
+      if (generation !== runGeneration || selectedLevel !== levelId) return;
       runToken = b.token;
+      if (state === 'win' && finishedRun?.level === levelId) {
+        $('score-form').hidden = false;
+        $('score-send').disabled = false;
+        scoreStatus('');
+      }
     }).catch(() => {});
   }
 
-  /** Same sum as api/scores.inc. */
-  function points() {
-    return stats.bits * 10 + (result.place === 1 ? 500 : 200) + Math.max(0, 900 - Math.floor(stats.time));
+  function updatePersonalBests() {
+    for (const el of document.querySelectorAll('[data-best]')) {
+      const best = readPersonalBest(el.dataset.best);
+      el.textContent = best ? `✦ ${formatRunTime(best)}` : '';
+    }
   }
 
-  function scoreStatus(text) {
-    $('score-status').textContent = text;
+  function selectLevel(id) {
+    if (!CHAPTERS[id]) return;
+    selectedLevel = id;
+    const chapter = CHAPTERS[id];
+    for (const button of document.querySelectorAll('[data-level]')) {
+      button.classList.toggle('selected', button.dataset.level === id);
+      button.setAttribute('aria-pressed', String(button.dataset.level === id));
+    }
+    $('chapter-description').textContent = chapter.description;
+    $('chapter-keys').textContent = `${chapter.keys} · Esc: Pause`;
+    $('chapter-touch').textContent = chapter.touch;
+    $('title-scores-heading').textContent = `Bestzeiten · ${chapter.short}`;
+    $('title-board').replaceChildren();
+    $('title-board-status').textContent = 'Bestzeiten werden geladen …';
+    updatePersonalBests();
+    const request = ++boardRequest;
+    fetchScores(id).then(body => {
+      if (request !== boardRequest) return;
+      showBoard($('title-board'), body.top.slice(0, TITLE_SCORES));
+      $('title-board-status').textContent = 'Nur die Zeit zählt. Jede Reise hat ihre eigene Liste.';
+    }).catch(() => {
+      if (request === boardRequest) $('title-board-status').textContent = 'Öffentliche Zeiten gerade offline. Deine Bestzeit bleibt auf diesem Gerät.';
+    });
   }
+
+  function scoreStatus(text) { $('score-status').textContent = text; }
 
   function offerHighScore() {
-    $('win-points').textContent = points();
+    const run = chapterGame?.snapshot();
+    finishedRun = Object.freeze({
+      level: selectedLevel,
+      timeMs: Math.max(1, Math.round((run ? run.time : selectedLevel === 'kart' ? result.time : stats.time) * 1000)),
+      penaltyMs: Math.round((run?.penalty ?? run?.penalties ?? 0) * 1000),
+    });
+    const personal = savePersonalBest(finishedRun.level, finishedRun.timeMs);
+    $('win-time').textContent = formatRunTime(finishedRun.timeMs);
+    $('personal-best').textContent = personal.isNew ? (personal.previous ? 'Neue persönliche Bestzeit!' : 'Deine erste Bestzeit. Abenteuer geschafft!') : `Deine Bestzeit: ${formatRunTime(personal.best)}`;
+    const medal = document.createElement('span');
+    medal.textContent = MEDALS[medalFor(finishedRun.level, finishedRun.timeMs)];
+    $('win-badges').prepend(medal);
+    updatePersonalBests();
     $('win-board').replaceChildren();
-    scoreStatus('');
-    const form = $('score-form');
-    form.hidden = !runToken;
+    scoreStatus(runToken ? '' : 'Deine Zeit ist auf diesem Gerät gespeichert. Die öffentliche Liste ist gerade offline.');
+    $('score-form').hidden = !runToken;
     $('score-send').disabled = false;
-    if (!runToken) scoreStatus(SCORES_DOWN);
-    try {
-      $('score-name').value = localStorage.getItem(NAME_KEY) ?? '';
-    } catch {
-      // Storage blocked: start with an empty name.
-    }
-    if (runToken && !document.body.classList.contains('touch')) $('score-name').focus();
-    fetchScores().then((b) => showBoard($('win-board'), b.top)).catch(() => {});
+    try { $('score-name').value = localStorage.getItem(NAME_KEY) ?? ''; } catch {}
+    const completed = finishedRun, revision = ++resultBoardRevision;
+    fetchScores(completed.level).then(b => {
+      if (finishedRun === completed && state === 'win' && revision === resultBoardRevision) showBoard($('win-board'), b.top);
+    }).catch(() => {});
   }
 
   async function sendHighScore(e) {
     e.preventDefault();
     const name = $('score-name').value.trim();
-    if (!name || !runToken) return;
+    if (!name || !runToken || !finishedRun || state !== 'win') return;
+    const completed = finishedRun, generation = runGeneration, token = runToken;
+    ++resultBoardRevision;
     $('score-send').disabled = true;
     scoreStatus('Wird eingetragen …');
     try {
       const res = await fetch(SCORES_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: runToken, name, bits: stats.bits, time: stats.time, place: result.place }),
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({...completed, token, name}),
       });
       const body = await res.json();
+      if (generation !== runGeneration || completed !== finishedRun) return;
       if (!body.ok) {
         scoreStatus(body.message);
-        // A different name or a later try can help; a refused run cannot.
-        if (body.error === 'name' || body.error === 'rate') $('score-send').disabled = false;
+        if (body.error === 'name' || body.error === 'rate' || body.error === 'unavailable' || res.status >= 500) $('score-send').disabled = false;
         else $('score-form').hidden = true;
         return;
       }
       runToken = null;
       $('score-form').hidden = true;
-      try {
-        localStorage.setItem(NAME_KEY, name);
-      } catch {
-        // Storage blocked: the name is just not remembered.
-      }
-      scoreStatus(body.rank ? `Platz ${body.rank} in der Bestenliste!` : 'Eingetragen! Für die besten 100 hat es noch nicht gereicht.');
+      try { localStorage.setItem(NAME_KEY, name); } catch {}
+      scoreStatus(body.rank ? `Platz ${body.rank} in der Bestenliste!` : 'Deine Zeit ist eingetragen!');
       showBoard($('win-board'), body.top, body.rank);
     } catch {
+      if (generation !== runGeneration || completed !== finishedRun) return;
       scoreStatus(SCORES_DOWN);
       $('score-send').disabled = false;
     }
@@ -818,14 +886,19 @@ async function main() {
     input.enabled = false;
     hint('', 0);
     $('race-hud').hidden = true;
+    $('win-eyebrow').textContent = selectedLevel === 'kart' ? 'STERNENRENNEN GESCHAFFT' : 'PLANETENREISE GESCHAFFT';
+    $('win-title').textContent = 'Dein Kristall!';
     const place = result.place === 1 ? '1. Platz' : `${result.place}. Platz`;
-    $('win-stats').innerHTML = [
+    $('win-stats').innerHTML = (selectedLevel === 'kart' ? [
+      `Kartrennen: <b>${place}</b> in ${formatTime(result.time)}`,
+      `Glitzersteine: <b>${stats.bits}</b> von ${race.bitCount}`,
+    ] : [
       `Kartrennen: <b>${place}</b> in ${formatTime(result.time)}`,
       `Glitzersteine: <b>${stats.bits}</b> von ${totalBits()}`,
       `Ins Wasser gefallen: <b>${stats.splashes}</b>&times;`,
       `Dreifachsprung: <b>${stats.bestJump === 3 ? 'geschafft' : 'noch nicht'}</b>`,
       `Zeit: <b>${formatTime(stats.time)}</b>`,
-    ].join('<br>');
+    ]).join('<br>');
     $('win-extra').textContent = stats.bits === totalBits()
       ? 'Alle Glitzersteine gefunden. Wow!'
       : `${totalBits() - stats.bits} Glitzersteine sind noch versteckt.`;
@@ -840,6 +913,37 @@ async function main() {
     ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
     offerHighScore();
     $('win').classList.remove('hidden');
+  }
+
+  function finishChapter() {
+    if (state !== 'chapter') return;
+    state = 'win';
+    input.enabled = false;
+    input.reset();
+    sound.biplane(null);
+    sound.play('star');
+    sound.setScene('victory');
+    hint('', 0);
+    const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
+    $('win-eyebrow').textContent = `${chapter.short.toUpperCase()} GESCHAFFT`;
+    $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : 'Hallo, Gartentor!';
+    $('win-stats').textContent = `${run.collectibles} von ${run.totalCollectibles} ${selectedLevel === 'sky' ? 'Himmelsringen' : 'Glitzersteinen'} gefunden.`;
+    $('win-extra').textContent = run.collectibles === run.totalCollectibles ? 'Alle gefunden! Was für eine schöne Reise.' : 'Auf dem nächsten Ausflug warten noch kleine Geheimnisse.';
+    $('win-badges').replaceChildren();
+    offerHighScore();
+    $('win').classList.remove('hidden');
+    renderHud(true);
+    $('again').focus();
+  }
+
+  function handleChapterEvents(events) {
+    for (const event of events ?? []) {
+      if (event.type !== 'finish') sound.play(({ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land'})[event.type] ?? event.type);
+      if (event.penalty > 0) hint(`${event.id?.startsWith('sky-balloon-') ? 'Ballon berührt' : 'Zurück am Checkpoint'} · +${event.penalty} s. Weiter geht’s!`, 4);
+      else if (event.type === 'checkpoint') { toast('Checkpoint!'); hint('Hier wartet ein sicherer Platz auf dich.', 3); }
+      else if (event.type === 'rescue') hint('Weich gelandet. Einfach nochmal hüpfen!', 4);
+      else if (event.type === 'bump') hint('Hoppla! Alles gut — weiter geht’s.', 3);
+    }
   }
 
   // ---- Animation of the world ------------------------------------------
@@ -900,6 +1004,12 @@ async function main() {
     enterFullscreen();
     sound.unlock();
     sound.startMusic();
+    sound.engine(null);
+    sound.biplane(null);
+    sound.ambience({active: false});
+    chapterGame = null;
+    document.body.classList.remove('chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    input.reset();
     resetGame();
     newRun();
     rig.distance = playDistance();
@@ -908,17 +1018,85 @@ async function main() {
     $('title').classList.add('hidden');
     $('win').classList.add('hidden');
     document.body.classList.add('playing');
-    hint(document.body.classList.contains('touch') ? HINTS.startTouch : HINTS.startKeys, 8);
+    $('chapter-guide').hidden = selectedLevel === 'adventure' || selectedLevel === 'kart';
+    if (selectedLevel === 'sky' || selectedLevel === 'ribbon') {
+      if (!chapterGames.has(selectedLevel)) chapterGames.set(selectedLevel, selectedLevel === 'sky' ? new SkyFlight(art) : new RibbonRun(art));
+      chapterGame = chapterGames.get(selectedLevel);
+      chapterGame.reset();
+      chapterCountdown = 3;
+      countdownNumber = -1;
+      state = 'chapter';
+      document.body.classList.add('chapter-mode', `chapter-${selectedLevel}`);
+      $('btn-jump').textContent = selectedLevel === 'sky' ? '↻' : '↑';
+      $('btn-jump').setAttribute('aria-label', selectedLevel === 'sky' ? 'Schutzrolle' : 'Springen');
+      $('btn-spin').textContent = '✦';
+      $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? 'Turbo' : 'Luftwirbel');
+      const chapter = CHAPTERS[selectedLevel];
+      $('chapter-guide').textContent = `${chapter.keys}. Controller: linker Stick, A und X. ${selectedLevel === 'sky' ? 'Ballons bremsen dich kurz: +2,5 Sekunden. Eine Rolle schützt dich.' : 'Eine weiche Landung bringt dich zum Checkpoint zurück: +2 Sekunden.'} Die Uhr pausiert mit dir.`;
+      hint(document.body.classList.contains('touch') ? chapter.touch : chapter.keys, 12);
+      chapterGame.render(camera, 0, {reducedMotion});
+    } else {
+      $('btn-jump').textContent = '↑';
+      $('btn-jump').setAttribute('aria-label', 'Springen');
+      $('btn-spin').textContent = '⟳';
+      $('btn-spin').setAttribute('aria-label', 'Drehen');
+      camera.fov = baseFov();
+      camera.updateProjectionMatrix();
+      hint(document.body.classList.contains('touch') ? HINTS.startTouch : HINTS.startKeys, 8);
+      if (selectedLevel === 'kart') {
+        state = 'race';
+        document.body.classList.add('racing');
+        player.board();
+        race.begin({pos: level.course.start.pos.clone(), up: level.course.start.up.clone()});
+        const shot = race.introShot();
+        camera.position.copy(shot.pos);
+        camera.up.copy(shot.up);
+        camera.lookAt(shot.look);
+        $('race-hud').hidden = false;
+        hint(document.body.classList.contains('touch') ? HINTS.raceTouch : HINTS.raceKeys, 10);
+      }
+    }
+    renderHud(true);
+  }
+
+  function returnToMenu() {
+    ++runGeneration;
+    runToken = finishedRun = null;
+    paused = false;
+    chapterGame = null;
+    state = 'title';
+    input.enabled = false;
+    input.reset();
+    sound.setPaused(false);
+    sound.engine(null);
+    sound.biplane(null);
+    sound.ambience({active: false});
+    sound.stopVoices();
+    sound.setScene('explore');
+    document.body.classList.remove('playing', 'paused', 'chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    $('pause').classList.add('hidden');
+    $('win').classList.add('hidden');
+    $('title').classList.remove('hidden');
+    $('toast').classList.remove('show');
+    hint('', 0);
+    resetGame();
+    rig.distance = 16;
+    camera.fov = baseFov();
+    camera.updateProjectionMatrix();
+    selectLevel(selectedLevel);
+    document.querySelector(`[data-level="${selectedLevel}"]`).focus();
   }
 
   startButton.addEventListener('click', start);
   $('again').addEventListener('click', start);
   $('score-form').addEventListener('submit', sendHighScore);
-  // The start screen shows the top of the list; without a server it stays hidden.
-  fetchScores().then((b) => {
-    showBoard($('title-board'), b.top.slice(0, TITLE_SCORES));
-    $('title-scores').hidden = false;
-  }).catch(() => {});
+  $('pause-menu').addEventListener('click', returnToMenu);
+  $('win-menu').addEventListener('click', returnToMenu);
+  for (const button of document.querySelectorAll('[data-level]')) button.addEventListener('click', () => { sound.play('click'); selectLevel(button.dataset.level); });
+  selectLevel('adventure');
+  $('show-times').addEventListener('click', () => $('scores-dialog').showModal());
+  $('show-help').addEventListener('click', () => $('help-dialog').showModal());
+  for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => $(button.dataset.close).close());
   $('mute').addEventListener('click', () => {
     sound.setMuted(!sound.muted);
     $('mute').classList.toggle('muted', sound.muted);
@@ -947,7 +1125,7 @@ async function main() {
     sound.setPaused(paused);
     document.body.classList.toggle('paused', paused);
     $('pause').classList.toggle('hidden', !paused);
-    $('rescue').hidden = state !== 'play' || !['play', 'biplane'].includes(player.state);
+    $('rescue').hidden = state === 'chapter' ? chapterCountdown > 0 : state !== 'play' || !['play', 'biplane'].includes(player.state);
     if (paused) {
       $('pause-objective').textContent = $('objective').textContent;
       $('resume').focus();
@@ -961,6 +1139,13 @@ async function main() {
     if (input.enabled) input.rideQueued = true;
   });
   $('rescue').addEventListener('click', () => {
+    if (state === 'chapter' && chapterGame) {
+      if (chapterCountdown > 0) return;
+      const events = chapterGame.rescue();
+      setPaused(false);
+      handleChapterEvents(events);
+      return;
+    }
     if (state !== 'play' || !['play', 'biplane'].includes(player.state)) return;
     biplane.recall(player);
     player.respawn();
@@ -984,6 +1169,8 @@ async function main() {
     });
   }
   window.addEventListener('keydown', e => {
+    const dialog = document.querySelector('dialog[open]');
+    if (dialog) { if (e.code === 'Escape') { e.preventDefault(); dialog.close(); } return; }
     if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); setPaused(!paused); }
     if (e.code === 'Tab' && paused) {
       const items = [...$('pause').querySelectorAll('button:not([hidden]), input')];
@@ -997,9 +1184,10 @@ async function main() {
   });
 
   resetGame();
+  input.enabled = false;
   rig.distance = 16;
   startButton.disabled = false;
-  startButton.textContent = "Los geht's!";
+  startButton.textContent = 'Spielen';
   $('status').textContent = '';
 
   // ---- Loop ------------------------------------------------------------------
@@ -1008,6 +1196,33 @@ async function main() {
   let frames = 0;
   let fpsT = 0;
   let fps = 0;
+
+  function chapterFrame(dt, raw) {
+    const runBefore = chapterGame.snapshot();
+    if (state === 'chapter') {
+      sound.setScene(selectedLevel === 'sky' ? 'moon' : 'explore');
+      if (chapterCountdown > 0) {
+        const number = Math.ceil(chapterCountdown);
+        if (number !== countdownNumber) { countdownNumber = number; bigToast(String(number)); sound.play('beep'); }
+        chapterCountdown = Math.max(0, chapterCountdown - dt);
+        input.consumeJump(); input.consumeSpin(); input.consumePound();
+        if (chapterCountdown === 0) { bigToast('Los!'); sound.play('go'); }
+      } else {
+        const events = chapterGame.step(dt, {x: input.move.x, y: input.move.y, jump: input.consumeJump(), jumpHeld: input.jumpHeld, action: input.consumeSpin()});
+        input.consumePound(); input.consumeRide();
+        handleChapterEvents(events);
+        if (chapterGame.snapshot().status === 'finished') finishChapter();
+      }
+      stats.time = chapterGame.snapshot().time;
+      sound.biplane(state === 'chapter' && selectedLevel === 'sky' ? {active: true, speed: runBefore.speed ?? 20, throttle: .6, boost: runBefore.boost > 0} : null);
+      sound.ambience({active: state === 'chapter' && selectedLevel === 'ribbon', dt});
+    } else { sound.biplane(null); sound.ambience({active: false}); }
+    if (hintTimer > 0) { hintTimer -= dt; if (hintTimer <= 0) $('hint').classList.remove('show'); }
+    chapterGame.render(camera, dt, {reducedMotion});
+    governor.update(raw);
+    renderer.render(chapterGame.scene, camera);
+    renderHud();
+  }
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -1025,6 +1240,10 @@ async function main() {
 
     input.update(paused ? 0 : dt);
     if (paused || document.hidden) return;
+    if (chapterGame && (state === 'chapter' || state === 'win')) {
+      chapterFrame(dt, raw);
+      return;
+    }
     if (input.consumeRide() && state === 'play' && !fight.on) {
       natureEvents.push(...biplane.toggle(player));
       input.consumeJump(); input.consumeSpin(); input.consumePound();
@@ -1050,10 +1269,11 @@ async function main() {
     const racing = state === 'race' || state === 'raceEnd' || (state === 'win' && result);
     if (racing) {
       handleRace(race.update(dt, input));
-      if (race.state === 'race') {
-        stats.time += dt;
-        stats.raceTime += dt;
-      }
+      // Use the kart's finish-line interpolation, including the last partial
+      // tick, for both the standalone clock and the adventure's total time.
+      const raceClock = result?.time ?? race.raceTime;
+      stats.time += Math.max(0, raceClock - stats.raceTime);
+      stats.raceTime = raceClock;
     }
     // The engine runs from the start signal until the win screen.
     const engineOn = racing && (race.state === 'race' || (race.state === 'finished' && state === 'raceEnd'));
@@ -1113,6 +1333,9 @@ async function main() {
     window.__mirio = {
       snapshot: () => ({
         state,
+        selectedLevel,
+        cameraUp: camera.up.toArray(),
+        chapterRun: chapterGame ? {...chapterGame.snapshot(), countdown: chapterCountdown} : null,
         paused,
         time: stats.time,
         adventure: { badges: [...adventure.badges], magnet: adventure.magnet, trails: adventure.trails.map(t => ({id: t.id, next: t.run.next, active: t.run.active, time: t.run.time})) },
@@ -1158,11 +1381,15 @@ async function main() {
         wildlife: wildlife.layout(),
         garden: garden.layout(),
         biplane: biplane.layout(),
+        chapterCourse: chapterGame?.layout?.() ?? null,
         lake: welt.water,
         arena: { planet: ar.planet.id, dir: ar.dir.toArray(), top: ar.top, radius: ar.radius, center: arenaCenter.toArray() },
       }),
       raceSkip(fraction) {
         race.skipTo(fraction);
+      },
+      chapterSeek(fraction) {
+        if (state === 'chapter') return chapterGame?.seek?.(fraction);
       },
       /** Skips the level: from the arena straight into the kart. */
       raceNow() {

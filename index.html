@@ -17,7 +17,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="img/mirio.png">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
   <canvas id="game" aria-label="Spielfeld"></canvas>
@@ -54,6 +54,7 @@
   <div id="magnet-hud" hidden>✦ Glitzermagnet <span id="magnet-time"></span></div>
   <div id="plane-hud" hidden aria-label="Wiesensummer Fluganzeige"><span class="plane-name">✈ WIESENSUMMER</span><span id="plane-altitude">0.0 m</span><progress id="plane-height" value="0" max="4.5" aria-label="Flughöhe, maximal 4,5 Meter"></progress><span id="plane-speed">0 km/h</span><span id="plane-boost">✦ Turbo bereit</span></div>
   <button id="ride-action" hidden><span aria-hidden="true">✈</span><span id="ride-label">Wiesensummer fliegen</span><kbd id="ride-key">F</kbd></button>
+  <div id="chapter-hud" hidden><span id="chapter-timer">00:00.00</span><span id="chapter-best"></span><progress id="chapter-progress" max="1" value="0" aria-label="Weg zum Ziel"></progress><small id="chapter-ability"></small></div>
 
   <div id="boss-bar" hidden>
     <span class="boss-name">Finster-Mirio</span>
@@ -78,28 +79,33 @@
   </div>
 
   <section id="title" class="overlay">
-    <div class="title-shell">
-      <div class="title-art"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="art-spark spark-one">✦</span><span class="art-spark spark-two">✧</span><img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro"><span class="drawing-note">Eine Zeichnung. Ein ganzes Universum.</span></div>
-      <div class="title-copy">
-        <p class="eyebrow">MIROS KLEINES WELTRAUMABENTEUER</p>
-        <h1><span class="word">Mirio</span><span class="title-dot">.</span></h1>
-        <p class="tagline">Kleine Schritte. <br>Riesengrosses Abenteuer.</p>
-        <p class="intro">Über Riesenblüten hüpfen, im Wiesensummer fliegen und zum Mond reisen. Deine Reise beginnt mit einer Zeichnung.</p>
-        <div class="journey-chips" aria-label="Deine Reise"><span>01 <b>Entdecken</b></span><span>02 <b>Abheben</b></span><span>03 <b>Losrasen</b></span></div>
-        <button id="start" class="big" disabled>Lädt …</button>
-        <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
-        <p class="controls keys"><kbd>WASD</kbd> laufen <kbd>Leertaste</kbd> springen<br><kbd>Shift</kbd> drehen <kbd>C</kbd> stampfen <kbd>Esc</kbd> Pause</p>
-        <p class="controls touch">Links wischen: laufen · ↑ springen · ⟳ drehen · ⤓ stampfen<br>Rechts wischen: Kamera drehen</p>
-        <p class="portrait-tip">Tipp: Handy quer halten</p>
+    <div class="game-menu">
+      <div class="menu-heading"><h1><img id="game-logo" src="assets/mirio-logo.png" alt="Mirio" width="720" height="240"></h1><div class="title-art"><img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro"></div></div>
+      <div id="chapter-select" class="chapter-select" role="group" aria-label="Abenteuer auswählen">
+        <button class="chapter-card selected" data-level="adventure" aria-pressed="true"><img src="assets/menu-adventure.png" alt=""><strong>Planetenreise</strong><em data-best="adventure"></em></button>
+        <button class="chapter-card" data-level="kart" aria-pressed="false"><img src="assets/menu-kart.png" alt=""><strong>Sternenrennen</strong><em data-best="kart"></em></button>
+        <button class="chapter-card" data-level="sky" aria-pressed="false"><img src="assets/menu-sky.png" alt=""><strong>Wolkenpost</strong><em data-best="sky"></em></button>
+        <button class="chapter-card" data-level="ribbon" aria-pressed="false"><img src="assets/menu-ribbon.png" alt=""><strong>Blütenpfad</strong><em data-best="ribbon"></em></button>
       </div>
-      <footer class="title-footer">
-        <div><p class="credit">Figur und Zeichnungen: <b>Miro</b> · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
-        <p class="credit"><a href="https://github.com/Benema3000/mirio" target="_blank" rel="noopener">Quellcode (MIT)</a> · <a href="audio/CREDITS.md" target="_blank" rel="noopener">Audio &amp; Credits</a></p>
-        <p class="legal">Ein kostenloses, nicht kommerzielles Experiment. Miros Zeichnungen bleiben seine. Musik und Spielwelt wurden für Mirio gestaltet; zusätzliche Klänge sind gemeinfrei (CC0).</p></div>
-        <section id="title-scores" class="title-scores" aria-labelledby="title-scores-heading" hidden><h3 id="title-scores-heading">Kleine Helden, grosse Abenteuer</h3><ol id="title-board" class="board"></ol></section>
-      </footer>
+      <button id="start" class="big" disabled>Lädt …</button>
+      <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
+      <div class="menu-links"><button id="show-times" class="text-button">Bestzeiten</button><button id="show-help" class="text-button">Hilfe &amp; Credits</button></div>
     </div>
   </section>
+
+  <dialog id="scores-dialog" class="menu-dialog" aria-labelledby="title-scores-heading">
+    <button class="dialog-close" data-close="scores-dialog" aria-label="Bestzeiten schliessen">×</button>
+    <section id="title-scores" class="title-scores"><h2 id="title-scores-heading">Bestzeiten · Planetenreise</h2><ol id="title-board" class="board"></ol><p id="title-board-status" class="status" role="status"></p></section>
+  </dialog>
+  <dialog id="help-dialog" class="menu-dialog" aria-labelledby="help-title">
+    <button class="dialog-close" data-close="help-dialog" aria-label="Hilfe schliessen">×</button>
+    <h2 id="help-title">So geht’s</h2>
+    <p id="chapter-description" class="chapter-description"></p><p id="chapter-keys" class="controls keys"></p><p id="chapter-touch" class="controls touch"></p>
+    <p class="controls">Controller: linker Stick · A springen / rollen · X drehen / Turbo<br>Kart: RT Gas · LT Bremse · A + lenken driften<br>Esc / Start: Pause</p>
+    <p class="credit">Figur und Zeichnungen: <b>Miro</b> · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
+    <p class="credit"><a href="https://github.com/Benema3000/mirio" target="_blank" rel="noopener">Quellcode (MIT)</a> · <a href="audio/CREDITS.md" target="_blank" rel="noopener">Audio &amp; Credits</a></p>
+    <p class="legal">Miros Zeichnungen bleiben seine. Ein kostenloses, nicht kommerzielles Spiel. Zusätzliche Klangaufnahmen sind gemeinfrei (CC0).</p>
+  </dialog>
 
   <section id="pause" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title">
     <div class="card pause-card">
@@ -115,16 +121,18 @@
       <div class="move-guide"><p><kbd>WASD / ↑↓←→</kbd> Laufen <kbd>Leertaste</kbd> Springen</p><p><kbd>Shift</kbd> Drehen <kbd>C</kbd> Stampfen <kbd>Q / E</kbd> Kamera</p><p>Controller: linker Stick · A springen · X drehen · B stampfen<br>Kart: RT Gas · LT Bremse · A + lenken driften</p></div>
       <p class="trail-tip">✦ Entdecke die leuchtenden Ringe! Eine ganze Spur schenkt dir 12 Sekunden Glitzermagnet.<br>❀ Grosse Blüten federn dich hoch. Kleine Wächter: von oben hüpfen oder drehen!</p>
       <p class="plane-guide">✈ <b>Wiesensummer</b> · F / Y: einsteigen und landen<br>Leertaste / A: steigen · C / B: sinken · Shift / X: Turbo<br>Bleibt nah an der Wiese. Zum Mond geht es mit der Rakete!</p>
+      <p id="chapter-guide" class="chapter-guide" hidden></p>
       <button id="rescue" class="text-button">Zurück zum Checkpoint</button>
+      <button id="pause-menu" class="text-button">Abenteuer auswählen</button>
     </div>
   </section>
 
   <section id="win" class="overlay hidden">
     <div class="card">
-      <p class="eyebrow">ABENTEUER GESCHAFFT</p><h2>Dein Kristall!</h2><p id="win-badges" class="win-badges"></p>
+      <p class="eyebrow" id="win-eyebrow">ABENTEUER GESCHAFFT</p><h2 id="win-title">Dein Kristall!</h2><p id="win-badges" class="win-badges"></p>
       <p id="win-stats" class="stats"></p>
       <p id="win-extra" class="status"></p>
-      <p class="points"><b id="win-points">0</b> Punkte</p>
+      <p class="points"><b id="win-time">00:00.00</b><span> Deine Zeit</span></p><p id="personal-best" class="personal-best"></p>
       <form id="score-form" class="score-form" hidden>
         <label for="score-name">Dein Name für die Bestenliste</label>
         <span class="row">
@@ -136,6 +144,7 @@
       <p id="score-status" class="status" role="status"></p>
       <ol id="win-board" class="board"></ol>
       <button id="again" class="big">Nochmal spielen</button>
+      <button id="win-menu" class="text-button">Nächstes Abenteuer auswählen</button>
     </div>
   </section>
 
@@ -155,6 +164,6 @@
     }
   }
   </script>
-  <script type="module" src="js/main.js?v=16"></script>
+  <script type="module" src="js/main.js?v=17"></script>
 </body>
 </html>

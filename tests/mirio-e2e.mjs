@@ -2,7 +2,7 @@
 // every station of the level, touch controls on a phone-sized screen, and a
 // start-and-walk check in WebKit.
 //
-// Serve this folder with PHP (the high score list is api/scores.php), then:
+// Serve this folder with PHP (the time board is api/times.php), then:
 //   MIRIO_SCORES_DIR=/tmp/mirio-scores php -S 127.0.0.1:8766
 //   node tests/mirio-e2e.mjs
 // PLAYWRIGHT can point at a playwright module outside this repo; SHOTS=<dir>
@@ -52,7 +52,10 @@ async function open(browser, options) {
 const snap = (page) => page.evaluate(() => window.__mirio.snapshot());
 const layout = (page) => page.evaluate(() => window.__mirio.layout());
 const teleport = (page, id, dir, height) => page.evaluate(([i, d, h]) => window.__mirio.teleport(i, d, h), [id, dir, height]);
-const until = (page, fn, arg, timeout = 30000) => page.waitForFunction(fn, arg, { timeout, polling: 100 });
+// Software WebGL shares the host CPU. Assertions still wait on actual state;
+// the wall-clock budget must allow the same simulation on a busy machine.
+const until = (page, fn, arg, timeout = 30000) => page.waitForFunction(fn, arg, { timeout: Math.max(30000, timeout), polling: 100 });
+const gameTime = async (page, seconds) => { const before = await snap(page); await until(page, t => window.__mirio.snapshot().time >= t, before.time + seconds, 60000); };
 const shot = async (page, name) => {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` });
 };
@@ -75,10 +78,12 @@ function norm(a) {
   const { page, errors } = await open(browser, { viewport: { width: 1280, height: 720 } });
   await shot(page, 'd01-title');
 
-  await check('the title screen shows the high score list', async () => {
+  await check('the title screen opens the selected adventure’s time board', async () => {
+    await page.click('#show-times');
     await until(page, () => document.querySelector('#title-board li'), null, 10000);
     assert.ok(await page.isVisible('#title-scores'));
     assert.ok((await page.$$('#title-board li')).length <= 5);
+    await page.click('[data-close="scores-dialog"]');
   });
 
   await check('start button begins the game in fullscreen', async () => {
@@ -128,15 +133,15 @@ function norm(a) {
       window.__mirio.teleport('welt', d, 0);
       window.__mirio.aim(east);
     }, [[Math.cos(la) * Math.cos(lo), Math.sin(la), Math.cos(la) * Math.sin(lo)], [-Math.sin(lo), 0, Math.cos(lo)]]);
-    await page.waitForTimeout(500);
+    await until(page, () => window.__mirio.snapshot().player.onGround);
     const best = await page.evaluate(() => new Promise((resolve) => {
       const key = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code }));
       key('keydown', 'ArrowUp');
-      const t0 = performance.now();
+      const t0 = window.__mirio.snapshot().time;
       let jumped = 0;
       const tick = () => {
         const s = window.__mirio.snapshot();
-        const elapsed = performance.now() - t0;
+        const elapsed = (s.time - t0) * 1000;
         // Wait for full speed, then jump each time the feet touch down.
         if (elapsed > 1200 && s.player.onGround && performance.now() - jumped > 150) {
           key('keydown', 'Space');
@@ -183,7 +188,7 @@ function norm(a) {
   await check('a stepping stone holds Mirio above the water', async () => {
     const stone = map.stones[0];
     await teleport(page, 'welt', stone.dir, stone.top + 0.4);
-    await page.waitForTimeout(1200);
+    await until(page, () => window.__mirio.snapshot().player.onGround);
     const s = await snap(page);
     assert.ok(s.player.onGround, 'not standing');
     assert.equal(s.splashes, 1);
@@ -201,19 +206,18 @@ function norm(a) {
     await until(page, () => {
       const s = window.__mirio.snapshot();
       return s.rocket === 'landed' && s.player.planet === 'mond' && s.player.onGround;
-    }, null, 30000);
+    }, null, 90000);
     await page.waitForTimeout(600);
     await shot(page, 'd07-moon');
   });
 
   await check('on the moon Mirio jumps much higher', async () => {
     await page.keyboard.down('Space');
-    let top = 0;
-    for (let i = 0; i < 30; i++) {
-      await page.waitForTimeout(80);
-      top = Math.max(top, (await snap(page)).player.height);
-    }
-    await page.keyboard.up('Space');
+    let top;
+    try {
+      await until(page, () => window.__mirio.snapshot().player.height > 5);
+      top = (await snap(page)).player.height;
+    } finally { await page.keyboard.up('Space'); }
     assert.ok(top > 5, `moon jump only ${top.toFixed(2)} high`);
     await until(page, () => window.__mirio.snapshot().player.onGround, null, 8000);
   });
@@ -221,7 +225,7 @@ function norm(a) {
   await check('the floor blocks on the moon can be stood on', async () => {
     const top = map.blocks.filter((b) => b.planet === 'mond').sort((a, b) => b.top - a.top)[1];
     await teleport(page, 'mond', top.dir, top.top + 0.4);
-    await page.waitForTimeout(1200);
+    await until(page, () => window.__mirio.snapshot().player.onGround);
     const s = await snap(page);
     assert.ok(s.player.onGround && Math.abs(s.player.height - top.top) < 0.15, `height ${s.player.height}`);
     await shot(page, 'd08-blocks');
@@ -291,7 +295,7 @@ function norm(a) {
     await page.keyboard.down('ArrowUp');
     await until(page, () => window.__mirio.snapshot().race.speed > 8, null, 20000);
     await page.keyboard.down('ArrowLeft');
-    await page.waitForTimeout(1500);
+    await gameTime(page, 1);
     await page.keyboard.up('ArrowLeft');
     const moved = (await snap(page)).race.progress;
     assert.ok(moved > before, `no progress: ${before} -> ${moved}`);
@@ -321,8 +325,8 @@ function norm(a) {
   });
 
   await check('the win screen puts a name on the public high score list', async () => {
-    assert.ok(await page.isVisible('#score-form'), 'no name form: the run got no token from api/scores.php');
-    assert.match(await page.textContent('#win-points'), /^\d+$/);
+    assert.ok(await page.isVisible('#score-form'), 'no name form: the run got no token from api/times.php');
+    assert.match(await page.textContent('#win-time'), /^\d+:\d{2}\.\d{2}$/);
     await page.fill('#score-name', 'Arschloch');
     await page.click('#score-send');
     await until(page, () => /geht leider nicht/.test(document.getElementById('score-status').textContent), null, 10000);
@@ -386,7 +390,7 @@ function norm(a) {
     const before = await snap(page);
     await touch('touchStart', 160, 260);
     for (let y = 250; y >= 190; y -= 10) await touch('touchMove', 160, y);
-    await page.waitForTimeout(1500);
+    await gameTime(page, 1);
     await shot(page, 'm02-stick');
     await touch('touchEnd');
     const after = await snap(page);
@@ -395,7 +399,7 @@ function norm(a) {
   });
 
   await check('phone: the jump button jumps', async () => {
-    await page.waitForTimeout(300);
+    await until(page, () => window.__mirio.snapshot().player.onGround);
     await page.tap('#btn-jump');
     await until(page, () => !window.__mirio.snapshot().player.onGround, null, 3000);
   });

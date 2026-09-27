@@ -65,6 +65,28 @@ the kart off, touched at an angle it scrapes along), and a rubber-banded rival
 so a child usually wins, narrowly. About 40 s on full gas; the camera swings
 round with the kart and widens when it goes fast.
 
+## Four adventures
+
+The start screen is a compact game menu: the original **Mirio** logo, four
+actual gameplay previews and a Play button. Help/credits and the selected
+level's time board open on demand. Every level is available immediately; pause
+or the result screen can return to the selector.
+
+| Level | What you play | Main controls |
+| --- | --- | --- |
+| **Planetenreise** | The complete original meadow → moon → boss → kart adventure, including the rideable Wiesensummer | Existing platformer and kart controls |
+| **Sternenrennen** | Direct entry into the complete existing three-lap kart race, with its rival, drift boosts and 77 gems | ↑ gas, ↓ brake, ← → steer, hold jump while steering to drift; controller RT/LT/A |
+| **Wolkenpost** | An original forward-flight course through floating orchards, cloud banks, 48 hoops and a balloon slalom | WASD/arrows/left stick steer; Space/A protective roll; Shift/X turbo |
+| **Blütenpfad** | A 334-metre side-scrolling garden with spring flowers, moving clouds, optional gem paths and friendly puff creatures | A/D or ←/→/left stick; Space/A variable-height jump; Shift/X air spin |
+
+Flight and garden levels have a three-count start, checkpoint recoveries,
+keyboard/controller/touch controls and no game-over screen. Recovery adds a
+small, explicitly shown time adjustment. The timer pauses with the game.
+Gold, silver and bronze medals reward replaying; finishing always earns a badge.
+The new modes use the unchanged drawing-derived Mirio model. Their scenery is
+original procedural geometry. The menu logo and gameplay thumbnail provenance
+are documented in `assets/README.md`.
+
 ## Polished adventure edition
 
 The child's drawing remains the centre of the game. The surrounding world now
@@ -170,6 +192,10 @@ three.js and loads `js/main.js`.
 | `js/wildlife.js`, `js/wildlife-models.js` | Reactive birds and squirrels, shared articulated geometry, discovery and culling |
 | `js/enemies.js`, `js/enemy-rules.js` | Original optional guardians, safe placements, readable attacks and renderer-independent rules |
 | `js/garden.js`, `js/scenery.js` | Spring blossoms; batched plants, petals and cloud wisps |
+| `js/chapters.js`, `js/time-records.js` | Level metadata, medals and storage-safe personal best times |
+| `js/sky-flight.js`, `js/sky-flight-rules.js` | Wolkenpost scene and deterministic flight course rules |
+| `js/ribbon-run.js`, `js/ribbon-rules.js` | Blütenpfad diorama and deterministic side-scroll physics |
+| `api/times.php`, `api/times.inc` | Separate public time boards for all four levels |
 | `js/biplane.js`, `js/biplane-physics.js`, `js/biplane-model.js` | Boarding and safe landing; bounded spherical flight; the original Wiesensummer model |
 | `js/adventure.js` | Optional ring-trail rules, gates, badges and magnet effect |
 | `js/environment-art.js` | Original seamless environment textures and gem reflection maps; no child artwork |
@@ -184,30 +210,42 @@ the check. To upgrade, change the version in both URLs and recompute the hashes.
 That is the game's only request outside its own folder: no fonts, no
 analytics, no cookies. It does send every player's IP address to jsDelivr, which
 is how every CDN request works. `localStorage` keeps audio levels, mute, the reduced-motion preference, and
-the last name entered for the high score list. The optional foley files load
+the last nickname and a personal best time for each level. The optional foley files load
 from this same folder, with synthesized fallback effects if they cannot load.
 
-## High score list
+## Per-level time boards
 
-The win screen shows the run's points and asks for a name, then the top 10;
-the start screen shows the top 5 (`api/scores.php`, rules in
-`api/scores.inc`). Points: 10 per Glitzerstein, 500 for winning the race (200
-for second), plus a point for every second under 15 minutes. The server works
-the points out itself from the run's Glitzersteine, time and place.
+Each of `adventure`, `kart`, `sky` and `ribbon` has its own best-time list.
+Lowest time wins; gems and finishing place remain achievements, not score
+multipliers. The full adventure measures the complete journey; standalone kart
+measures only the race. Personal bests remain on the device without a server,
+with an in-memory fallback when storage is unavailable. Public submission is
+optional and only happens when the player submits a nickname.
 
-- Each run fetches a signed token when it starts. The server refuses a run
-  that claims to be faster than its token is old, a token used twice, and more
-  than 10 entries from one address in 10 minutes. The address is only kept as
-  a keyed hash, for those 10 minutes. A browser game cannot prove a score
-  beyond that: a determined cheater can still post a made-up run.
-- Names are public and read by children: at most 16 letters, digits, spaces
-  and `._!-`, and a word list keeps out common German and English swearing
-  and slurs. The form asks for a nickname, not a full name.
-- The list is one JSON file outside the web root, in `data/mirio/` next to
-  the web root's folder (`scores.json`, and `secret.key`, made on first use). To
-  remove an entry, edit the file (keep the JSON valid: a damaged file makes
-  the list refuse new entries rather than start over). It keeps the best 100.
-- `MIRIO_SCORES_DIR` overrides the folder, for tests and previews.
+- `GET api/times.php?level=sky` returns the selected list and a signed token.
+  `POST {level,token,name,timeMs,penaltyMs?}` submits an integer total duration.
+  Optional integer `penaltyMs` defaults to zero and must be between zero and
+  `timeMs`. Active play (`timeMs - penaltyMs`) must meet the level minimum and
+  fit within the token's age plus 15 seconds of clock/network slack. This allows
+  repeated safety recoveries without dropping their penalties from the ranked
+  total. Total duration is capped at 24 hours. Tokens are scoped to a level,
+  expire after 24 hours and can only be used once. Duration bounds, token-age
+  checks and a rate limit discourage casual spam. Browser games cannot
+  prove a client-reported time; this is a friendly leaderboard, not competitive
+  anti-cheat. Equal times keep submission order.
+- Nicknames inherit the existing 16-character limit and German/English word
+  filters. Entries are rendered with `textContent`. Public fields are only
+  rank, nickname, elapsed milliseconds and date.
+- `times.json` and `times.lock` live outside the web root in `data/mirio/` next
+  to the deployed web root. The best 100 per level are retained; the UI shows
+  the top ten. Corrupt data is preserved and fails closed. File updates are
+  atomic and protected by an exclusive lock. `MIRIO_TIMES_DIR` overrides the
+  location; `MIRIO_SCORES_DIR` remains a compatible test override.
+- The legacy `api/scores.php`, its point rules and `scores.json` are preserved
+  for existing data/clients, but the current game uses only the new time boards.
+- `localStorage` also stores each level's personal best (`mirio-time-best-v1:`).
+  A failed public submission does not erase the personal best. Slow/stale
+  network responses cannot replace another level's active run or result.
 
 ## Tests
 
@@ -262,17 +300,31 @@ the points out itself from the run's Glitzersteine, time and place.
   the same checks with Safari's audio engine. It accepts `PLAYWRIGHT` and
   `BASE_URL` like the other browser suites.
 
+- `node tests/mirio-chapters-e2e.mjs` covers the logo/menu, deferred help and
+  time boards, sky keyboard/gamepad/touch controls, countdown/pause/rescue,
+  garden jumps/spin/finish, replay and mode switching, standalone kart,
+  per-level records, transient server retry and portrait/landscape layout.
+
+- `node tests/mirio-kart-entry-e2e.mjs` drives the standalone kart through its
+  finish, checks the exact result clock, submits to a local time board, replays
+  and switches back to the garden and original adventure. It permits public
+  form submissions only to a loopback test server.
+
+- `php tests/mirio-times.php` checks scoped tokens, duration/penalty bounds,
+  honest balloon/recovery penalties, ties, isolation, one-use submission,
+  concurrent writes, names, rate limits and corrupt storage.
+
 - `php tests/mirio-scores.php` checks the high score rules: points,
   names, tokens, replays, the rate limit, ordering, the top 100, and that a
   damaged file is left alone.
 
-`?test` adds `window.__mirio` (state snapshot, layout, teleport, a jump to the race). It is a
+`?test` adds `window.__mirio` (state snapshot, layout, teleport, raceSkip and chapterSeek). It is a
 cheat for tests, harmless in a kid's game, and absent without the parameter.
 
 ## Running it
 
 Any web server with PHP 8 serves it; without PHP the game runs and only the
-high score list stays hidden. Locally:
+public time boards are unavailable; device bests still work. Locally:
 
 ```bash
 MIRIO_SCORES_DIR=/tmp/mirio-scores php -S 127.0.0.1:8766
