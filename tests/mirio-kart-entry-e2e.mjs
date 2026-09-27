@@ -65,7 +65,7 @@ try {
     assert.equal(start.time, 0);
     assert.equal(start.bits, 0);
     assert.match(await page.textContent('#bits'), /^0\s*\/\s*77$/);
-    assert.equal(await page.evaluate(() => localStorage.getItem('mirio-time-best-v1:kart')), null);
+    assert.equal(await page.evaluate(() => localStorage.getItem('mirio-time-best-v2:kart')), null);
     await until(page, () => window.__mirio.snapshot().race.state === 'race');
   });
 
@@ -79,7 +79,7 @@ try {
     assert.ok(after.time >= before.time + 12);
     assert.ok(after.race.progress > before.race.progress + .03, `progress ${after.race.progress}`);
     assert.ok(Number.isFinite(after.race.speed));
-    assert.equal(await page.evaluate(() => localStorage.getItem('mirio-time-best-v1:kart')), null,
+    assert.equal(await page.evaluate(() => localStorage.getItem('mirio-time-best-v2:kart')), null,
       'a best must not be stored before finishing');
     await shot(page, 'kart-entry-driving');
   });
@@ -113,13 +113,13 @@ try {
     assert.ok(result.winVisible);
     assert.match(await page.textContent('#win-eyebrow'), /STERNENRENNEN/);
     const displayed = readDisplayTime(await page.textContent('#win-time'));
-    firstBest = await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v1:kart')));
+    firstBest = await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v2:kart')));
     assert.ok(Number.isSafeInteger(firstBest) && firstBest >= 12000);
     assert.equal(firstBest, Math.round(result.time * 1000), 'PB and interpolated race clock differ');
     assert.ok(Math.abs(result.time * 1000 - displayed) < 10.6, 'displayed hundredths differ from final clock');
     assert.ok(firstBest >= displayed && firstBest - displayed < 10);
     for (const level of ['adventure', 'sky', 'ribbon']) assert.equal(
-      await page.evaluate(id => localStorage.getItem(`mirio-time-best-v1:${id}`), level), null);
+      await page.evaluate(id => localStorage.getItem(`mirio-time-best-v2:${id}`), level), null);
     const stats = await page.textContent('#win-stats');
     assert.match(stats, /Kartrennen:/); assert.match(stats, /von 77/);
     assert.doesNotMatch(stats, /Wasser|Dreifachsprung|153/);
@@ -149,7 +149,7 @@ try {
     assert.equal(body.level, 'kart'); assert.equal(body.timeMs, firstBest);
     await until(page, () => document.getElementById('score-form').hidden);
     assert.match(await page.textContent('#score-status'), /Platz|eingetragen/);
-    assert.equal(await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v1:kart'))), firstBest);
+    assert.equal(await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v2:kart'))), firstBest);
   });
 
   await check('Nochmal resets the kart and its clock, and a second normal finish can return through the win menu', async () => {
@@ -158,7 +158,7 @@ try {
     assert.equal(retry.selectedLevel, 'kart'); assert.equal(retry.state, 'race');
     assert.equal(retry.time, 0); assert.equal(retry.bits, 0);
     assert.ok(retry.race.progress < .01);
-    assert.equal(await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v1:kart'))), firstBest);
+    assert.equal(await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v2:kart'))), firstBest);
     await until(page, () => window.__mirio.snapshot().race.state === 'race');
     await page.keyboard.down('ArrowUp');
     await gameTime(page, .3);

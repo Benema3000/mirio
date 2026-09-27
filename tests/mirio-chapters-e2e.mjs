@@ -94,13 +94,13 @@ try{
     await until(page,()=>window.__mirio.snapshot().state==='win');
     assert.match(await page.textContent('#win-title'),/Post/);
     assert.match(await page.textContent('#win-time'),/^\d+:\d{2}\.\d{2}$/);
-    assert.ok(await page.evaluate(()=>Number(localStorage.getItem('mirio-time-best-v1:sky'))>0));
-    assert.equal(await page.evaluate(()=>localStorage.getItem('mirio-time-best-v1:ribbon')),null);
+    assert.ok(await page.evaluate(()=>Number(localStorage.getItem('mirio-time-best-v2:sky'))>0));
+    assert.equal(await page.evaluate(()=>localStorage.getItem('mirio-time-best-v2:ribbon')),null);
     await shot(page,'chapter-result');
   });
   await check('a temporary score-server failure permits retry with the same finished run',async()=>{
     let refuse=true;let submitted=null;
-    await page.route('**/api/times.php',async route=>{
+    await page.route('**/api/times.php?*',async route=>{
       if(route.request().method()==='POST'){
         submitted=route.request().postDataJSON();
         if(refuse){refuse=false;return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:'unavailable',message:'Kurz offline'})});}
@@ -118,7 +118,7 @@ try{
     assert.ok(submitted.penaltyMs>=2000);
     assert.match(await page.textContent('#score-status'),/Platz|eingetragen/);
     assert.equal((await page.textContent('#win-board .mine .name'))?.trim(),'Wolkenkind');
-    await page.unroute('**/api/times.php');
+    await page.unroute('**/api/times.php?*');
   });
   await check('replay resets the flight, while menu navigation retains the personal best',async()=>{
     await page.click('#again');const s=await snap(page);assert.equal(s.chapterRun.time,0);assert.equal(s.chapterRun.collectibles,0);
@@ -135,15 +135,16 @@ try{
     assert.equal((await snap(page)).chapterRun.airSpin,false);
     await page.keyboard.up('KeyD');await shot(page,'chapter-ribbon');
   });
-  await check('garden rescue, finish and replay stay within their own level',async()=>{
+  await check('garden rescue preserves its room and replay clears discoveries',async()=>{
     await page.click('#pause-button');await page.click('#rescue');
     assert.equal((await snap(page)).selectedLevel,'ribbon');
-    await gameTime(page,8);
-    await page.evaluate(()=>window.__mirio.chapterSeek(.99));
-    await page.keyboard.down('KeyD');await until(page,()=>window.__mirio.snapshot().state==='win');await page.keyboard.up('KeyD');
-    assert.match(await page.textContent('#win-title'),/Gartentor/);
-    assert.ok(await page.evaluate(()=>Number(localStorage.getItem('mirio-time-best-v1:ribbon'))>0));
-    await page.click('#again');assert.equal((await snap(page)).chapterRun.collectibles,0);
+    const recovered=(await snap(page)).chapterRun;
+    assert.equal(recovered.seeds,0);assert.equal(recovered.status,'playing');
+    assert.ok(recovered.penalties>=2);
+    // Complete seed/door/finish routes are played in mirio-garden-e2e.mjs.
+    await menu(page);await choose(page,'ribbon');
+    assert.equal((await snap(page)).chapterRun.collectibles,0);
+    assert.equal((await snap(page)).chapterRun.seeds,0);
     await menu(page);
   });
   await check('the kart has a direct menu entry and keeps its gas, steering and drift controls',async()=>{

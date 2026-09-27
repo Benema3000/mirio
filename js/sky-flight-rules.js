@@ -1,7 +1,8 @@
-// An original, forgiving sky slalom. Course rules have no renderer or DOM.
+// Forgiving postal flight. Course rules have no renderer or DOM.
+import { POST, createPostRun, deliveryTarget, makePostCourse, postalWind, postSnapshot, tossParcel, updatePost } from './sky-post-rules.js';
 export const SKY = Object.freeze({
   length: 1800, cruise: 24, boostSpeed: 35, boostDuration: 1.45, boostCooldown: 5,
-  lateralSpeed: 9.5, verticalSpeed: 7.5, width: 9, height: 5.5,
+  lateralSpeed: 9.5, verticalSpeed: 7.5, width: 12, height: 8,
   ringRadius: 2.3, ringDraft: .45, draftSpeed: 28,
   rollDuration: .8, rollCooldown: 2.4,
   bumpPenalty: 2.5, rescuePenalty: 2, invulnerable: 1.6,
@@ -13,6 +14,7 @@ const damp = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt));
 
 /** Rings describe a gentle, visible line; balloons leave more than one way past. */
 export function makeSkyCourse() {
+  const post = makePostCourse();
   const rings = Array.from({length: 48}, (_, i) => {
     const s = 50 + i * 35.5;
     const ramp = Math.min(1, i / 5);
@@ -24,15 +26,16 @@ export function makeSkyCourse() {
     for (const checkpoint of [450, 900, 1350]) if (Math.abs(s - checkpoint) < 25) s = checkpoint + 30;
     const ring = rings.reduce((best, r) => Math.abs(r.s - s) < Math.abs(best.s - s) ? r : best);
     // Obstacles sit across from the marked route, with a few central slaloms.
-    const x = clamp(-Math.sign(ring.x || 1) * (3.5 + (i % 3) * 1.1), -7, 7);
+    const delivery = post.deliveries.find(d => Math.abs(d.s - s) < POST.approach);
+    const x = delivery ? -Math.sign(delivery.x) * 6 : clamp(-Math.sign(ring.x || 1) * (3.5 + (i % 3) * 1.1), -7, 7);
     return {id: `sky-balloon-${i}`, s, x, y: Math.sin(i * 1.8) * 2.5,
       radius: 1.65, phase: i * 1.37, drift: .55, color: i % 3};
   });
-  return {length: SKY.length, rings, obstacles, checkpoints: [450, 900, 1350]};
+  return {length: SKY.length, rings, obstacles, checkpoints: [450, 900, 1350], ...post};
 }
 
 export function createSkyRun() {
-  return {status: 'playing', s: 0, time: 0, elapsed: 0, penalty: 0,
+  return {status: 'playing', post: createPostRun(), s: 0, time: 0, elapsed: 0, penalty: 0,
     x: 0, y: 0, vx: 0, vy: 0, speed: SKY.cruise,
     boost: 0, cooldown: 0, draft: 0, roll: 0, rollCooldown: 0,
     actionHeld: false, jumpHeld: false, invulnerable: 0, slow: 0,
@@ -50,7 +53,7 @@ export function stepSkyRun(run, course, dt, controls = {}) {
   if (run.status !== 'playing' || !Number.isFinite(dt) || dt <= 0) return events;
   dt = Math.min(SKY.maxFrame, dt);
   const action = Boolean(controls.action), jump = Boolean(controls.jump);
-  if (action && !run.actionHeld && run.cooldown <= 0) {
+  if (action && !run.actionHeld && !tossParcel(run, course, events) && run.cooldown <= 0) {
     run.boost = SKY.boostDuration;
     run.cooldown = SKY.boostCooldown;
     events.push({type: 'boost', kind: 'speed'});
@@ -69,19 +72,23 @@ export function stepSkyRun(run, course, dt, controls = {}) {
   for (let n = 0; n < count && run.status === 'playing'; n++) {
     const before = {s: run.s, x: run.x, y: run.y};
     for (const key of ['boost', 'cooldown', 'draft', 'roll', 'rollCooldown', 'invulnerable', 'slow']) run[key] = Math.max(0, run[key] - h);
-    run.vx = damp(run.vx, x * SKY.lateralSpeed, 12, h);
-    run.vy = damp(run.vy, y * SKY.verticalSpeed, 12, h);
+    run.post.wind = postalWind(run, course);
+    run.vx = damp(run.vx, x * SKY.lateralSpeed + run.post.wind.x, 12, h);
+    run.vy = damp(run.vy, y * SKY.verticalSpeed + run.post.wind.y, 12, h);
     run.x = clamp(run.x + run.vx * h, -SKY.width, SKY.width);
     run.y = clamp(run.y + run.vy * h, -SKY.height, SKY.height);
     if (Math.abs(run.x) === SKY.width && Math.sign(run.vx) === Math.sign(run.x)) run.vx = 0;
     if (Math.abs(run.y) === SKY.height && Math.sign(run.vy) === Math.sign(run.y)) run.vy = 0;
-    const target = run.slow > 0 ? 13 : run.boost > 0 ? SKY.boostSpeed : run.draft > 0 ? SKY.draftSpeed : SKY.cruise;
+    const bay = deliveryTarget(run, course);
+    const cruise = bay && run.s > bay.s - POST.bayApproach ? POST.baySpeed : SKY.cruise;
+    const target = (run.slow > 0 ? 13 : run.boost > 0 ? SKY.boostSpeed : run.draft > 0 ? SKY.draftSpeed : cruise) + run.post.wind.speed;
     run.speed = damp(run.speed, target, 6, h);
     const advance = Math.min(run.speed * h, course.length - run.s);
     const used = advance / Math.max(1, run.speed);
     run.s += advance;
     run.elapsed += used;
     run.time += used;
+    updatePost(run, course, used, events);
     const at = s => {
       const k = clamp((s - before.s) / Math.max(1e-8, advance), 0, 1);
       return {x: before.x + (run.x - before.x) * k, y: before.y + (run.y - before.y) * k};
@@ -138,6 +145,9 @@ export function rescueSkyRun(run, course) {
   run.boost = run.draft = run.roll = run.slow = 0;
   run.actionHeld = run.jumpHeld = false;
   run.combo = 0;
+  run.post.parcel = null;
+  run.post.arrival = false;
+  run.post.arrivalAt = 0;
   run.invulnerable = 2;
   run.time += SKY.rescuePenalty;
   run.penalty += SKY.rescuePenalty;
@@ -164,5 +174,5 @@ export function skySnapshot(run, course) {
     collectibles: run.collected.size, totalCollectibles: course.rings.length,
     checkpoint: run.checkpoint, checkpoints: course.checkpoints.length,
     boost: run.boost, cooldown: run.cooldown, roll: run.roll, rollCooldown: run.rollCooldown,
-    combo: run.combo, bestCombo: run.bestCombo, bumps: run.bumps};
+    combo: run.combo, bestCombo: run.bestCombo, bumps: run.bumps, ...postSnapshot(run, course)};
 }

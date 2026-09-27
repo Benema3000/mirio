@@ -75,9 +75,9 @@ or the result screen can return to the selector.
 | Level | What you play | Main controls |
 | --- | --- | --- |
 | **Planetenreise** | The complete original meadow → moon → boss → kart adventure, including the rideable Wiesensummer | Existing platformer and kart controls |
-| **Sternenrennen** | Direct entry into the complete existing three-lap kart race, with its rival, drift boosts and 77 gems | ↑ gas, ↓ brake, ← → steer, hold jump while steering to drift; controller RT/LT/A |
-| **Wolkenpost** | An original forward-flight course through floating orchards, cloud banks, 48 hoops and a balloon slalom | WASD/arrows/left stick steer; Space/A protective roll; Shift/X turbo |
-| **Blütenpfad** | A 334-metre side-scrolling garden with spring flowers, moving clouds, optional gem paths and friendly puff creatures | A/D or ←/→/left stick; Space/A variable-height jump; Shift/X air spin |
+| **Sternenrennen** | Three drifting laps with windmill, orchard and cloud forks, rolling fruit, splits and a rival using the same roads | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
+| **Wolkenpost** | Three parcel deliveries, upper currents, windmills, cloud arches and a singing cloud whale | WASD/arrows/stick steer; Space/A roll; Shift/X toss near baskets, turbo elsewhere |
+| **Blütenpfad** | Connected courtyard, orchard, musical conservatory and cellar; three lantern seeds open the final ascent | A/D or ←/→/stick move; Space/A jump; Shift/X air spin, song or door |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
 keyboard/controller/touch controls and no game-over screen. Recovery adds a
@@ -86,6 +86,27 @@ Gold, silver and bronze medals reward replaying; finishing always earns a badge.
 The new modes use the unchanged drawing-derived Mirio model. Their scenery is
 original procedural geometry. The menu logo and gameplay thumbnail provenance
 are documented in `assets/README.md`.
+
+## Playground routes edition
+
+- **Sternenrennen:** three physically separate forks share a route network for
+  rendering, steering, rivals, collisions and progress. Charge a drift before
+  the windmill fork; release to take its upper road. An uncharged attempt keeps
+  racing below. The orchard offers a narrow inside line; cloud cushions launch
+  playful jumps. Two split times and distinct charge tones support replay.
+  On touch, accelerate, then hold ↑ while steering: the drift maintains gas.
+- **Wolkenpost:** match the visible parcels to flower, bread and kite signs.
+  Shift / X / ✦ tosses inside generous delivery areas; a bird returns a miss.
+  Recipients change later currents. Roll through three chimes on different air
+  routes to wake the cloud whale. Remaining cargo reaches the post office.
+- **Blütenpfad:** explore in either direction and use doors, rooftop windows
+  and a curtain passage to reconnect. Sing at a musical flower to exchange vine
+  stairs for sleepy spirit platforms. Three lantern seeds open the courtyard
+  ascent. Discoveries survive checkpoint recovery; replay resets them.
+
+All scenery is procedural. Original drawings, derived models and floor textures
+are unchanged. Public and device records use **playground-v2**; older records
+remain intact and are excluded from the new courses.
 
 ## Polished adventure edition
 
@@ -222,8 +243,8 @@ measures only the race. Personal bests remain on the device without a server,
 with an in-memory fallback when storage is unavailable. Public submission is
 optional and only happens when the player submits a nickname.
 
-- `GET api/times.php?level=sky` returns the selected list and a signed token.
-  `POST {level,token,name,timeMs,penaltyMs?}` submits an integer total duration.
+- `GET api/times.php?course=playground-v2&level=sky` returns the selected list and a signed token.
+  `POST {level,token,name,timeMs,penaltyMs?}` to the same course URL submits an integer total duration.
   Optional integer `penaltyMs` defaults to zero and must be between zero and
   `timeMs`. Active play (`timeMs - penaltyMs`) must meet the level minimum and
   fit within the token's age plus 15 seconds of clock/network slack. This allows
@@ -243,7 +264,11 @@ optional and only happens when the player submits a nickname.
   location; `MIRIO_SCORES_DIR` remains a compatible test override.
 - The legacy `api/scores.php`, its point rules and `scores.json` are preserved
   for existing data/clients, but the current game uses only the new time boards.
-- `localStorage` also stores each level's personal best (`mirio-time-best-v1:`).
+- Current records live under `courses/playground-v2/` inside the time data
+  directory, with an independent token secret. Requests without `course` retain
+  the original boards. Unknown versions are rejected.
+- `localStorage` stores current personal bests under `mirio-time-best-v2:`.
+  The original `mirio-time-best-v1:` entries are preserved.
   A failed public submission does not erase the personal best. Slow/stale
   network responses cannot replace another level's active run or result.
 
@@ -320,6 +345,25 @@ optional and only happens when the player submits a nickname.
 
 `?test` adds `window.__mirio` (state snapshot, layout, teleport, raceSkip and chapterSeek). It is a
 cheat for tests, harmless in a kid's game, and absent without the parameter.
+
+The playground update adds:
+
+- `tests/mirio-kart-routes-e2e.mjs`: keyboard/controller/touch drifting, every
+  branch through production physics, split times, finish, replay and fallback.
+- `tests/mirio-sky-post-e2e.mjs`: complete keyboard flight, all recipients,
+  air routes, chimes, arrival and replay.
+- `tests/mirio-sky-post-devices-e2e.mjs`: genuine touch events, controller
+  delivery, missed-parcel return and pause.
+- `tests/mirio-garden-e2e.mjs`: complete keyboard exploration; set
+  `GARDEN_ROUTE=song` for the alternative conservatory/secret route.
+- `tests/mirio-garden-controls-e2e.mjs`: touch, controller, song, recovery,
+  pause and reduced motion.
+- `tests/mirio-course-records-e2e.mjs`: isolated PHP server verifies new boards,
+  legacy preservation and cross-course token rejection. Accepts `PHP`.
+
+Browser suites accept `PLAYWRIGHT` and `BASE_URL`; new suites also accept
+`CHROMIUM` for an explicit Chromium executable. Full keyboard runs use normal
+input; the kart geometry suite also advances production physics directly.
 
 ## Running it
 

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { buildMirio } from './mirio-model.js';
+import { GARDEN } from './garden-course.js';
 import { RIBBON, RibbonRules, makeRibbonCourse, platformAt, critterAt } from './ribbon-rules.js';
 
 const PALETTE=[
@@ -86,8 +87,8 @@ export class RibbonRun {
     this.sphere=new THREE.SphereGeometry(1,14,10);this.cylinder=new THREE.CylinderGeometry(1,1,1,10);
     this.box=new RoundedBoxGeometry(1,1,1,3,.1);
     const batch=new GardenBatch(this.scene);
-    this._landscape(batch);this._backdrop(batch);this.chunks=batch.finish();
-    this._movingPlatforms();this._springs();this._checkpoints();this._critters();this._gems();this._finish();this._particles();
+    this._landscape(batch);this._backdrop(batch);this._gardenLandmarks(batch);this.chunks=batch.finish();
+    this._movingPlatforms();this._springs();this._checkpoints();this._critters();this._gems();this._finish();this._gardenToys();this._particles();
     this.hero=buildMirio(art);this.scene.add(this.hero.group);
     const shadowMat=new THREE.MeshBasicMaterial({map:art.shadow||null,color:0x355867,transparent:true,opacity:.24,depthWrite:false});
     this.shadow=new THREE.Mesh(new THREE.PlaneGeometry(1.4,.8),shadowMat);this.shadow.rotation.x=-Math.PI/2;this.scene.add(this.shadow);
@@ -108,7 +109,7 @@ export class RibbonRun {
         // Pale stepping-stone inlays break the path into a clear, welcoming line.
         for(let x=p.x-p.w/2+1.1;x<p.x+p.w/2-1;x+=1.9){
           b.add('box',x,p.y+.026,rand()*.15-.075,.91,.026,.72,0xf8e9bf,0,(rand()-.5)*.2);
-          if(x>7&&x<330&&rand()>.32)this._flowerBed(b,x,p.y,2.4+rand()*.6,pal,rand);
+          if(rand()>.48)this._flowerBed(b,x,p.y,2.4+rand()*.6,pal,rand);
         }
         // Scalloped front edge and seed-shaped stones in the earth strata.
         for(let x=p.x-p.w/2+.45;x<p.x+p.w/2;x+=.82){
@@ -116,7 +117,7 @@ export class RibbonRun {
           if(rand()>.5)b.add('stone',x,p.y-1.3-rand()*2,3.34,.14+rand()*.18,.13,.055,0xf5d5a3,rand());
         }
         for(let x=p.x-p.w/2+3;x<p.x+p.w/2-1.5;x+=5.5+rand()*2){
-          this._tree(b,x,p.y,-2.5,1+rand()*.36,pal,rand);
+          if(p.zone<2)this._tree(b,x,p.y,-2.5,1+rand()*.36,pal,rand);
           this._flowerBed(b,x+1.5,p.y,-2.8,pal,rand);
         }
       }else if(p.kind==='petal'){
@@ -126,11 +127,10 @@ export class RibbonRun {
         b.add('stem',p.x,p.y-.83,0,.11,.5,.11,0x81aa7d);
       }
     }
-    // Small side signs teach visually; no controls baked into the artwork.
-    this._sign(11,1.4,-2.15,'Blütenpfad','Ein Garten voller Wege',4.6);
-    this._sign(84,1.9,-2.3,'Hui!','Blumen tragen dich',3.6);
-    this._sign(214,1.3,-2.2,'Wolkenweg','Oben glitzert noch mehr',3.9);
-    this._sign(314,1.4,-2.2,'Fast da!','Zum Blütentor →',3.6);
+    this._sign(3,1.1,-2.15,'← ♧   ✿   ☀ →','3 ✧ → ✿',4.9);
+    this._sign(-23,1.1,-2.3,'♧ Baumhaus','↑ ✧',3.8);
+    this._sign(46,1.1,-2.3,'☀ Glashaus','♪ ☀ ↔ ☾',3.8);
+    this._sign(122,1.1,-2.3,'☾ Kellergarten','♪ ☀ ↔ ☾',4.1);
   }
   _flowerBed(b,x,y,z,pal,rand){
     for(let j=0;j<3;j++){
@@ -160,7 +160,7 @@ export class RibbonRun {
   }
   _backdrop(b){
     const rand=random(43536);
-    for(let x=-60;x<430;x+=12){
+    for(let x=-130;x<230;x+=12){
       b.add('orb',x,-5,-37,18,13+rand()*9,9,rand()>.5?0xb2d7bc:0xb9d9c7);
       b.add('orb',x+5,-5,-24,13,8+rand()*7,7,rand()>.5?0x97c4ae:0xa1cbb5);
       if(rand()>.35){
@@ -169,23 +169,152 @@ export class RibbonRun {
       }
     }
     // The creek and its glints sit below the garden, never obscuring a landing.
-    for(let x=-40;x<400;x+=40)b.add('box',x+20,-5.6,-3,40,.15,30,0x83cace);
-    for(let x=-15;x<365;x+=3.4)b.add('box',x,-5.49,-1-rand()*9,1+rand()*2,.015,.08,0xc5eeea,0,.1);
+    for(let x=-120;x<230;x+=40)b.add('box',x+20,-5.6,-3,40,.15,30,0x83cace);
+    for(let x=-100;x<200;x+=3.4)b.add('box',x,-5.49,-1-rand()*9,1+rand()*2,.015,.08,0xc5eeea,0,.1);
     // Tall seed stalks behind the route provide distinct landmarks in each act.
-    for(const x of [28,76,130,182,233,277,324]){
-      const pal=PALETTE[Math.min(4,Math.floor(x/70))];
+    for(const x of [-70,-31,20,71,149,178]){
+      const pal=PALETTE[x<0?1:x<40?0:x<115?2:3];
       b.rod(x,-1,-9,x+1,8,-9,.14,pal.leaf);
       for(let j=0;j<7;j++){const a=j/7*Math.PI*2;b.add('petal',x+1+Math.sin(a)*1.1,8+Math.cos(a)*1.1,-9,.8,1.1,.3,pal.flower,-a);}
       b.add('orb',x+1,8,-8.65,.65,.65,.2,0xf5d07e);
       b.add('petal',x-1,3,-9,2,.42,.8,pal.leaf,.3);
     }
   }
+  _gardenLandmarks(b){
+    // Glass framing and a striped roof identify the conservatory from both paths.
+    for(let x=52;x<=108;x+=8){
+      b.rod(x,0,-3,x,9.8,-3,.10,0xf4edcf);
+      b.rod(x,9.8,-3,x-3,11.4,-5,.10,0x769e94);
+      b.add('box',x,9.9,-3,8,.16,.18,0xf4edcf);
+    }
+    b.add('box',79,4.5,-3.2,58,9,.08,0xb8d9c7);
+    for(let x=53;x<108;x+=8)b.add('box',x,4.5,-3,7.4,.10,.2,0xf4edcf);
+    // Cellar walls sit behind play: soft moonlight, oversized pots, and star windows.
+    b.add('box',153,3.5,-4,70,9,.35,0x828eaf);
+    for(let x=125;x<186;x+=11){
+      b.add('box',x,3.5,-3.7,4,5,.2,0x465779);
+      b.add('orb',x,4.5,-3.5,.9,.9,.08,0xffe2a6);
+      b.add('box',x,3.5,-3.3,.12,5.1,.22,0xbebbc8);
+      b.add('box',x,3.5,-3.3,4.1,.12,.22,0xbebbc8);
+    }
+    // A tree-house platform, ladder, and acorn lift advertise two ways up.
+    b.add('stem',-70,3,-2.4,.75,6,.75,0x967050);
+    b.add('box',-70,7.3,-2.8,13,2.2,2.3,0xdfbc83);
+    b.add('cone',-70,10,-2.8,8,3,2.3,0xcc8f80);
+    for(let y=.6;y<6;y+=.5)b.add('box',-79,y,-1.3,1.2,.1,.15,0xdbc39b);
+    b.rod(-79.55,0,-1.3,-79.55,6,-1.3,.07,0x977257);
+    b.rod(-78.45,0,-1.3,-78.45,6,-1.3,.07,0x977257);
+    // Tiny footprints lead to a fluttering curtain and a hollow stump.
+    for(let x=138;x<146;x+=.7)b.add('orb',x,6.44,(Math.floor(x/.7)%2?-.25:.25),.16,.025,.08,0xe9d7ac);
+    b.add('stem',-87,1,-2,.9,2,.9,0xa57b59);
+    b.add('orb',-87,1,-.98,.62,.8,.08,0x4d6260);
+  }
+  _gardenToys(){
+    this.vines=[];this.seedToys=[];this.doors=[];this.songFlowers=[];this.spirits=[];
+    for(const p of this.course.platforms.filter(p=>p.kind==='vine')){
+      const group=new THREE.Group();group.position.set(p.x,p.y,0);this.scene.add(group);
+      mesh(group,this.box,this.materials.green,[0,-.13,0],[p.w,.26,2.6]);
+      for(let i=-2;i<=2;i++)mesh(group,this.sphere,this.materials.pink,[i*p.w/5,-.2,1.2],[.72,.25,.37]);
+      mesh(group,this.cylinder,this.materials.green,[0,-p.y/2,-.3],[.065,p.y,.065]);
+      this.vines.push({p,group});
+    }
+    for(const seed of this.course.seeds){
+      const group=new THREE.Group();group.position.set(seed.x,seed.y,0);this.scene.add(group);
+      mesh(group,this.sphere,this.materials.gold,[0,0,0],[.5,.65,.42]);
+      for(const side of [-1,1])mesh(group,this.sphere,this.materials.green,[side*.27,.64,0],[.3,.11,.16]).rotation.z=side*.55;
+      mesh(group,new THREE.TorusGeometry(.8,.045,5,24),this.materials.cream,[0,0,-.1]);
+      this.seedToys.push({seed,group});
+    }
+    for(const door of this.course.doors){
+      const group=new THREE.Group();group.position.set(door.x,door.y,-1);this.scene.add(group);
+      const color=door.secret?this.materials.pink:this.materials.teal;
+      mesh(group,this.box,color,[0,1.15,0],[1.8,2.4,.24]);
+      mesh(group,this.box,this.materials.dark,[0,1.1,.18],[1.3,1.9,.10]);
+      const curtain=mesh(group,this.box,color,[0,1.35,.3],[1.3,1.5,.12]);curtain.visible=!!door.secret;
+      mesh(group,new THREE.PlaneGeometry(1.4,1.3),label(door.icon,'↻','#35535b',192),[0,3.15,.25]);
+      mesh(group,this.sphere,this.materials.gold,[.5,1.1,.33],[.1,.1,.09]);
+      this.doors.push({door,group,curtain});
+    }
+    for(const flower of this.course.flowers){
+      const group=new THREE.Group();group.position.set(flower.x,flower.y,0);this.scene.add(group);
+      mesh(group,this.cylinder,this.materials.green,[0,.72,0],[.08,1.44,.08]);
+      const blossom=new THREE.Group();blossom.position.y=1.55;group.add(blossom);
+      for(let i=0;i<6;i++){const a=i*Math.PI/3;mesh(blossom,this.sphere,this.materials.pink,[Math.sin(a)*.44,Math.cos(a)*.44,0],[.28,.34,.12]);}
+      mesh(blossom,this.sphere,this.materials.gold,[0,0,.10],[.28,.28,.12]);
+      mesh(group,new THREE.PlaneGeometry(2.4,1.44),label('♪  ↻','☀ ↔ ☾','#35535b',320),[0,3.05,0]);
+      this.songFlowers.push({flower,group,blossom});
+    }
+    // These shy gardeners hum with the flower and water the lanterns you found.
+    for(const [x,y]of [[61,0],[84,0],[140,0],[175,0]]){
+      const group=new THREE.Group();this.scene.add(group);
+      mesh(group,this.sphere,this.materials.white,[0,.75,0],[.64,.74,.48]);
+      for(const side of [-1,1]){
+        mesh(group,this.sphere,this.materials.dark,[side*.21,.91,.43],[.07,.08,.03]);
+        mesh(group,this.sphere,this.materials.pink,[side*.39,.73,.40],[.10,.05,.03]);
+      }
+      const can=mesh(group,this.box,this.materials.teal,[.6,.52,.35],[.45,.38,.32]);
+      mesh(group,this.cylinder,this.materials.teal,[.9,.58,.35],[.07,.38,.07]).rotation.z=-1;
+      const water=mesh(group,this.cylinder,this.materials.teal,[1.04,.25,.35],[.024,.38,.024]);
+      this.spirits.push({x,y,group,can,water});
+    }
+    this.seedSockets=new THREE.Group();this.seedSockets.position.set(17,1.1,-1.6);this.scene.add(this.seedSockets);
+    this.lanterns=[];
+    for(let i=0;i<GARDEN.seedCount;i++){
+      mesh(this.seedSockets,this.cylinder,this.materials.wood,[(i-1)*1.5,.4,0],[.06,.8,.06]);
+      this.lanterns.push(mesh(this.seedSockets,this.sphere,this.materials.cream,[(i-1)*1.5,1,0],[.43,.53,.36]));
+    }
+    mesh(this.seedSockets,new THREE.PlaneGeometry(4.8,1.8),label('✧ ✧ ✧','↓ ✿ ↑'),[0,3,0]);
+    this.interactPrompt=mesh(this.scene,new THREE.PlaneGeometry(.9,.9),label('↻','','#35535b',192),[0,0,0]);
+    this.guide=mesh(this.scene,new THREE.ConeGeometry(.25,.6,3),this.materials.gold,[0,0,0]);
+    this.gardenBackground=new THREE.Color();
+  }
+  _renderGarden(dt,{reducedMotion}){
+    const r=this.rules,t=this.animationTime,awake=r.dream===GARDEN.dreamAwake;
+    this.gardenBackground.setHex(r.room().color);
+    this.scene.background.lerp(this.gardenBackground,1-Math.exp(-dt*3));this.scene.fog.color.copy(this.scene.background);
+    for(const {p,group}of this.vines)group.visible=r.platformActive(p)&&Math.abs(p.x-r.x)<42;
+    for(const {seed,group}of this.seedToys){
+      group.visible=!r.seeds.has(seed.id)&&Math.abs(seed.x-r.x)<42;
+      group.position.y=seed.y+(reducedMotion?0:Math.sin(t*2)*.17);
+      group.rotation.y=reducedMotion?0:Math.sin(t)*.3;
+    }
+    for(const {door,group,curtain}of this.doors){
+      group.visible=Math.abs(door.x-r.x)<42;
+      if(door.secret){curtain.scale.x=r.opened.has(door.id)?.18:.78+(reducedMotion?0:Math.sin(t*2.5)*.1);curtain.position.x=r.opened.has(door.id)?.55:0;}
+    }
+    for(const {flower,group,blossom}of this.songFlowers){
+      group.visible=Math.abs(flower.x-r.x)<42;
+      blossom.rotation.z=reducedMotion?0:Math.sin(t*2)*.1;
+      blossom.scale.setScalar(awake?1:1.15);
+    }
+    for(const [index,spirit]of this.spirits.entries()){
+      const {group,y,water,can}=spirit,x=r.gateOpen()?12+index*2.8:spirit.x;
+      group.visible=Math.abs(x-r.x)<40;
+      group.position.set(x,y+(reducedMotion?.1:.12+Math.sin(t*1.4+x)*.12),-.5);
+      group.scale.y=awake?1:.7;group.rotation.z=reducedMotion?0:Math.sin(t+x)*.06;
+      can.rotation.z=awake?-.3:0;water.visible=awake||r.seeds.size>0;
+      water.scale.y=reducedMotion?1:.65+Math.sin(t*8+x)*.3;
+    }
+    this.lanterns.forEach((lantern,i)=>{lantern.material=i<r.seeds.size?this.materials.gold:this.materials.cream;});
+    const interaction=r.interaction();this.interactPrompt.visible=!!interaction;
+    if(interaction)this.interactPrompt.position.set(r.x,r.y+3.5,.25);
+    const next=this.course.seeds.find(seed=>!r.seeds.has(seed.id));
+    this.guide.visible=r.clock-r.lastDiscovery>GARDEN.hintDelay;
+    if(this.guide.visible){
+      const target=next||{x:GARDEN.finishX,y:GARDEN.finishY};
+      this.guide.position.set(r.x,r.y+2.8,.2);this.guide.rotation.z=Math.atan2(-(target.x-r.x),target.y-r.y);
+    }
+  }
   _movingPlatforms(){
     this.movers=[];
-    for(const p of this.course.platforms.filter(p=>p.kind==='cloud'||p.kind==='catch')){
+    for(const p of this.course.platforms.filter(p=>p.kind==='cloud'||p.kind==='catch'||p.kind==='ghost')){
       const group=new THREE.Group();this.scene.add(group);
       for(let j=0;j<7;j++)mesh(group,this.sphere,this.materials.white,[(j-3)*p.w/7,-.23+(j%2)*.03,0],[p.w/7+.1,.33,.9]);
       mesh(group,this.box,this.materials.cream,[0,-.06,0],[p.w*.87,.14,1.5]);
+      if(p.kind==='ghost'){
+        for(const side of [-1,1])mesh(group,this.box,this.materials.dark,[side*.5,.12,.92],[.3,.055,.035]);
+        mesh(group,this.sphere,this.materials.pink,[0,-.03,.94],[.13,.06,.03]);
+      }
       this.movers.push({p,group});
     }
   }
@@ -241,7 +370,7 @@ export class RibbonRun {
     this.course.gems.forEach((g,i)=>this.gems.setColorAt(i,new THREE.Color(g.route==='blossom'||g.route==='cloud'?0xf3c0dd:0xffda78)));
   }
   _finish(){
-    this.finish=new THREE.Group();this.finish.position.set(this.course.finishX,0,-.3);this.scene.add(this.finish);
+    this.finish=new THREE.Group();this.finish.position.set(this.course.finishX,this.course.finishY,-.3);this.scene.add(this.finish);
     for(const side of [-1,1]){
       mesh(this.finish,this.cylinder,this.materials.wood,[side*1.9,2.5,0],[.17,5,.17]);
       mesh(this.finish,this.sphere,this.materials.green,[side*1.9,.2,0],[.55,.28,.7]);
@@ -279,9 +408,9 @@ export class RibbonRun {
   step(dt,controls={}){
     const events=this.rules.step(dt,controls);
     for(const e of events){
-      if(e.type==='bit')this._burst(e.x,e.y,6);
+      if(e.type==='bit')this._burst(e.x,e.y,e.kind==='seed'?30:6);
       if(e.type==='spring'){const f=this.flowers.find(f=>f.s.id===e.id);if(f)f.pulse=.7;this._burst(e.x,e.y+.3,14);}
-      if(e.type==='checkpoint')this._burst(e.x,e.y+1.7,16);
+      if(e.type==='checkpoint'){this._burst(e.x,e.y+1.7,16);if(e.kind==='door')this.cameraReady=false;}
       if(e.type==='bump'){const c=this.critters.find(c=>c.c.id===e.id);if(c)c.bonk=.6;this._burst(e.x,e.y+.8,8);}
       if(e.type==='finish'){this._burst(this.rules.x,this.rules.y+2,60);this.finishedBurst=true;}
     }
@@ -310,20 +439,20 @@ export class RibbonRun {
     m.head.rotation.z=reducedMotion?0:Math.sin(t*2.1)*.025;
     this.recoveryCloud.visible=r.recovery>0;this.recoveryCloud.position.set(r.x,r.y+recover-.08,0);
     let floor=-6;
-    for(const p of this.course.platforms){const a=platformAt(p,r.clock);if(r.x>a.x-a.w/2&&r.x<a.x+a.w/2&&a.y<=r.y+.1)floor=Math.max(floor,a.y);}
+    for(const p of this.course.platforms){if(!r.platformActive(p))continue;const a=platformAt(p,r.clock);if(r.x>a.x-a.w/2&&r.x<a.x+a.w/2&&a.y<=r.y+.1)floor=Math.max(floor,a.y);}
     this.shadow.visible=floor>-6;this.shadow.position.set(r.x,floor+.045,.07);this.shadow.scale.setScalar(Math.max(.35,1-(r.y-floor)*.075));
     this.shadow.material.opacity=.24*Math.max(.15,1-(r.y-floor)*.11);
     const aspect=Math.max(.35,camera.aspect||1.6),distance=Math.max(23,8/(aspect*Math.tan(43*Math.PI/360)));
-    const lead=Math.min(3.6,aspect*3.2),goalX=r.x+lead,goalY=Math.max(.6,Math.min(5.2,r.y*.53+1));
+    const lead=Math.min(3.6,aspect*3.2),goalX=r.x+r.facing*lead,goalY=Math.max(.6,r.y*.8+1);
     if(!this.cameraReady){this.cameraX=goalX;this.cameraY=goalY;this.cameraReady=true;}
     const ease=1-Math.exp(-dt*7);this.cameraX+=(goalX-this.cameraX)*ease;this.cameraY+=(goalY-this.cameraY)*ease;
     if(camera.isPerspectiveCamera&&camera.fov!==43){camera.fov=43;camera.updateProjectionMatrix();}
     camera.position.set(this.cameraX,this.cameraY+4.3,distance);camera.up.set(0,1,0);camera.lookAt(this.cameraX,this.cameraY+.6,0);
     for(const chunk of this.chunks)chunk.group.visible=Math.abs(chunk.center-r.x)<92;
-    for(const {p,group}of this.movers){const a=platformAt(p,r.clock);group.position.set(a.x,a.y,0);group.visible=Math.abs(a.x-r.x)<38;}
+    for(const {p,group}of this.movers){const a=platformAt(p,r.clock);group.position.set(a.x,a.y,0);group.visible=Math.abs(a.x-r.x)<38&&r.platformActive(p);}
     for(const f of this.flowers){f.pulse=Math.max(0,f.pulse-dt);f.blossom.scale.y=1-Math.sin(f.pulse/.7*Math.PI)*.44;f.group.visible=Math.abs(f.s.x-r.x)<38;}
     for(const {cp,group,flag}of this.flags){
-      group.visible=Math.abs(cp.x-r.x)<38;flag.material.color.setHex(cp.index<=r.checkpoint?0x61b6ad:0xf3c79c);
+      group.visible=Math.abs(cp.x-r.x)<38;flag.material.color.setHex(cp.index===r.checkpoint?0x61b6ad:0xf3c79c);
       if(!reducedMotion){const pos=flag.geometry.attributes.position;for(let i=0;i<pos.count;i++)pos.setZ(i,Math.sin(t*3+pos.getX(i)*4)*.08*(pos.getX(i)+.45));pos.needsUpdate=true;}
     }
     for(const c of this.critters){const a=critterAt(c.c,r.clock);c.group.position.set(a.x,a.y,0);c.group.visible=Math.abs(a.x-r.x)<38;c.bonk=Math.max(0,c.bonk-dt);
@@ -346,6 +475,7 @@ export class RibbonRun {
       this.particleDummy.rotation.set(t+i,Math.sin(t+i),t*.6+i);this.particleDummy.scale.set(.08,.035,.13);this.particleDummy.updateMatrix();this.petals.setMatrixAt(i,this.particleDummy.matrix);
     }
     this.petals.instanceMatrix.needsUpdate=true;
-    this.finish.visible=Math.abs(r.x-this.course.finishX)<44;
+    this.finish.visible=Math.abs(r.x-this.course.finishX)<44&&r.gateOpen();
+    this._renderGarden(dt,{reducedMotion});
   }
 }

@@ -1,8 +1,10 @@
 // Local best times only; public entries are always explicitly submitted by
 // the player. No placeholder scores or cross-level comparisons are invented.
+import { PERSONAL_BEST_PREFIX } from './course-version.js';
+
 const LEVEL_IDS = new Set(['adventure', 'sky', 'ribbon', 'kart']);
 const MAX_TIME_MS = 24 * 60 * 60 * 1000;
-const KEY_PREFIX = 'mirio-time-best-v1:';
+const KEY_PREFIX = PERSONAL_BEST_PREFIX;
 const memory = new Map();
 
 const validTime = value => Number.isSafeInteger(value) && value > 0 && value <= MAX_TIME_MS;
