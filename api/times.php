@@ -42,6 +42,10 @@ try {
         header('Allow: GET, POST');
         $result = mirio_times_fail(405, 'method', 'Nur GET und POST.');
     }
+    // A new client can detect an old endpoint during a staggered deployment.
+    if ($course === MIRIO_CURRENT_COURSE) {
+        $result['body']['course'] = MIRIO_CURRENT_COURSE;
+    }
     mirio_times_respond($result['status'], $result['body']);
 } catch (Throwable $e) {
     error_log($e->getMessage());

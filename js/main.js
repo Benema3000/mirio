@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { loadArt } from './art.js';
 import { Adventure } from './adventure.js';
 import { SpringGarden } from './garden.js';
+import { MeadowPlayground } from './meadow-playground.js';
+import { MoonPlayground } from './moon-playground.js';
 import { EnemySystem } from './enemies.js';
 import { Wildlife } from './wildlife.js';
 import { Biplane, chooseBiplaneHome } from './biplane.js';
@@ -79,7 +81,7 @@ const TITLE_SCORES = 5;
 
 async function fetchScores(level) {
   const body = await (await fetch(`${SCORES_URL}&level=${encodeURIComponent(level)}`, { cache: 'no-store' })).json();
-  if (!body.ok) throw new Error(body.message);
+  if (!body.ok || body.course !== COURSE_VERSION) throw new Error(body.message ?? SCORES_DOWN);
   return body;
 }
 
@@ -157,6 +159,8 @@ async function main() {
   const particles = new Particles(scene, art.sparkle);
   const player = new Player(scene, art, level.planets, colliders);
   const biplane = new Biplane(scene, level, art, colliders);
+  const meadow = new MeadowPlayground(scene, level, colliders);
+  const moon = new MoonPlayground(scene, level, colliders);
   const rig = new CameraRig(camera, level.planets);
   const sound = new Sound();
   const input = new Input({
@@ -284,7 +288,7 @@ async function main() {
   // ---- The boss -----------------------------------------------------------------
   const ar = level.arena;
   const arenaCenter = surfacePoint(ar.planet, ar.dir, ar.top);
-  const boss = new Boss(scene, art, { planet: ar.planet, center: arenaCenter, up: ar.dir.clone(), radius: ar.radius });
+  const boss = new Boss(scene, art, { planet: ar.planet, center: arenaCenter, up: ar.dir.clone(), radius: ar.radius }, colliders);
   const fight = { on: false };
 
   function onArena() {
@@ -413,6 +417,8 @@ async function main() {
     biplane.reset(player);
     adventure.reset();
     garden.reset();
+    meadow.reset();
+    moon.reset();
     enemies.reset();
     wildlife.reset();
     finishDelay = 0;
@@ -497,8 +503,10 @@ async function main() {
       const boost = race.player.boost > 0 || race.player.turbo > 0;
       const charge = driftLevel(race.player);
       const routeHint = race.snapshot().routeHint;
-      $('race-technique').hidden = !boost && !race.player.drift && !routeHint;
-      $('race-technique').textContent = boost ? '✦ TURBO!' : charge === 2 ? 'SUPER-TURBO · Loslassen!' : charge === 1 ? 'TURBO BEREIT · Loslassen!' : race.player.drift ? 'DRIFT · Weiter halten …' : routeHint;
+      $('race-route').hidden = !routeHint;
+      $('race-route').textContent = routeHint;
+      $('race-technique').hidden = !boost && !race.player.drift;
+      $('race-technique').textContent = boost ? '✦ TURBO!' : charge === 2 ? 'SUPER-TURBO · Loslassen!' : charge === 1 ? 'TURBO BEREIT · Loslassen!' : 'DRIFT · Weiter halten …';
       $('race-technique').dataset.charge = boost ? 'boost' : String(charge);
       $('race-place').textContent = `${race.place}.`;
       $('race-time').textContent = formatTime(race.state === 'race' ? stats.raceTime : result?.time ?? 0);
@@ -547,7 +555,12 @@ async function main() {
     let label = 'Folge den Glitzersteinen';
     let chapter = '01 / WIESENWELT';
     let target = null;
-    if (biplane.mounted) { chapter = 'WIESENSUMMER / TIEFFLUG'; label = biplane.landing ? 'Wir landen auf der Wiese …' : 'Gleite über Wiesen und Wasser'; }
+    if (biplane.mounted) {
+      const task = meadow.snapshot().task;
+      chapter = 'WIESENSUMMER / WINDGARTEN';
+      label = biplane.landing ? 'Wir landen auf der Wiese …' : task.label;
+      target = surfacePoint(welt, new THREE.Vector3(...task.dir), task.height);
+    }
     else if (state === 'race' || state === 'raceEnd') { chapter = '03 / STERNENRENNEN'; label = 'Hol dir den Kristall!'; }
     else if (state === 'rocket') { chapter = '02 / AUF ZUM MOND'; label = 'Nächster Halt: Miros Mond'; }
     else if (state === 'cutscene') { chapter = '03 / STERNENRENNEN'; label = 'Dem Kristall hinterher!'; }
@@ -563,6 +576,12 @@ async function main() {
       const next = world.flags.find(f => !f.reached);
       label = next ? ['Über die Baumstümpfe zum See', 'Überquere den Glitzersee', 'Durch die Hügel zur Rakete'][world.flags.indexOf(next)] : 'Die Rakete wartet auf dem Plateau';
       target = next?.center ?? padBase;
+      const discovery = meadow.snapshot();
+      const destination = surfacePoint(welt, new THREE.Vector3(...discovery.task.dir), discovery.task.height);
+      if (discovery.windPowered && ['bridge', 'walk', 'picnic'].includes(discovery.task.id) && player.body.pos.distanceTo(destination) < 18) {
+        label = discovery.task.label;
+        target = destination;
+      }
     }
     if ($('objective').textContent !== label) $('objective').textContent = label;
     if ($('chapter').textContent !== chapter) $('chapter').textContent = chapter;
@@ -601,11 +620,14 @@ async function main() {
   const bossEvents = [];
   const natureEvents = [];
   function simulate(h) {
+    // Keep the return islands usable after a fall from the boss arena.
+    natureEvents.push(...moon.step(h, player, {active: state === 'play'}));
     if (biplane.mounted) natureEvents.push(...biplane.step(h, player));
     else {
       natureEvents.push(...garden.step(h, player, state === 'play' && !fight.on));
       player.step(h);
     }
+    natureEvents.push(...meadow.step(h, player, biplane, {active: state === 'play' && !fight.on}));
     natureEvents.push(...enemies.step(h, player, {active: state === 'play' && !fight.on}));
     if (state === 'play' && !biplane.mounted && !fight.on && !boss.defeated && onArena()) {
       fight.on = true;
@@ -724,6 +746,17 @@ async function main() {
 
     for (const ev of natureEvents) {
       sound.play(ev.type);
+      if (ev.type.startsWith('meadow')) {
+        sound.play(ev.type === 'meadowSpring' ? 'spring' : ev.type === 'meadowKiteGate' ? 'ring' : 'flag');
+        const messages = {
+          meadowWind: '✣ Die Blütenbrücke wächst!', meadowTow: '⚓ Zum Steg!',
+          meadowBoat: 'Das Boot ist zu Hause!', meadowKiteHook: '◇ Durch die Drachenringe!',
+          meadowKite: '◇ Dein Drachen bleibt am Himmel!', meadowLookout: '❀ Willkommen im Baumhaus!',
+          meadowSpringOpen: '❀ Das Eichhörnchen zeigt die Sprungblüte!', meadowPicnic: '♡ Picknick im Baumhaus!',
+        };
+        if (messages[ev.type]) hint(messages[ev.type], 5);
+        particles.burst(ev.pos, {count: 10, color: [ev.color, 0xffefa5], speed: 3, size: .3, life: .6});
+      }
       if (ev.type === 'planeBoard') {
         toast('Wiesensummer!');
         const keys = input.gamepadConnected ? 'Stick lenken · A steigen · B sinken · X Turbo · Y landen' : document.body.classList.contains('touch') ? 'Links lenken · ↑ steigen · ↓ sinken · ✦ Turbo · Tippen zum Landen' : 'WASD lenken · Leertaste steigen · C sinken · Shift Turbo · F landen';
@@ -747,7 +780,8 @@ async function main() {
         player.hearts = Math.min(MAX_HEARTS, player.hearts + 1);
       }
       if (ev.type === 'spring') {
-        hintOnce('spring', 7);
+        if (ev.kind === 'moonGuardian') hint('☾ Der Mondwächter trägt dich hinauf!', 5);
+        else hintOnce('spring', 7);
         particles.burst(ev.pos, {count: 12, color: [ev.color, 0xffefa5], speed: 4, size: .3, life: .65});
         $('garden-guide').textContent = `${garden.used.size} / 3 Sprungblüten`;
         if (ev.strong) toast('Blütensprung!');
@@ -757,6 +791,11 @@ async function main() {
 
     for (const ev of bossEvents) {
       switch (ev.type) {
+        case 'spring':
+          sound.play('spring');
+          hint('↑ Die Mondtrommel federt zur Mütze!', 4);
+          particles.burst(ev.pos, {count: 10, color: [ev.color, 0xffefa5], speed: 3, size: .3, life: .6});
+          break;
         case 'roar':
           sound.play('roar');
           toast('Finster-Mirio!');
@@ -935,6 +974,7 @@ async function main() {
       ...(friends.size === 2 ? ['♡ Tierfreund'] : []),
       ...(garden.used.size === 3 ? ['❀ Blütenflieger'] : []),
       ...(biplane.distance >= 150 ? ['✈ Wiesenpilot'] : []),
+      ...(meadow.snapshot().celebration ? ['♡ Windgartenfreund'] : []),
       ...(race.snapshot().bestDrift === 2 ? ['✦ Driftsonne'] : []),
       ...(race.snapshot().routes.length === 3 ? ['↗ Wegefinder'] : []),
     ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
@@ -1346,6 +1386,8 @@ async function main() {
     biplane.update(dt, elapsed, camera, player, reducedMotion);
     enemies.update(elapsed, camera);
     garden.update(elapsed, camera);
+    meadow.update(elapsed, camera, {reducedMotion});
+    moon.update(elapsed, camera, {reducedMotion});
     for (const ev of wildlife.update(dt, elapsed, player, {active: state === 'play' && !fight.on, camera})) {
       if (ev.type === 'wildlifeMeet') {
         friends.add(ev.kind);
@@ -1379,6 +1421,8 @@ async function main() {
         enemies: enemies.snapshot(),
         wildlife: wildlife.snapshot(),
         garden: garden.snapshot(),
+        meadow: meadow.snapshot(),
+        moon: moon.snapshot(),
         biplane: biplane.snapshot(),
         player: {
           state: player.state,
@@ -1398,7 +1442,7 @@ async function main() {
         bestJump: stats.bestJump,
         chain: player.chain,
         fight: fight.on,
-        boss: { state: boss.state, hp: boss.hp, defeated: boss.defeated, pos: boss.position.toArray() },
+        boss: { ...boss.snapshot(), pos: boss.position.toArray() },
         bubble: world.goal.bubble.visible,
         race: { state: race.state, progress: race.progress, place: race.place, drift: race.player.drift, speed: race.player.v, ...race.snapshot() },
         winVisible: !$('win').classList.contains('hidden'),
@@ -1414,6 +1458,9 @@ async function main() {
         enemies: enemies.layout(),
         wildlife: wildlife.layout(),
         garden: garden.layout(),
+        meadow: meadow.layout(),
+        moon: moon.layout(),
+        boss: boss.layout(),
         biplane: biplane.layout(),
         chapterCourse: chapterGame?.layout?.() ?? null,
         lake: welt.water,

@@ -30,6 +30,7 @@ try {
   const newBoard = await (await fetch(`${current}&level=sky`)).json();
   assert.equal(oldBoard.top[0].name, 'Altflug');
   assert.deepEqual(newBoard.top, []);
+  assert.equal(newBoard.course, COURSE_VERSION, 'clients must be able to reject an outdated API');
   assert.equal((await post(current, oldBoard.token)).status, HTTP_BAD_REQUEST);
   assert.equal((await post(base, newBoard.token)).status, HTTP_BAD_REQUEST);
   assert.equal((await fetch(`${base}?course=../legacy&level=sky`)).status, HTTP_BAD_REQUEST);

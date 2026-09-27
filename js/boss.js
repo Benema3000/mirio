@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { buildMirio } from './mirio-model.js';
+import { BossToys } from './boss-toys.js';
 
 const SCALE = 2.6;
 const MAX_HP = 3;
@@ -47,13 +48,13 @@ const CHASE_SPEED = 3.2;
 const CHASE_SPEED_PER_HIT = 0.8;
 const CHASE_ACCEL = 5;
 const TURN_SPEED = 3.5;
-const CROUCH_TIME = 0.6;
+const CROUCH_TIME = 1.05;
 const LEAP_TIME = 1.0;
 const LEAP_HEIGHT = 5;
 const SLAM_TIME = 0.45;
-const DIZZY_TIME = 2.6;
+const DIZZY_TIME = 4.2;
 const DIZZY_PER_HIT = 0.4;
-const DIZZY_MIN = 1.4;
+const DIZZY_MIN = 3.0;
 const DIZZY_SQUASH = 0.65;
 const HURT_TIME = 0.8;
 const RECOIL_SPEED = 6;
@@ -246,7 +247,8 @@ function buildShadow(map) {
 }
 
 export class Boss {
-  constructor(scene, art, arena) {
+  #toys;
+  constructor(scene, art, arena, colliders = null) {
     this.arena = arena;
     this.maxHp = MAX_HP;
 
@@ -292,9 +294,14 @@ export class Boss {
     this.wave.group.quaternion.copy(this.flat);
     this.group.add(this.wave.group);
 
+    this.#toys = new BossToys(this.group, arena, this.flat, colliders);
     this.limbs = {};
     this.reset();
   }
+
+  snapshot() { return {state:this.state,hp:this.hpLeft,defeated:this.defeated,target:{...this.target},toys:this.#toys.snapshot()}; }
+
+  layout() { return {pads:this.#toys.layout()}; }
 
   get hp() {
     return this.hpLeft;
@@ -325,6 +332,7 @@ export class Boss {
     this.dizzyTime = DIZZY_TIME;
     this.wave.active = false;
     this.wave.group.visible = false;
+    this.#toys.reset();
     for (const s of this.stars) s.visible = false;
     Object.assign(this.limbs, { squash: 1, raise: 0, legL: 0, legR: 0, armL: 0, armR: 0, lean: 0 });
     this.setGlow(0, 0);
@@ -352,7 +360,8 @@ export class Boss {
     this.time += dt;
     this.stateT += dt;
     const p = this.readPlayer(player);
-    if (p) Object.assign(this.target, { x: p.x, z: p.z });
+    // The warning commits to one landing spot so a child can read and dodge it.
+    if (p && !['crouch', 'leap', 'slam'].includes(this.state)) Object.assign(this.target, { x: p.x, z: p.z });
 
     if (this.roarPending) {
       this.roarPending = false;
@@ -404,6 +413,7 @@ export class Boss {
 
     if (p && this.touching(p)) this.hurtPlayer(player, p, this.x, this.z, events);
     this.updateWave(dt, p, player, events);
+    this.#toys.update(dt, this, p, player, events);
     this.pose(dt);
     this.place();
     return events;
@@ -414,6 +424,7 @@ export class Boss {
     this.stateT = 0;
     const hits = MAX_HP - this.hpLeft;
     if (state === 'chase') this.speed = 0;
+    if (state === 'crouch') [this.target.x, this.target.z] = this.inside(this.target.x, this.target.z);
     if (state === 'dizzy') this.dizzyTime = Math.max(DIZZY_MIN, DIZZY_TIME - DIZZY_PER_HIT * hits);
     for (const s of this.stars) s.visible = state === 'dizzy';
   }

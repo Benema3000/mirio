@@ -568,6 +568,8 @@ body.reduced-motion .hero { animation: none; }
 #race-technique { width: 100%; margin-top: 4px; text-align: center; font-size: 10px; letter-spacing: .04em; color: #e1c88f; }
 #race-technique[data-charge="1"], #race-technique[data-charge="boost"] { color: #8ae5ff; }
 #race-technique[data-charge="2"] { color: #ffba6b; }
+/* Keep the fork choice readable while the charge indicator is active. */
+#race-route { width: 100%; text-align: center; }
 body.playing #hearts svg { width: 18px; height: 18px; }
 body.playing .pill { gap: 10px; }
 @media (max-width: 360px) {

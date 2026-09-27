@@ -74,7 +74,7 @@ or the result screen can return to the selector.
 
 | Level | What you play | Main controls |
 | --- | --- | --- |
-| **Planetenreise** | The complete original meadow → moon → boss → kart adventure, including the rideable Wiesensummer | Existing platformer and kart controls |
+| **Planetenreise** | Meadow wind toys, boat rescue, kite towing, moon islands and arena drums along the original rocket → boss → kart journey | Existing platformer and kart controls; F/Y board or land |
 | **Sternenrennen** | Three drifting laps with windmill, orchard and cloud forks, rolling fruit, splits and a rival using the same roads | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
 | **Wolkenpost** | Three parcel deliveries, upper currents, windmills, cloud arches and a singing cloud whale | WASD/arrows/stick steer; Space/A roll; Shift/X toss near baskets, turbo elsewhere |
 | **Blütenpfad** | Connected courtyard, orchard, musical conservatory and cellar; three lantern seeds open the final ascent | A/D or ←/→/stick move; Space/A jump; Shift/X air spin, song or door |
@@ -89,6 +89,13 @@ are documented in `assets/README.md`.
 
 ## Playground routes edition
 
+- **Planetenreise:** the low plane powers a windmill, unfolding a real petal
+  bridge. Tow the toy boat home and guide a kite through wind beacons; then land
+  and follow a squirrel to its lookout and spring. Completed toys stay active
+  and the treehouse hosts a picnic. These errands are optional. On the moon,
+  drifting lantern islands offer an alternate climb; a sleepy guardian launches
+  Mirio toward the arena. The boss commits to a marked landing, and its waves
+  charge spring drums. The rocket and kart finale remain the main journey.
 - **Sternenrennen:** three physically separate forks share a route network for
   rendering, steering, rivals, collisions and progress. Charge a drift before
   the windmill fork; release to take its upper road. An uncharged attempt keeps
@@ -348,6 +355,12 @@ cheat for tests, harmless in a kid's game, and absent without the parameter.
 
 The playground update adds:
 
+- `tests/mirio-meadow-e2e.mjs`: flight errands, landing, bridge exploration,
+  squirrel guide, picnic, recovery and replay.
+- `tests/mirio-moon-e2e.mjs`: moving-island jump, guardian launch, fixed boss
+  warning, charged drum and return route during a fight.
+- `tests/mirio-kart-native-e2e.mjs`: a complete race through ordinary keyboard
+  input, including drift release and branch selection.
 - `tests/mirio-kart-routes-e2e.mjs`: keyboard/controller/touch drifting, every
   branch through production physics, split times, finish, replay and fallback.
 - `tests/mirio-sky-post-e2e.mjs`: complete keyboard flight, all recipients,

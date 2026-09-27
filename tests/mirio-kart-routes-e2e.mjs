@@ -143,6 +143,21 @@ try {
   await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...jump,id:1},{x:stick.x+15,y:stick.y,id:2}]});
   await wait(phone,()=>window.__kartRace.player.charge>=.5);await shot(phone,'kart-phone-drift');
   await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await wait(phone,()=>window.__kartRace.player.turbo>0);
-  console.log('ok two-thumb touch drift and release at 390×844');await mobile.close();
+  console.log('ok two-thumb touch drift and release at 390×844');
+  // Layout fixture only: real touch drift and release are verified above.
+  await phone.evaluate(()=>{
+    const r=window.__kartRace;
+    r.skipTo((65-8.5)/(r.sFinish-8.5));
+    Object.assign(r.player,{x:0,v:15,vx:0,steer:0,boost:0,turbo:1.3});
+  });
+  await wait(phone,()=>!document.querySelector('#race-route').hidden&&!document.querySelector('#race-technique').hidden);
+  assert.ok(await phone.locator('#race-route').isVisible());
+  assert.ok(await phone.locator('#race-technique').isVisible());
+  for(const selector of ['#race-route','#race-technique','#btn-gas','#btn-brake','#btn-jump']) {
+    const box=await phone.locator(selector).boundingBox();
+    assert.ok(box.x>=0&&box.x+box.width<=390&&box.y>=0&&box.y+box.height<=844,`${selector} leaves phone viewport`);
+  }
+  await shot(phone,'kart-phone-fork-turbo');
+  console.log('ok fork guidance remains visible beside turbo on phone');await mobile.close();
   assert.deepEqual(errors,[]);
 } finally {await browser.close();}
