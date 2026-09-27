@@ -4,7 +4,8 @@
 // the HMAC domain below includes both this protocol and the requested level.
 require_once __DIR__ . '/scores.inc';
 
-const MIRIO_TIMES_LEVELS = ['adventure' => 30000, 'sky' => 20000, 'ribbon' => 8000, 'kart' => 10000];
+const MIRIO_TIMES_LEVELS = ['adventure' => 30000, 'sky' => 20000, 'ribbon' => 8000, 'kart' => 10000, 'marble' => 8000];
+const MIRIO_TIMES_ADDED_LEVELS = ['marble'];
 const MIRIO_TIMES_MAX = 86400000;
 const MIRIO_TIMES_TOKEN_AGE = 86400;
 const MIRIO_TIMES_SLACK_MS = 15000;
@@ -35,7 +36,7 @@ function mirio_times_token(string $secret, string $level, int $now): string
 function mirio_times_read_token($token, string $secret, string $level, int $now): ?array
 {
     if (!mirio_times_level($level) || !is_string($token)
-        || !preg_match('/^(adventure|sky|ribbon|kart)\.(\d{1,12})\.([0-9a-f]{32})\.([0-9a-f]{64})$/', $token, $m)
+        || !preg_match('/^([a-z]+)\.(\d{1,12})\.([0-9a-f]{32})\.([0-9a-f]{64})$/', $token, $m)
         || $m[1] !== $level) {
         return null;
     }
@@ -70,6 +71,10 @@ function mirio_times_load(string $dir): array
         throw new RuntimeException('mirio times: unreadable ' . $path);
     }
     foreach (MIRIO_TIMES_LEVELS as $level => $minimum) {
+        // Older files gain only the new board; existing rows and tokens stay intact.
+        if (!array_key_exists($level, $data['times']) && in_array($level, MIRIO_TIMES_ADDED_LEVELS, true)) {
+            $data['times'][$level] = [];
+        }
         if (!isset($data['times'][$level]) || !is_array($data['times'][$level])) {
             throw new RuntimeException('mirio times: unreadable level in ' . $path);
         }

@@ -2,6 +2,7 @@
 // direct kart entry. Public submissions go only to the configured local server.
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
+import {CHAPTERS} from '../js/chapters.js';
 const {chromium} = await import(process.env.PLAYWRIGHT ?? 'playwright');
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:8766/';
 const browser = await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
@@ -32,8 +33,8 @@ async function fits(page,selector){
 }
 try{
   const {context,page,errors}=await open({viewport:{width:1280,height:800}});
-  await check('a real logo and four visual level choices replace the long start-screen copy',async()=>{
-    assert.equal(await page.locator('[data-level]').count(),4);
+  await check('the logo and every journey choice appear without introductory copy',async()=>{
+    assert.equal(await page.locator('[data-level]').count(),Object.keys(CHAPTERS).length);
     assert.ok(await page.locator('#game-logo').evaluate(img=>img.complete&&img.naturalWidth>0));
     assert.equal((await snap(page)).selectedLevel,'adventure');
     assert.equal(await page.locator('#title .intro').count(),0);
@@ -167,7 +168,8 @@ try{
   });
   await context.close();
   const mobile=await open({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:1});
-  await check('portrait menu shows all four levels and Play without scrolling',async()=>{
+  await check('portrait menu keeps journey choices and Play reachable',async()=>{
+    assert.equal(await mobile.page.locator('[data-level]').count(),Object.keys(CHAPTERS).length);
     for(const id of ['#game-logo','[data-level="ribbon"]','[data-level="kart"]','#start','#show-help'])await fits(mobile.page,id);
     assert.equal(await mobile.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
     await shot(mobile.page,'chapter-menu-phone');

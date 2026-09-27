@@ -121,8 +121,8 @@ try {
   console.log('ok controller Start respects modal pause');
   await shot(page,'hub-arrival');
   const layout=await page.evaluate(()=>window.__mirio.layout().hub);
-  for(const id of ['adventure','sky','ribbon','kart']) {
-    const portal=layout.portals.find(p=>p.level===id);
+  for(const portal of layout.portals) {
+    const id=portal.level;
     await driveTo(page,portal.pos);
     const state=await snapshot(page);
     assert.equal(state.selectedLevel,id);

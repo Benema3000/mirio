@@ -65,15 +65,18 @@ the kart off, touched at an angle it scrapes along), and a rubber-banded rival
 so a child usually wins, narrowly. About 40 s on full gas; the camera swings
 round with the kart and widens when it goes fast.
 
-## Four adventures
+## Adventures from Sternenhof
 
 The original **Mirio** logo opens into **Sternenhof**, a playable garden hub.
-Walk into one of four landmark portals to start an adventure. Every level is
+Walk into a landmark portal to start an adventure. Every level is
 available immediately; pause and results return to the hub, while replay
 restarts the same level. Completed adventures light their portal medals.
 The hub has no timer or score. Help, time boards and an optional quick selector
 open on demand. Spin at its musical flower to summon birds, or ground-pound
 for a spring jump; the soft garden rim keeps practice safe.
+Completed worlds leave musical souvenirs. Spin beside them to wake their
+echoes; collect at least two, then spin at the central flower for a bird chorus.
+Pause provides help and separate time boards without leaving the current run.
 
 | Level | What you play | Main controls |
 | --- | --- | --- |
@@ -81,6 +84,7 @@ for a spring jump; the soft garden rim keeps practice safe.
 | **Sternenrennen** | Three drifting laps with windmill, orchard and cloud forks, rolling fruit, splits and a rival using the same roads | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
 | **Wolkenpost** | Three parcel deliveries, upper currents, windmills, cloud arches and a singing cloud whale | WASD/arrows/stick steer; Space/A roll; Shift/X toss near baskets, turbo elsewhere |
 | **Blütenpfad** | Connected courtyard, orchard, musical conservatory and cellar; three lantern seeds open the final ascent | A/D or ←/→/stick move; Space/A jump; Shift/X air spin, song or door |
+| **Klangkugel** | A rolling musical bubble, pudding floors, bumpers and a raised shortcut; carry three bell notes home to the drum | WASD/arrows/stick roll; hold Space/A/◎ to brake; Shift/X/♪ rings nearby bells |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
 keyboard/controller/touch controls and no game-over screen. Recovery adds a
@@ -113,6 +117,13 @@ are documented in `assets/README.md`.
   and a curtain passage to reconnect. Sing at a musical flower to exchange vine
   stairs for sleepy spirit platforms. Three lantern seeds open the courtyard
   ascent. Discoveries survive checkpoint recovery; replay resets them.
+  A delayed pictogram points through the nearest useful door when you pause
+  to find your bearings.
+- **Klangkugel:** a broad first bowl teaches steering and braking before a bell
+  answers your pulse. Three rooms reconnect around a raised, narrow bank;
+  bumpers announce their bounce and gutters return you to a safe checkpoint.
+  Collected notes orbit Mirio and survive falls. Follow the gold return arrows
+  and settle on the starting drum to play your tune.
 
 All scenery is procedural. Original drawings, derived models and floor textures
 are unchanged. Public and device records use **playground-v2**; older records
@@ -226,7 +237,9 @@ three.js and loads `js/main.js`.
 | `js/chapters.js`, `js/time-records.js` | Level metadata, medals and storage-safe personal best times |
 | `js/sky-flight.js`, `js/sky-flight-rules.js` | Wolkenpost scene and deterministic flight course rules |
 | `js/ribbon-run.js`, `js/ribbon-rules.js` | Blütenpfad diorama and deterministic side-scroll physics |
-| `api/times.php`, `api/times.inc` | Separate public time boards for all four levels |
+| `js/marble-run.js`, `js/marble-rules.js` | Klangkugel scene, rolling physics and musical circuit |
+| `js/menu-navigation.js` | Controller focus, dialogs and settings navigation |
+| `api/times.php`, `api/times.inc` | Separate public time boards for every level |
 | `js/biplane.js`, `js/biplane-physics.js`, `js/biplane-model.js` | Boarding and safe landing; bounded spherical flight; the original Wiesensummer model |
 | `js/adventure.js` | Optional ring-trail rules, gates, badges and magnet effect |
 | `js/environment-art.js` | Original seamless environment textures and gem reflection maps; no child artwork |
@@ -363,6 +376,14 @@ The playground update adds:
   completion markers and keyboard/controller/touch hub controls.
 - `tests/mirio-hub-toys-e2e.mjs`: walk, spin and ground-pound at the hub flower;
   verify its spring and the garden's safe boundary.
+- `tests/mirio-hub-echoes-e2e.mjs`: walk between completed-world souvenirs,
+  wake their echoes and return to the flower for the chorus.
+- `tests/mirio-marble-e2e.mjs`: full keyboard bell circuit, raised bank,
+  recovery, controller, touch and held-brake replay regression.
+- `tests/mirio-menu-e2e.mjs`: controller settings, independent help/time tabs
+  and phone dialogs through normal hub navigation.
+- `tests/mirio-browser-smoke-e2e.mjs`: every mode through normal navigation,
+  movement, paused clocks and returns; supports `BROWSER=webkit`.
 - `tests/mirio-meadow-e2e.mjs`: flight errands, landing, bridge exploration,
   squirrel guide, picnic, recovery and replay.
 - `tests/mirio-moon-e2e.mjs`: moving-island jump, guardian launch, fixed boss

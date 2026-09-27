@@ -54,6 +54,17 @@ export function makeGardenCourse() {
     {id:'glass-seed',x:94,y:9.45,room:'glass',icon:'☀'},
     {id:'cellar-seed',x:164,y:4.45,room:'cellar',icon:'☾'},
   ];
+  // Hints use reachable room links; the secret curtain remains a discovery.
+  const guidanceRoutes=[
+    {from:'glass',to:'orchard',door:'glass-window',minY:6},
+    {from:'orchard',to:'glass',door:'orchard-window',minY:6},
+    {from:'cellar',to:'glass',door:'cellar-glass'},
+    {from:'cellar',to:'orchard',door:'cellar-home'},
+    {from:'cellar',to:'courtyard',door:'cellar-home'},
+    {from:'glass',to:'cellar',door:'glass-cellar'},
+    {from:'courtyard',to:'cellar',door:'home-cellar'},
+    {from:'orchard',to:'cellar',door:'home-cellar'},
+  ];
   const springs=[{id:'orchard-flower',x:-27,y:0,boost:16.7},{id:'cellar-flower',x:137,y:0,boost:16.7}];
   const gems=[];
   for(const p of platforms.filter(p=>!p.dream&&!p.gate&&p.kind!=='ground')) {
@@ -62,7 +73,7 @@ export function makeGardenCourse() {
   for(const x of [-82,-69,-56,-43,-16,-5,34,43,58,73,87,105,132,148,168,179])gems.push({id:`gem-${gems.length}`,x,y:1,route:'ribbon'});
   const critters=[[-40,0],[-66,0],[85,0],[153,0]].map(([x,y],i)=>({id:`puff-${i}`,x,y,range:1.5,phase:i*1.3,speed:.8,spirit:i>1}));
   return {name:'Blütenpfad',version:2,start:{x:5,y:0},finishX:GARDEN.finishX,finishY:GARDEN.finishY,
-    platforms,springs,checkpoints,gems,critters,flowers,doors,seeds,
+    platforms,springs,checkpoints,gems,critters,flowers,doors,seeds,guidanceRoutes,
     rooms:[{id:'orchard',name:'Baumhaus',min:-92,max:-16,color:0xc3e8be},{id:'courtyard',name:'Blütenhof',min:-16,max:40,color:0xc0e8ec},
       {id:'glass',name:'Glashaus',min:40,max:115,color:0xd9e7dc},{id:'cellar',name:'Kellergarten',min:115,max:188,color:0x8591bb}]};
 }

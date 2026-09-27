@@ -1,12 +1,58 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBoundary, hubSpawn, stepHubVisit} from '../js/hub-rules.js';
+import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBoundary, hubSpawn, hubSouvenir, hubChorusReady, stepHubVisit} from '../js/hub-rules.js';
 
 test('all destinations are visible on a compact safe cap and central spawn cannot enter', () => {
-  assert.deepEqual(new Set(HUB_PORTALS.map(p => p.level)), new Set(['adventure', 'sky', 'ribbon', 'kart']));
+  assert.deepEqual(new Set(HUB_PORTALS.map(p => p.level)), new Set(['adventure', 'sky', 'marble', 'ribbon', 'kart']));
   const visit = createHubVisit();
   for (const portal of HUB_PORTALS) assert.ok(Math.hypot(portal.x, portal.z) + HUB.portalReach < HUB.boundary);
   assert.deepEqual(stepHubVisit(visit, 5, {...HUB.spawn, grounded: true}), []);
+});
+
+test('souvenirs require completion and a nearby spin, once per visit', () => {
+  const visit = createHubVisit({completed: ['sky']}), sky = {...hubSouvenir('sky'), height: 0, grounded: true};
+  assert.deepEqual(stepHubVisit(visit, .1, sky), []);
+  assert.deepEqual(stepHubVisit(visit, .1, {...hubSouvenir('ribbon'), height: 0, spin: true}), []);
+  assert.deepEqual(stepHubVisit(visit, .1, {...sky, height: 5, spin: true}), []);
+  assert.deepEqual(stepHubVisit(visit, .1, {...sky, spin: true}), [{type: 'hubEcho', level: 'sky'}]);
+  assert.deepEqual(stepHubVisit(visit, .1, {...sky, spin: true}), []);
+  assert.equal(createHubVisit({completed: ['sky']}).echoes.size, 0);
+});
+
+test('all completed echoes and at least two worlds unlock the optional central chorus', () => {
+  for (const completed of [[], ['sky'], ['sky', 'ribbon'], HUB_PORTALS.map(p => p.level)]) {
+    const visit = createHubVisit({completed});
+    const flower = {...HUB.toy, height: 0, grounded: true, spin: true};
+    assert.equal(stepHubVisit(visit, .1, flower).some(e => e.type === 'hubChorus'), false);
+    for (const level of completed) stepHubVisit(visit, .1, {...hubSouvenir(level), height: 0, spin: true});
+    assert.equal(hubChorusReady(visit), completed.length >= HUB.chorusMinimum);
+    const events = stepHubVisit(visit, 2, flower);
+    assert.equal(events.some(e => e.type === 'hubChorus'), completed.length >= HUB.chorusMinimum);
+    assert.ok(events.some(e => e.kind === 'hubFlower'), 'the ordinary flower still works');
+    assert.equal(stepHubVisit(visit, 2, flower).some(e => e.type === 'hubChorus'), false, 'a playing chorus cannot stack');
+  }
+});
+
+test('souvenir interaction areas never overlap a portal entrance or the central flower', () => {
+  for (const portal of HUB_PORTALS) {
+    const souvenir = hubSouvenir(portal.level);
+    for (const entrance of HUB_PORTALS) assert.ok(Math.hypot(souvenir.x - entrance.x, souvenir.z - entrance.z) > HUB.echoReach + HUB.portalReach);
+    assert.ok(Math.hypot(souvenir.x - HUB.toy.x, souvenir.z - HUB.toy.z) > HUB.echoReach + HUB.toyReach);
+  }
+});
+
+test('nearby signs name the closest portal in the five-way fan', () => {
+  const visit = createHubVisit();
+  stepHubVisit(visit, .1, {x: -1, z: -11, height: 0, grounded: true});
+  assert.equal(visit.near.level, 'marble');
+});
+
+test('unknown saved worlds cannot block the chorus; a missing available echo can', () => {
+  const visit = createHubVisit({completed: ['sky', 'ribbon', 'old-world']});
+  stepHubVisit(visit, .1, {...hubSouvenir('sky'), height: 0, spin: true});
+  assert.equal(hubChorusReady(visit), false);
+  stepHubVisit(visit, .1, {...hubSouvenir('ribbon'), height: 0, spin: true});
+  assert.equal(hubChorusReady(visit), true);
 });
 
 test('a grounded deliberate approach enters once; jumping over a portal does not', () => {

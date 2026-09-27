@@ -25,6 +25,7 @@ try{
 if(process.env.GARDEN_ROUTE==='song'){
   await reach(49,0);await action();assert.equal((await snap()).dream,'awake');
   for(const [x,y]of [[57,1.7],[65,3.4],[73,5.1],[81,6.8],[89,8.4],[94,8.4]])await reach(x,y);
+  assert.equal((await snap()).guide.id,'glass-window');assert.equal((await snap()).guide.direction,'→');
   await page.screenshot({path:'/tmp/garden-awake.png'});
   await reach(102,8.4);await action();await reach(-64,8.4);
   await reach(-55,0);assert.equal((await snap()).recoveries,0);
@@ -35,7 +36,9 @@ if(process.env.GARDEN_ROUTE==='song'){
   await page.screenshot({path:'/tmp/garden-orchard.png'});await reach(-74,8.4);await action();await reach(94,8.4);await page.screenshot({path:'/tmp/garden-conservatory.png'});
   await reach(113,0);await reach(109,0);await action();await reach(155,1.7);await reach(164,3.4);
 }
+assert.equal((await snap()).guide.id,'cellar-home');assert.ok((await snap()).hint);
 await page.screenshot({path:'/tmp/garden-cellar.png'});await reach(125,0);await action();
+assert.equal((await snap()).guide.id,'finale-0');
 for(const [x,y]of [[10,2],[19,4],[10,6],[19,8],[10,10],[19,12]])await reach(x,y);
 await page.screenshot({path:'/tmp/garden-finish.png'});
 const finished=await snap();assert.equal(finished.status,'finished');assert.equal(finished.seeds,3);assert.equal(finished.recoveries,0);assert.equal(finished.shortcuts,3);assert.deepEqual(errors,[]);

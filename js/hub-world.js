@@ -6,11 +6,12 @@ import {CameraRig} from './camera.js';
 import {Player} from './player.js';
 import {buildRocket} from './props.js';
 import {surfacePoint} from './world.js';
-import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBoundary, hubSpawn, stepHubVisit} from './hub-rules.js';
+import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBoundary, hubChorusReady, hubSouvenir, hubSpawn, stepHubVisit} from './hub-rules.js';
 
 const UP = new THREE.Vector3(0, 1, 0), FORWARD = new THREE.Vector3(0, 0, -1);
 const CREAM = 0xfff0ce, LEAF = 0x8bc8a2, GOLD = 0xf5c864, INK = 0x435a65;
 const PHYSICS_STEP = 1 / 120, MAX_FRAME = .05;
+const NOTE_COLORS = [0xef9ead, 0x9ccfa5, 0x91cbdc];
 const groundY = (x, z) => Math.sqrt(Math.max(0, HUB.radius ** 2 - x * x - z * z)) - HUB.radius;
 const point = (x, z, height = 0) => new THREE.Vector3(x, groundY(x, z) + height, z);
 const upAt = (x, z) => new THREE.Vector3(x, groundY(x, z) + HUB.radius, z).normalize();
@@ -47,12 +48,12 @@ function starGeometry() {
   shape.closePath();
   return new THREE.ExtrudeGeometry(shape, {depth: .13, bevelEnabled: false});
 }
-function label(text, color = '#435a65') {
-  const canvas = document.createElement('canvas'); canvas.width = 768; canvas.height = 128;
+function label(text, color = '#435a65', width = 768) {
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = 128;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff5dd'; ctx.beginPath(); ctx.roundRect(4, 10, 760, 105, 30); ctx.fill();
+  ctx.fillStyle = '#fff5dd'; ctx.beginPath(); ctx.roundRect(4, 10, width - 8, 105, 30); ctx.fill();
   ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 62px sans-serif';
-  ctx.fillText(text, 384, 65);
+  ctx.fillText(text, width / 2, 65);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({map: canvasTexture(canvas), depthWrite: false}));
   sprite.scale.set(6.2, 1.03, 1);
   return sprite;
@@ -61,6 +62,7 @@ function label(text, color = '#435a65') {
 export class HubWorld {
   scene; #player; #rig = null;
   #planet; #colliders = []; #visit; #portals = []; #flower; #petals = []; #birds = [];
+  #souvenirs = [];
   #rotor; #elapsed = 0; #snapCamera = true; #facing = FORWARD.clone(); #completed = [];
 
   constructor(art) {
@@ -73,7 +75,10 @@ export class HubWorld {
     this.#planet = {id: 'sternenhof', center: new THREE.Vector3(0, -HUB.radius, 0), radius: HUB.radius, gravityRadius: 220, gravity: 38};
     const material = new THREE.MeshLambertMaterial({vertexColors: true});
     this.#buildIsland(material);
-    for (const portal of HUB_PORTALS) this.#buildPortal(portal, material, art);
+    for (const portal of HUB_PORTALS) {
+      this.#buildPortal(portal, material, art);
+      this.#buildSouvenir(portal, material);
+    }
     this.#buildFlower(material);
     this.#player = new Player(this.scene, art, [this.#planet], () => this.#colliders);
     this.reset();
@@ -94,7 +99,7 @@ export class HubWorld {
       new THREE.MeshLambertMaterial({color: 0xadd3a8}));
     ground.position.copy(this.#planet.center); this.scene.add(ground);
     const parts = [];
-    // Dotted paths converge on the flower, so all four choices stay legible.
+    // Dotted paths keep every destination visible from spawn.
     for (const portal of HUB_PORTALS) {
       for (let i = 0; i < 11; i++) {
         const t = i / 11, x = portal.x * t, z = HUB.spawn.z + (portal.z - HUB.spawn.z) * t;
@@ -145,6 +150,14 @@ export class HubWorld {
       parts.push(ball(0, 4.4, .35, .58, .58, .16, GOLD));
       for (const side of [-1, 1]) parts.push(rod(side * 2.65, .7, .1, .1, 1.4, LEAF), ball(side * 2.65, 1.5, .1, .7, .5, .6, spec.color));
     }
+    if (spec.level === 'marble') {
+      parts.push(ball(0, 4.5, .18, 1.05, 1.05, .75, GOLD));
+      for (const [i, color] of NOTE_COLORS.entries()) {
+        const x = (i - 1) * .57;
+        parts.push(ball(x, 4.15 + i * .23, 1, .19, .15, .09, color), rod(x + .14, 4.52 + i * .23, 1, .05, .7, color));
+      }
+      parts.push(box(-2.65, .45, .2, 1.1, .35, .9, NOTE_COLORS[0]), box(2.65, .45, .2, 1.1, .35, .9, NOTE_COLORS[2]));
+    }
     if (spec.level === 'adventure') {
       const rocket = buildRocket(art); rocket.group.scale.setScalar(.28); rocket.group.position.set(-2.8, .05, .3); rocket.flame.visible = false;
       group.add(rocket.group);
@@ -165,6 +178,50 @@ export class HubWorld {
     this.#portals.push({spec, group, glow, medal});
   }
 
+  #buildSouvenir(spec, material) {
+    const {x, z} = hubSouvenir(spec.level), group = this.#anchor(new THREE.Group(), x, z), parts = [];
+    parts.push(rod(0, .1, 0, .72, .16, CREAM));
+    if (spec.level === 'adventure') {
+      parts.push(paint(new THREE.OctahedronGeometry(.7).scale(.8, 1.25, .15).translate(0, 1.8, 0), spec.color));
+      parts.push(rod(0, .9, 0, .025, 1.2, INK));
+      for (let i = 0; i < 3; i++) parts.push(ball(i % 2 ? -.18 : .18, .4 + i * .25, 0, .2, .09, .05, i % 2 ? GOLD : LEAF));
+    }
+    if (spec.level === 'sky') {
+      parts.push(box(0, 1.9, 0, 1.35, .15, .2, CREAM));
+      for (let i = 0; i < 3; i++) parts.push(rod((i - 1) * .45, 1.15 + i * .12, 0, .085, 1.2 - i * .24, i % 2 ? GOLD : spec.color));
+    }
+    if (spec.level === 'ribbon') {
+      for (let i = 0; i < 3; i++) {
+        const x = (i - 1) * .45, y = 1.05 + (i % 2) * .4;
+        parts.push(rod(x, y / 2, 0, .045, y, LEAF), ball(x, y, 0, .3, .36, .3, spec.color), ball(x, y, .23, .15, .2, .13, GOLD));
+      }
+    }
+    if (spec.level === 'kart') {
+      parts.push(rod(0, .85, 0, .055, 1.5, CREAM));
+      for (let i = 0; i < 4; i++) parts.push(paint(new THREE.SphereGeometry(1, 10, 6).scale(.2, .53, .08).translate(0, .4, 0).rotateZ(i * Math.PI / 2).translate(0, 1.7, 0), i % 2 ? CREAM : spec.color));
+      parts.push(ball(0, 1.7, .13, .16, .16, .1, GOLD));
+    }
+    if (spec.level === 'marble') {
+      for (const [i, color] of NOTE_COLORS.entries()) {
+        const x = (i - 1) * .53, y = .55 + i * .22;
+        parts.push(ball(x, y, 0, .24, .17, .14, color), rod(x + .18, y + .45, 0, .045, .9, color));
+      }
+    }
+    const toy = merge(parts, material); group.add(toy);
+    const sign = label('↻ ♪', '#967c45', 256); sign.position.set(0, 2.65, 0); sign.scale.set(1.6, .65, 1); group.add(sign);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(.85, .055, 5, 28), new THREE.MeshBasicMaterial({color: GOLD}));
+    halo.rotation.x = Math.PI / 2; halo.position.y = .18; group.add(halo);
+
+    // Heard souvenirs light a route back to the flower, without adding barriers.
+    const lights = [];
+    for (let i = 0; i < 8; i++) {
+      const t = (i + 1) / 9, lx = x + (HUB.toy.x - x) * t, lz = z + (HUB.toy.z - z) * t;
+      lights.push(ball(lx, groundY(lx, lz) + .13, lz, .16, .1, .16, spec.color));
+    }
+    const path = merge(lights, new THREE.MeshBasicMaterial({vertexColors: true})); this.scene.add(path);
+    this.#souvenirs.push({level: spec.level, group, toy, halo, path});
+  }
+
   #buildFlower(material) {
     this.#flower = this.#anchor(new THREE.Group(), HUB.toy.x, HUB.toy.z);
     this.#flower.add(merge([ball(0, .18, 0, .85, .26, .85, GOLD), ball(-.24, .38, .35, .075, .05, .1, INK), ball(.24, .38, .35, .075, .05, .1, INK)], material));
@@ -173,21 +230,25 @@ export class HubWorld {
       petal.position.set(Math.cos(a) * 1.1, .1, Math.sin(a) * 1.1); petal.rotation.y = -a;
       this.#flower.add(petal); this.#petals.push(petal);
     }
-    const sign = label('↓  ♪', '#967c45'); sign.position.set(0, .85, 0); sign.scale.set(1.6, .65, 1); this.#flower.add(sign);
-    for (let i = 0; i < 4; i++) {
+    const sign = label('↻ ↓ ♪', '#967c45', 384); sign.position.set(0, .85, 0); sign.scale.set(2, .65, 1); this.#flower.add(sign);
+    for (let i = 0; i < HUB_PORTALS.length; i++) {
       const bird = merge([ball(0, 0, 0, .28, .22, .34, HUB_PORTALS[i].color), ball(-.37, .06, 0, .36, .07, .16, CREAM), ball(.37, .06, 0, .36, .07, .16, CREAM), ball(0, .02, .3, .09, .07, .16, GOLD)], material);
       this.scene.add(bird); this.#birds.push(bird);
     }
   }
 
   reset({completed = [], lastLevel = null} = {}) {
-    this.#completed = [...completed]; this.#visit = createHubVisit({completed, lastLevel}); this.#elapsed = 0;
+    this.#visit = createHubVisit({completed, lastLevel}); this.#completed = [...this.#visit.completed]; this.#elapsed = 0;
     const spawn = hubSpawn(lastLevel), dir = upAt(spawn.x, spawn.z);
     this.#facing.copy(lastLevel ? point(HUB.spawn.x, HUB.spawn.z).sub(point(spawn.x, spawn.z)) : FORWARD);
     this.#player.reset({planet: this.#planet, dir}, this.#facing);
     this.#player.events.length = 0;
     this.#snapCamera = true;
     for (const portal of this.#portals) portal.medal.visible = this.#visit.completed.has(portal.spec.level);
+    for (const souvenir of this.#souvenirs) {
+      souvenir.group.visible = this.#visit.completed.has(souvenir.level);
+      souvenir.halo.visible = souvenir.path.visible = false;
+    }
     return this.snapshot();
   }
 
@@ -199,7 +260,7 @@ export class HubWorld {
 
   #prepareCamera(camera) {
     if (!this.#rig) this.#rig = new CameraRig(camera, [this.#planet]);
-    this.#rig.distance = camera.aspect < 1 ? 38 : 24;
+    this.#rig.distance = camera.aspect < 1 ? 40 : 24;
     if (!this.#snapCamera) return;
     this.#rig.pitch = .68; this.#rig.snap(this.#player, this.#facing); this.#snapCamera = false;
   }
@@ -247,25 +308,37 @@ export class HubWorld {
       portal.medal.rotation.y = reducedMotion ? 0 : Math.sin(time * 1.5) * .18;
     }
     this.#rotor.rotation.z = reducedMotion ? .2 : time * .8;
+    for (const souvenir of this.#souvenirs) {
+      const heard = this.#visit.echoes.has(souvenir.level);
+      souvenir.path.visible = souvenir.halo.visible = heard;
+      souvenir.toy.rotation.z = heard && !reducedMotion ? Math.sin(time * 3) * .12 : 0;
+      souvenir.toy.position.y = heard && !reducedMotion ? .08 + Math.sin(time * 4) * .08 : 0;
+    }
     for (const [i, petal] of this.#petals.entries()) petal.position.y = .1 + (bloom > 0 && !reducedMotion ? Math.sin(time * 8 + i * .4) * .22 : 0);
     for (const [i, bird] of this.#birds.entries()) {
       bird.visible = this.#visit.discoveries > 0;
-      const a = reducedMotion ? i * Math.PI / 2 : time * .5 + i * Math.PI / 2;
-      bird.position.set(Math.cos(a) * 3, 3.5 + (reducedMotion ? 0 : Math.sin(time * 3 + i) * .15), HUB.toy.z + Math.sin(a) * 3);
+      const chorus = this.#visit.chorus > 0, radius = chorus ? 4.2 : 3;
+      const a = i * Math.PI * 2 / this.#birds.length + (reducedMotion ? 0 : time * (chorus ? 1.2 : .5));
+      bird.position.set(Math.cos(a) * radius, (chorus ? 4.3 : 3.5) + (reducedMotion ? 0 : Math.sin(time * 3 + i) * .15), HUB.toy.z + Math.sin(a) * radius);
       bird.rotation.y = -a;
     }
   }
 
   snapshot() {
     const b = this.#player.body, forward = this.#rig?.forward ?? this.#facing;
+    const chorusReady = hubChorusReady(this.#visit), echoNear = this.#visit.echoNear;
+    const actionHint = echoNear && !this.#visit.echoes.has(echoNear) ? '↻ ♪ Echo wecken'
+      : chorusReady ? this.#visit.flowerNear ? '↻ ♪ Alle singen!' : '♪ Zur Blume' : null;
     return {name: 'Sternenhof', time: this.#elapsed, near: this.#visit.near ? {level: this.#visit.near.level, label: this.#visit.near.label} : null,
       pos: b.pos.toArray(), velocity: b.vel.toArray(), grounded: b.onGround, forward: forward.toArray(),
       right: new THREE.Vector3().crossVectors(forward, b.up).normalize().toArray(), up: b.up.toArray(),
-      completed: [...this.#completed], discovery: this.#visit.discoveries, blocked: this.#visit.blocked};
+      completed: [...this.#completed], discovery: this.#visit.discoveries, blocked: this.#visit.blocked,
+      echoes: [...this.#visit.echoes], echoTotal: this.#visit.completed.size, chorus: this.#visit.chorus > 0, chorusReady, actionHint};
   }
 
   layout() {
     return {spawn: point(HUB.spawn.x, HUB.spawn.z).toArray(), toy: point(HUB.toy.x, HUB.toy.z).toArray(), boundary: HUB.boundary,
+      souvenirs: HUB_PORTALS.map(p => {const s = hubSouvenir(p.level); return {level: p.level, pos: point(s.x, s.z).toArray()};}),
       portals: HUB_PORTALS.map(p => {const r = hubSpawn(p.level); return {level: p.level, label: p.label, pos: point(p.x, p.z).toArray(), returnPos: point(r.x, r.z).toArray()};})};
   }
 }

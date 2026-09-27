@@ -7,11 +7,13 @@ export const CHAPTERS = Object.freeze({
     touch: 'Links laufen · ↑ springen · ⟳ drehen · ⤓ stampfen',
     goal: 'Hol dir den Kristall!', medal: [240000, 420000, 720000]},
   sky: {name: 'Wolkenpost', short: 'Wolkenpost', eyebrow: '02 / HIMMELSEXPRESS',
+    jumpIcon: '↻', jumpLabel: 'Schutzrolle', actionIcon: '✦', actionLabel: 'Paket / Turbo',
     description: 'Pakete zustellen, Windwege wählen und den Wolkenwal wecken.',
     keys: 'WASD / Pfeile lenken · Leertaste Schutzrolle · Shift Paket / Turbo',
     touch: 'Links lenken · ↻ Schutzrolle · ✦ Paket / Turbo',
     goal: 'Bring die Wolkenpost ins Ziel!', medal: [65000, 85000, 120000]},
   ribbon: {name: 'Blütenpfad', short: 'Blütenpfad', eyebrow: '03 / HÜPF INS GRÜNE',
+    jumpIcon: '↑', jumpLabel: 'Springen', actionIcon: '✦', actionLabel: 'Luftwirbel / Lied / Tür',
     description: 'Baumhaus, Glashaus und Kellergarten: Finde drei Laternensamen.',
     keys: 'A / D oder ← → laufen · Leertaste springen · Shift Wirbel / Lied / Tür',
     touch: 'Links laufen · ↑ springen · ✦ Wirbel / Lied / Tür',
@@ -21,6 +23,12 @@ export const CHAPTERS = Object.freeze({
     keys: '↑ Gas · ↓ Bremse · ← → lenken · Leertaste + lenken: driften',
     touch: 'Links lenken · Gas & Bremse rechts · Zum Driften ↑ halten, loslassen: Turbo',
     goal: 'Hol dir den Kristall!', medal: [42000, 55000, 75000]},
+  marble: {name: 'Klangkugel', short: 'Klangkugel', eyebrow: '05 / ALLES ROLLT',
+    jumpIcon: '◎', jumpLabel: 'Bremse halten', actionIcon: '♪', actionLabel: 'Klangstoss',
+    description: 'Rolle durch Klangschalen, bremse an Glocken und bring drei Töne zur Trommel.',
+    keys: 'WASD / Pfeile rollen · Leertaste halten: bremsen · Shift: Klangstoss',
+    touch: 'Links rollen · ◎ halten: bremsen · ♪ Klangstoss',
+    goal: '♪ Drei Töne → Trommel', medal: [55000, 85000, 130000]},
 });
 
 export function medalFor(level, milliseconds) {

@@ -58,6 +58,17 @@ test('only a strictly faster time replaces the personal best', async t => {
   assert.equal(storage.writes, 2);
 });
 
+test('Klangkugel saves separately without replacing existing course records', async t => {
+  const storage = store({'mirio-time-best-v2:kart': '42000', 'mirio-time-best-v1:sky': '21000'});
+  const records = await fixture(t, storage);
+  assert.equal(records.savePersonalBest('marble', 61000).isNew, true);
+  assert.equal(records.readPersonalBest('marble'), 61000);
+  assert.equal(records.readPersonalBest('kart'), 42000);
+  assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
+  const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
+  assert.equal(reloaded.readPersonalBest('marble'), 61000);
+});
+
 test('unknown levels and invalid durations cannot create or replace records', async t => {
   const storage = store();
   const { readPersonalBest, savePersonalBest } = await fixture(t, storage);

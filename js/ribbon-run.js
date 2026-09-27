@@ -233,7 +233,9 @@ export class RibbonRun {
       const curtain=mesh(group,this.box,color,[0,1.35,.3],[1.3,1.5,.12]);curtain.visible=!!door.secret;
       mesh(group,new THREE.PlaneGeometry(1.4,1.3),label(door.icon,'↻','#35535b',192),[0,3.15,.25]);
       mesh(group,this.sphere,this.materials.gold,[.5,1.1,.33],[.1,.1,.09]);
-      this.doors.push({door,group,curtain});
+      const halo=mesh(group,new THREE.TorusGeometry(1.28,.055,6,28),this.materials.gold,[0,1.25,.38],[.86,1.16,1]);
+      halo.visible=false;
+      this.doors.push({door,group,curtain,halo});
     }
     for(const flower of this.course.flowers){
       const group=new THREE.Group();group.position.set(flower.x,flower.y,0);this.scene.add(group);
@@ -270,6 +272,7 @@ export class RibbonRun {
   }
   _renderGarden(dt,{reducedMotion}){
     const r=this.rules,t=this.animationTime,awake=r.dream===GARDEN.dreamAwake;
+    const target=r.guidance(),guiding=r.gateOpen()||r.clock-r.lastDiscovery>GARDEN.hintDelay;
     this.gardenBackground.setHex(r.room().color);
     this.scene.background.lerp(this.gardenBackground,1-Math.exp(-dt*3));this.scene.fog.color.copy(this.scene.background);
     for(const {p,group}of this.vines)group.visible=r.platformActive(p)&&Math.abs(p.x-r.x)<42;
@@ -278,8 +281,9 @@ export class RibbonRun {
       group.position.y=seed.y+(reducedMotion?0:Math.sin(t*2)*.17);
       group.rotation.y=reducedMotion?0:Math.sin(t)*.3;
     }
-    for(const {door,group,curtain}of this.doors){
+    for(const {door,group,curtain,halo}of this.doors){
       group.visible=Math.abs(door.x-r.x)<42;
+      halo.visible=guiding&&target.kind==='door'&&target.id===door.id;
       if(door.secret){curtain.scale.x=r.opened.has(door.id)?.18:.78+(reducedMotion?0:Math.sin(t*2.5)*.1);curtain.position.x=r.opened.has(door.id)?.55:0;}
     }
     for(const {flower,group,blossom}of this.songFlowers){
@@ -298,10 +302,8 @@ export class RibbonRun {
     this.lanterns.forEach((lantern,i)=>{lantern.material=i<r.seeds.size?this.materials.gold:this.materials.cream;});
     const interaction=r.interaction();this.interactPrompt.visible=!!interaction;
     if(interaction)this.interactPrompt.position.set(r.x,r.y+3.5,.25);
-    const next=this.course.seeds.find(seed=>!r.seeds.has(seed.id));
-    this.guide.visible=r.clock-r.lastDiscovery>GARDEN.hintDelay;
+    this.guide.visible=guiding;
     if(this.guide.visible){
-      const target=next||{x:GARDEN.finishX,y:GARDEN.finishY};
       this.guide.position.set(r.x,r.y+2.8,.2);this.guide.rotation.z=Math.atan2(-(target.x-r.x),target.y-r.y);
     }
   }

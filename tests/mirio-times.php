@@ -33,6 +33,23 @@ $now = 1_800_000_000;
 $client = '203.0.113.7';
 
 try {
+    // A fifth outing must also work against files written by the four-level build.
+    $olderDir = $dir . '/four-levels';
+    mirio_scores_ensure_dir($olderDir);
+    $older = mirio_times_empty();
+    unset($older['times']['marble']);
+    $older['times']['sky'][] = ['id' => 1, 'name' => 'Altflug', 'timeMs' => 43000, 'date' => '2026-09-01'];
+    $older['nextId'] = 2;
+    $olderText = json_encode($older);
+    file_put_contents($olderDir . '/times.json', $olderText);
+    $newLevel = mirio_times_get($olderDir, 'marble', $now);
+    check($newLevel['status'] === 200 && $newLevel['body']['top'] === [], 'Klangkugel starts empty beside four existing boards');
+    check(file_get_contents($olderDir . '/times.json') === $olderText, 'reading the added board does not rewrite old data');
+    $marble = mirio_times_submit($olderDir, time_run($olderDir, $now, 'marble', ['timeMs' => 61000]), 'marble', $now);
+    check($marble['status'] === 200 && $marble['body']['rank'] === 1, 'Klangkugel accepts its own signed completed run');
+    check(mirio_times_load($olderDir)['times']['sky'] === $older['times']['sky'], 'adding a Klangkugel time preserves previous rows');
+    check(mirio_times_read_token($newLevel['body']['token'], mirio_scores_secret($olderDir), 'kart', $now) === null, 'Klangkugel tokens cannot enter the kart board');
+
     $empty = mirio_times_get($dir, 'adventure', $now);
     check($empty['status'] === 200 && $empty['body']['ok'] && $empty['body']['level'] === 'adventure' && $empty['body']['top'] === [], 'GET starts genuinely empty and issues a token for the requested level');
     foreach ([null, '', 'other', '__proto__', ['sky'], 1] as $bad) {

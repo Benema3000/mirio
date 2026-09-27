@@ -675,6 +675,20 @@ test('pause and focus loss clear queued actions, dragging and held controls', (t
   assert.equal(input.move.y, 0);
 });
 
+test('a held gameplay key cannot activate a newly focused result button', t => {
+  const {input, win} = testInput(t);
+  win.emit('keydown', {code: 'Space'});
+  input.enabled = false;
+  let prevented = 0;
+  const space = {code: 'Space', target: {tagName: 'BUTTON'}, preventDefault: () => prevented++};
+  win.emit('keydown', {...space, repeat: true});
+  win.emit('keyup', space);
+  assert.equal(prevented, 2, 'carry-over repeats and release stay in gameplay');
+  win.emit('keydown', space);
+  win.emit('keyup', space);
+  assert.equal(prevented, 2, 'a fresh Space can activate Replay');
+});
+
 test('key release inside a text field does not leave movement stuck', (t) => {
   const { input, win } = testInput(t);
   win.emit('keydown', { code: 'KeyW' });
@@ -712,6 +726,25 @@ test('gamepad analog controls have a dead zone, single press edges and separate 
   assert.deepEqual(input.move, { x: 0, y: 0 });
   assert.equal(input.jumpHeld, false);
   assert.equal(input.drive.gas, 0);
+});
+
+test('paused gamepad menus retain navigation without leaking gameplay actions', t => {
+  const pad = {connected: true, mapping: 'standard', axes: [1, -1, 0, 0], buttons: Array.from({length: 16}, () => ({pressed: false, value: 0}))};
+  const {input} = testInput(t, () => [pad]);
+  input.enabled = false;
+  pad.buttons[0] = {pressed: true, value: 1};
+  pad.buttons[1] = {pressed: true, value: 1};
+  input.update(DT);
+  assert.ok(input.menu?.x > 0 && input.menu?.y > 0);
+  assert.ok(Math.hypot(input.menu.x, input.menu.y) <= 1);
+  assert.equal(input.menu.confirm, true);
+  assert.equal(input.menu.back, true);
+  assert.deepEqual(input.move, {x: 0, y: 0});
+  assert.equal(input.consumeJump(), false);
+  assert.equal(input.consumePound(), false);
+  pad.connected = false;
+  input.update(DT);
+  assert.deepEqual(input.menu, {x: 0, y: 0, confirm: false, back: false});
 });
 
 test('the kart can safely coast with empty controls and only charges drift on the road', () => {

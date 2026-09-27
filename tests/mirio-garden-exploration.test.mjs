@@ -95,3 +95,47 @@ test('the secret upper window drops onto the broad cellar seed pod',()=>{
   const r=new RibbonRules();r.x=-87;action(r);settle(r);
   reach(r,164,3.4);assert.ok(r.seeds.has('cellar-seed'));assert.equal(r.recoveries,0);
 });
+
+test('stuck hints point toward missing seeds instead of always sending explorers right',()=>{
+  const r=new RibbonRules();r.clock=GARDEN.hintDelay+1;r.x=34;
+  assert.match(r.snapshot().hint,/←/,'the orchard seed is left of the courtyard');
+  r.seeds.add('orchard-seed');r.x=5;
+  assert.match(r.snapshot().hint,/→/,'the glass seed is right of the courtyard');
+  r.x=94;r.y=0;
+  assert.match(r.snapshot().hint,/↑/,'the glass seed is above its lower path');
+});
+
+test('roof guidance uses nearby windows instead of sending explorers off the roof',()=>{
+  const r=new RibbonRules();r.x=94;r.y=8.4;r.seeds.add('glass-seed');
+  assert.equal(r.guidance().id,'glass-window');assert.equal(r.guidance().direction,'→');
+  r.x=-64;r.seeds.clear();r.seeds.add('orchard-seed');
+  assert.equal(r.guidance().id,'orchard-window');assert.equal(r.guidance().direction,'←');
+});
+
+test('guidance develops the current region before routing to another missing seed',()=>{
+  const r=new RibbonRules();r.x=125;
+  assert.equal(r.guidance().id,'cellar-seed');
+  r.seeds.add('cellar-seed');
+  assert.equal(r.guidance().id,'cellar-home');
+  r.seeds.add('orchard-seed');
+  assert.equal(r.guidance().id,'cellar-glass');
+});
+
+test('three seeds immediately guide the return shortcut and rescue keeps that destination',()=>{
+  const r=new RibbonRules();r.x=164;r.y=3.4;r.checkpoint=3;
+  for(const seed of r.course.seeds)r.seeds.add(seed.id);
+  assert.equal(r.guidance().id,'cellar-home');
+  assert.ok(r.snapshot().hint,'the final return should not wait for the stuck timer');
+  r.rescue();settle(r);assert.equal(r.guidance().id,'cellar-home');assert.equal(r.guidance().direction,'↻');
+  action(r);settle(r);assert.equal(r.guidance().kind,'finish');
+});
+
+test('courtyard guidance follows the reachable petal ascent rather than the final height',()=>{
+  const r=new RibbonRules();r.x=28;
+  for(const seed of r.course.seeds)r.seeds.add(seed.id);
+  for(let i=0;i<6;i++){
+    const guide=r.guidance();assert.equal(guide.id,`finale-${i}`);
+    reach(r,guide.x,r.course.platforms.find(p=>p.id===guide.id).y);
+  }
+  assert.equal(r.status,'finished');assert.equal(r.recoveries,0);
+});

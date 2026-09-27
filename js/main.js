@@ -13,7 +13,9 @@ import { Wildlife } from './wildlife.js';
 import { Biplane, chooseBiplaneHome } from './biplane.js';
 import { SkyFlight } from './sky-flight.js';
 import { RibbonRun } from './ribbon-run.js';
+import { MarbleRun } from './marble-run.js';
 import { CHAPTERS, medalFor, MEDALS } from './chapters.js';
+import { MenuNavigation } from './menu-navigation.js';
 import { formatRunTime, readPersonalBest, savePersonalBest } from './time-records.js';
 import { COURSE_VERSION } from './course-version.js';
 import { Sound } from './audio.js';
@@ -40,6 +42,8 @@ const MAX_FRAME = 1 / 15;
 const TEST_MODE = new URLSearchParams(location.search).has('test');
 // Focused level suites keep their old navigation fixture; real play starts in the hub.
 const TEST_MENU = TEST_MODE && new URLSearchParams(location.search).has('menu');
+const CHAPTER_TYPES = Object.freeze({sky: SkyFlight, ribbon: RibbonRun, marble: MarbleRun});
+const CHAPTER_MODE_CLASSES = Object.keys(CHAPTER_TYPES).map(id => `chapter-${id}`);
 
 const BIT_RADIUS = 1.3;
 const FLAG_RADIUS = 2.4;
@@ -469,13 +473,14 @@ async function main() {
       const visit = hub.snapshot();
       for (const id of ['hearts', 'ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud', 'chapter-hud']) $(id).hidden = true;
       $('chapter').textContent = 'STERNENHOF';
-      $('objective').textContent = visit.near ? `→ ${visit.near.label}` : 'Vier Tore · Deine Reise';
+      $('objective').textContent = visit.actionHint || (visit.near ? `→ ${visit.near.label}` : `${Object.keys(CHAPTERS).length} Tore · Deine Reise`);
       return;
     }
     if (chapterGame && (state === 'chapter' || state === 'win')) {
       const run = chapterGame.snapshot();
       $('hearts').hidden = true;
-      $('bits').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} / ${run.totalDeliveries}` : `✧ ${run.seeds} / ${run.totalSeeds}`;
+      $('bits').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} / ${run.totalDeliveries}`
+        : selectedLevel === 'marble' ? `♪ ${run.notes} / ${run.totalNotes}` : `✧ ${run.seeds} / ${run.totalSeeds}`;
       for (const id of ['ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud']) $(id).hidden = true;
       $('chapter-hud').hidden = state !== 'chapter';
       $('chapter-timer').textContent = formatRunTime(Math.round(run.time * 1000));
@@ -484,18 +489,24 @@ async function main() {
       $('chapter-progress').value = run.progress;
       const cooldown = run.cooldown ?? 0;
       const touchKeys = document.body.classList.contains('touch');
-      const actionKey = input.gamepadConnected ? 'X' : touchKeys ? '✦' : 'Shift';
+      const actionKey = input.gamepadConnected ? 'X' : touchKeys ? CHAPTERS[selectedLevel].actionIcon : 'Shift';
       const jumpKey = input.gamepadConnected ? 'A' : touchKeys ? '↻' : 'Leertaste';
       let ability = run.actionHint ? `${actionKey} ${run.actionHint.replace('↻ ', '')}` : `${actionKey}: Luftwirbel`;
       if (selectedLevel === 'sky') {
         ability = run.parcelInFlight ? '✉ Unterwegs …' : run.deliveryTarget ? `${run.deliveryTarget.icon} → ${run.deliveryTarget.ready ? `${actionKey}: werfen` : 'Zum Korb'}`
           : run.chimeNear ? `♪ ${jumpKey}: Rolle` : run.boost > 0 ? '✦ Rückenwind!'
           : cooldown > 0 ? `✦ ${Math.ceil(cooldown)} s · ${jumpKey}: Rolle` : `${actionKey}: Turbo · ${jumpKey}: Rolle`;
+      } else if (selectedLevel === 'marble') {
+        const brakeKey = input.gamepadConnected ? 'A' : touchKeys ? '◎' : 'Leertaste';
+        ability = run.notesNear && !run.noteReady ? `${brakeKey} halten: bremsen`
+          : run.noteReady ? `${actionKey}: Glocke wecken` : `${brakeKey}: Bremse · ${actionKey}: Klangstoss`;
       }
       $('chapter-ability').textContent = chapterCountdown > 0 ? 'Bereit?' : ability;
-      $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? (run.deliveryTarget ? 'Paket werfen' : 'Turbo') : (run.actionHint || 'Luftwirbel'));
+      $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? (run.deliveryTarget ? 'Paket werfen' : 'Turbo') : (run.actionHint || CHAPTERS[selectedLevel].actionLabel));
       $('chapter').textContent = CHAPTERS[selectedLevel].eyebrow;
-      $('objective').textContent = selectedLevel === 'sky' ? '✉ Folge den Paketzeichen' : `${run.roomName} · ${run.gateOpen ? '✿ ↑ Blütenhof' : run.hint || '✧ Laternensamen finden'}`;
+      $('objective').textContent = selectedLevel === 'sky' ? '✉ Folge den Paketzeichen'
+        : selectedLevel === 'marble' ? `${run.roomName} · ${run.finishReady ? '♪ Zur Trommel · bremsen' : '♪ Glocken wecken'}`
+        : `${run.roomName} · ${run.hint || (run.gateOpen ? '✿ ↑ Blütenhof' : '✧ Laternensamen finden')}`;
       return;
     }
     $('chapter-hud').hidden = true;
@@ -871,20 +882,39 @@ async function main() {
   }
 
   function selectLevel(id) {
-    if (!CHAPTERS[id]) return;
+    if (!Object.hasOwn(CHAPTERS, id)) return;
     selectedLevel = id;
-    const chapter = CHAPTERS[id];
     for (const button of document.querySelectorAll('[data-level]')) {
       button.classList.toggle('selected', button.dataset.level === id);
       button.setAttribute('aria-pressed', String(button.dataset.level === id));
     }
+    showHelp(id);
+    showScores(id);
+    updatePersonalBests();
+  }
+
+  // Browsing another outing's help or board must not change the active run.
+  function showHelp(id) {
+    const chapter = id === 'hub' ? {
+      short: 'Sternenhof', description: 'Laufe in ein Tor. Deine Reisen lassen den Sternenhof wachsen.',
+      keys: 'WASD / Pfeile laufen · Leertaste springen · Shift drehen · C stampfen',
+      touch: 'Links laufen · ↑ springen · ⟳ drehen · ⤓ stampfen',
+    } : Object.hasOwn(CHAPTERS, id) ? CHAPTERS[id] : null;
+    if (!chapter) return;
+    $('help-title').textContent = `Hilfe · ${chapter.short}`;
     $('chapter-description').textContent = chapter.description;
     $('chapter-keys').textContent = `${chapter.keys} · Esc: Pause`;
     $('chapter-touch').textContent = chapter.touch;
+    for (const button of document.querySelectorAll('[data-help-level]')) button.setAttribute('aria-pressed', String(button.dataset.helpLevel === id));
+  }
+
+  function showScores(id) {
+    if (!Object.hasOwn(CHAPTERS, id)) return;
+    const chapter = CHAPTERS[id];
     $('title-scores-heading').textContent = `Bestzeiten · ${chapter.short}`;
     $('title-board').replaceChildren();
     $('title-board-status').textContent = 'Bestzeiten werden geladen …';
-    updatePersonalBests();
+    for (const button of document.querySelectorAll('[data-scores-level]')) button.setAttribute('aria-pressed', String(button.dataset.scoresLevel === id));
     const request = ++boardRequest;
     fetchScores(id).then(body => {
       if (request !== boardRequest) return;
@@ -1004,8 +1034,10 @@ async function main() {
     hint('', 0);
     const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
     $('win-eyebrow').textContent = `${chapter.short.toUpperCase()} GESCHAFFT`;
-    $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : 'Der Blütenhof leuchtet!';
-    $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ♪ ${run.chimes} Glocken · ◇ ${run.collectibles} Ringe` : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
+    $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Die Trommel singt!' : 'Der Blütenhof leuchtet!';
+    $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ♪ ${run.chimes} Glocken · ◇ ${run.collectibles} Ringe`
+      : selectedLevel === 'marble' ? `♪ ${run.notes} Töne · ${run.bankTrips} Klangkurven · ${run.bumps} Kissenhüpfer`
+      : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
     $('win-extra').textContent = selectedLevel === 'sky' && run.choir ? 'Der Wolkenwal singt für dich!' : 'Welchen Weg nimmst du nächstes Mal?';
     $('win-badges').replaceChildren();
     offerHighScore();
@@ -1016,12 +1048,13 @@ async function main() {
 
   function handleChapterEvents(events) {
     for (const event of events ?? []) {
-      if (event.type !== 'finish') sound.play(({ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
+      if (event.type !== 'finish') sound.play(({note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
       if (event.penalty > 0) hint(`${event.id?.startsWith('sky-balloon-') ? 'Ballon berührt' : 'Zurück am Checkpoint'} · +${event.penalty} s. Weiter geht’s!`, 4);
       else if (event.type === 'delivery') { toast(`✉ ${event.deliveries} / ${chapterGame.snapshot().totalDeliveries}`); hint(({garden: 'Blumenwind!', bakery: 'Warmer Rückenwind!', kite: 'Drachen voraus!'})[event.id] ?? 'Post ist da!', 4); }
       else if (event.type === 'parcel-return') hint('Der Vogel bringt dein Paket zurück.', 4);
       else if (event.type === 'choir') hint('Der Wolkenwal singt mit!', 5);
       else if (event.type === 'arrival') toast('Willkommen bei der Wolkenpost!');
+      else if (event.type === 'note') toast(`♪ ${event.notes} / ${chapterGame.snapshot().totalNotes}`);
       else if (event.type === 'bit' && event.kind === 'seed') toast(`✧ ${event.seeds} / ${chapterGame.snapshot().totalSeeds}`);
       else if (event.type === 'spring' && event.kind === 'song') toast(event.dream === 'awake' ? '♪ ☀' : '♪ ☾');
       else if (event.type === 'checkpoint' && event.kind === 'gate') hint('✿ Zurück zum Blütenhof — hinauf!', 6);
@@ -1093,7 +1126,7 @@ async function main() {
     sound.biplane(null);
     sound.ambience({active: false});
     chapterGame = null;
-    document.body.classList.remove('hub-mode', 'chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    document.body.classList.remove('hub-mode', 'chapter-mode', ...CHAPTER_MODE_CLASSES);
     $('pause-menu').hidden = false;
     input.reset();
     resetGame();
@@ -1105,19 +1138,19 @@ async function main() {
     $('win').classList.add('hidden');
     document.body.classList.add('playing');
     $('chapter-guide').hidden = selectedLevel === 'adventure' || selectedLevel === 'kart';
-    if (selectedLevel === 'sky' || selectedLevel === 'ribbon') {
-      if (!chapterGames.has(selectedLevel)) chapterGames.set(selectedLevel, selectedLevel === 'sky' ? new SkyFlight(art) : new RibbonRun(art));
+    if (Object.hasOwn(CHAPTER_TYPES, selectedLevel)) {
+      if (!chapterGames.has(selectedLevel)) chapterGames.set(selectedLevel, new CHAPTER_TYPES[selectedLevel](art));
       chapterGame = chapterGames.get(selectedLevel);
       chapterGame.reset();
       chapterCountdown = 3;
       countdownNumber = -1;
       state = 'chapter';
       document.body.classList.add('chapter-mode', `chapter-${selectedLevel}`);
-      $('btn-jump').textContent = selectedLevel === 'sky' ? '↻' : '↑';
-      $('btn-jump').setAttribute('aria-label', selectedLevel === 'sky' ? 'Schutzrolle' : 'Springen');
-      $('btn-spin').textContent = '✦';
-      $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? 'Paket / Turbo' : 'Luftwirbel / Lied / Tür');
       const chapter = CHAPTERS[selectedLevel];
+      $('btn-jump').textContent = chapter.jumpIcon;
+      $('btn-jump').setAttribute('aria-label', chapter.jumpLabel);
+      $('btn-spin').textContent = chapter.actionIcon;
+      $('btn-spin').setAttribute('aria-label', chapter.actionLabel);
       $('chapter-guide').textContent = `${chapter.keys}. Controller: linker Stick, A und X. ${selectedLevel === 'sky' ? 'Ballons bremsen dich kurz: +2,5 Sekunden. Eine Rolle schützt dich.' : 'Eine weiche Landung bringt dich zum Checkpoint zurück: +2 Sekunden.'} Die Uhr pausiert mit dir.`;
       hint(document.body.classList.contains('touch') ? chapter.touch : chapter.keys, 12);
       chapterGame.render(camera, 0, {reducedMotion});
@@ -1165,7 +1198,7 @@ async function main() {
     hub.reset({completed: Object.keys(CHAPTERS).filter(id => readPersonalBest(id)), lastLevel});
     camera.fov = baseFov();
     camera.updateProjectionMatrix();
-    document.body.classList.remove('paused', 'racing', 'flying', 'chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    document.body.classList.remove('paused', 'racing', 'flying', 'chapter-mode', ...CHAPTER_MODE_CLASSES);
     document.body.classList.add('playing', 'hub-mode');
     for (const id of ['title', 'win', 'pause']) $(id).classList.add('hidden');
     $('toast').classList.remove('show');
@@ -1201,7 +1234,7 @@ async function main() {
     sound.ambience({active: false});
     sound.stopVoices();
     sound.setScene('explore');
-    document.body.classList.remove('playing', 'paused', 'chapter-mode', 'chapter-sky', 'chapter-ribbon');
+    document.body.classList.remove('playing', 'paused', 'chapter-mode', ...CHAPTER_MODE_CLASSES);
     $('pause').classList.add('hidden');
     $('win').classList.add('hidden');
     $('title').classList.remove('hidden');
@@ -1235,8 +1268,16 @@ async function main() {
   $('title-quick').addEventListener('click', showQuick);
   $('pause-quick').addEventListener('click', showQuick);
   selectLevel('adventure');
-  $('show-times').addEventListener('click', () => $('scores-dialog').showModal());
-  $('show-help').addEventListener('click', () => $('help-dialog').showModal());
+  for (const id of ['show-times', 'pause-times']) $(id)?.addEventListener('click', () => {
+    showScores(selectedLevel);
+    $('scores-dialog').showModal();
+  });
+  for (const id of ['show-help', 'pause-help']) $(id)?.addEventListener('click', () => {
+    showHelp(state === 'hub' || (state === 'title' && !TEST_MENU) ? 'hub' : selectedLevel);
+    $('help-dialog').showModal();
+  });
+  for (const button of document.querySelectorAll('[data-scores-level]')) button.addEventListener('click', () => showScores(button.dataset.scoresLevel));
+  for (const button of document.querySelectorAll('[data-help-level]')) button.addEventListener('click', () => showHelp(button.dataset.helpLevel));
   for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => $(button.dataset.close).close());
   $('mute').addEventListener('click', () => {
     sound.setMuted(!sound.muted);
@@ -1337,7 +1378,7 @@ async function main() {
   startButton.textContent = 'Spielen';
   $('status').textContent = '';
   if (!TEST_MENU) {
-    $('chapter-description').textContent = 'Vier Tore führen vom Sternenhof zu vier Reisen.';
+    $('chapter-description').textContent = 'Vom Sternenhof beginnt deine Reise.';
     $('chapter-keys').textContent = 'WASD / Pfeile laufen · Leertaste springen · Laufe in ein Tor';
     $('chapter-touch').textContent = 'Links laufen · ↑ springen · Laufe in ein Tor';
   }
@@ -1348,22 +1389,25 @@ async function main() {
   let frames = 0;
   let fpsT = 0;
   let fps = 0;
-  const menuPad = {jump: false, spin: false};
+  const menuPad = {spin: false};
+  const menuNavigation = new MenuNavigation({
+    scope: () => document.querySelector('dialog[open]') ?? (paused ? $('pause') : state === 'title' ? $('title') : state === 'win' ? $('win') : null),
+    back: root => {
+      if (root.tagName === 'DIALOG') { root.close(); return; }
+      if (paused) { setPaused(false); return; }
+      if (state === 'win') leaveLevel();
+    },
+  });
 
-  function menuController() {
-    const jump = Boolean(input.padButtons[0]), spin = Boolean(input.padButtons[1]);
-    const jumpPressed = jump && !menuPad.jump, spinPressed = spin && !menuPad.spin;
-    menuPad.jump = jump; menuPad.spin = spin;
-    if (document.querySelector('dialog[open]')) return;
-    if (spinPressed && (paused || state === 'win')) {
+  function menuController(dt) {
+    const spin = Boolean(input.padButtons[1]), spinPressed = spin && !menuPad.spin;
+    menuPad.spin = spin;
+    if (spinPressed && !document.querySelector('dialog[open]') && (paused || state === 'win')) {
       if (state === 'hub') setPaused(false);
       else leaveLevel();
       return;
     }
-    if (!jumpPressed) return;
-    if (state === 'title') start();
-    else if (state === 'win') startLevel();
-    else if (paused) setPaused(false);
+    menuNavigation.update(dt, input.menu);
   }
 
   function hubFrame(dt, raw) {
@@ -1374,6 +1418,8 @@ async function main() {
         startLevel();
         return;
       }
+      if (event.type === 'hubEcho') { sound.play('ring'); continue; }
+      if (event.type === 'hubChorus') { sound.play('trailWin'); hint('♪ Der Sternenhof singt!', 5); continue; }
       sound.play(event.type === 'jump' ? ['jump', 'jump2', 'triple'][(event.level ?? 1) - 1] : event.type);
     }
     const visit = hub.snapshot();
@@ -1428,7 +1474,7 @@ async function main() {
     }
 
     input.update(paused ? 0 : dt);
-    menuController();
+    menuController(dt);
     if (paused || document.hidden) return;
     if (state === 'hub') { hubFrame(dt, raw); return; }
     if (chapterGame && (state === 'chapter' || state === 'win')) {

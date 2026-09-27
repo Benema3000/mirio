@@ -133,6 +133,20 @@ export class RibbonRules {
   gateOpen(){return this.seeds.size===(this.course.seeds?.length||GARDEN.seedCount);}
   platformActive(platform){return (!platform.dream||platform.dream===this.dream)&&(!platform.gate||this.gateOpen());}
   room(){return this.course.rooms?.find(room=>this.x>=room.min&&this.x<room.max)||{id:'courtyard',name:'Blütenhof',color:0xc0e8ec};}
+  guidance(){
+    const room=this.room().id,missing=this.course.seeds?.filter(item=>!this.seeds.has(item.id))||[];
+    const seed=missing.find(item=>item.room===room)||missing[0];
+    const destination=seed?.room||'courtyard';
+    const route=this.course.guidanceRoutes?.find(item=>item.from===room&&item.to===destination&&this.y>=(item.minY??-Infinity));
+    const door=route&&this.course.doors.find(item=>item.id===route.door);
+    const stair=!seed&&room==='courtyard'&&this.course.platforms.find(p=>p.gate&&p.y>this.y+.2);
+    const finish=stair?{...stair,y:stair.y+.95,icon:'✿'}:{id:'flower-gate',x:GARDEN.finishX,y:GARDEN.finishY,icon:'✿'};
+    const target=door||seed||finish;
+    const dx=target.x-this.x,dy=target.y-this.y-.95;
+    const atDoor=door&&Math.abs(dx)<GARDEN.interactionRadius&&Math.abs(target.y-this.y)<1.6;
+    const direction=atDoor?'↻':Math.abs(dx)<3&&Math.abs(dy)>1.4?(dy>0?'↑':'↓'):(dx<0?'←':'→');
+    return {...target,kind:door?'door':seed?'seed':'finish',direction};
+  }
   interaction(){
     const near=item=>Math.abs(this.x-item.x)<GARDEN.interactionRadius&&Math.abs(this.y-item.y)<1.6;
     const door=this.course.doors?.find(near);
@@ -182,13 +196,13 @@ export class RibbonRules {
   }
   snapshot(){
     const gate=this.gateOpen(),room=this.room(),interaction=this.interaction();
-    const next=this.course.seeds?.find(seed=>!this.seeds.has(seed.id));
+    const guide=this.guidance();
     return {status:this.status,time:this.time,progress:this.status==='finished'?1:this.seeds.size/GARDEN.seedCount*GARDEN.discoveryShare+(gate&&room.id==='courtyard'?clamp(this.y/GARDEN.finishY,0,1)*(1-GARDEN.discoveryShare):0),
       collectibles:this.collected.size,totalCollectibles:this.course.gems.length,checkpoint:this.checkpoint,
       recoveries:this.recoveries,penalties:this.penalties,x:this.x,y:this.y,vx:this.vx,vy:this.vy,
       grounded:this.grounded,airSpin:this.airSpin,recovering:this.recovery>0,
       seeds:this.seeds.size,totalSeeds:this.course.seeds?.length||0,seedIds:[...this.seeds],gateOpen:gate,
       room:room.id,roomName:room.name,dream:this.dream,discovered:[...this.discovered],shortcuts:this.opened.size/2,
-      actionHint:interaction?.hint||'',hint:this.clock-this.lastDiscovery>GARDEN.hintDelay?(next?`${next.icon} →`:'✿ ↑'):''};
+      actionHint:interaction?.hint||'',guide,hint:gate||this.clock-this.lastDiscovery>GARDEN.hintDelay?`${guide.icon} ${guide.direction}`:''};
   }
 }

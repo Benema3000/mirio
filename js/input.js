@@ -38,8 +38,11 @@ const KEYS = {
 const GAME_KEYS = new Set(Object.values(KEYS).flat());
 
 export class Input {
+  #gameplayKeys = new Set();
+
   constructor({ surface, stick, knob, jumpButton, spinButton, poundButton, gasButton, brakeButton }) {
     this.move = { x: 0, y: 0 };
+    this.menu = { x: 0, y: 0, confirm: false, back: false };
     this.drive = { steer: 0, gas: 0, brake: 0 };
     this.buttonGas = false;
     this.buttonBrake = false;
@@ -67,7 +70,7 @@ export class Input {
 
     window.addEventListener('keydown', (e) => this.key(e, true));
     window.addEventListener('keyup', (e) => this.key(e, false));
-    window.addEventListener('blur', () => this.reset());
+    window.addEventListener('blur', () => { this.#gameplayKeys.clear(); this.reset(); });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.reset();
     });
@@ -124,6 +127,7 @@ export class Input {
     this.jumpQueued = this.spinQueued = this.poundQueued = this.rideQueued = false;
     this.turn.x = this.turn.y = this.move.x = this.move.y = 0;
     this.drive.steer = this.drive.gas = this.drive.brake = 0;
+    Object.assign(this.menu, {x: 0, y: 0, confirm: false, back: false});
     for (const button of this.buttons) button.classList.remove('pressed');
   }
 
@@ -149,10 +153,17 @@ export class Input {
 
   key(e, isDown) {
     // Always release a key, even if focus has since moved into a text field.
-    if (!isDown) this.down.delete(e.code);
+    const carried = this.#gameplayKeys.has(e.code);
+    if (!isDown) { this.down.delete(e.code); this.#gameplayKeys.delete(e.code); }
+    // A held brake must not click Replay when the result takes keyboard focus.
+    if (!this.enabled) {
+      if (carried) e.preventDefault();
+      return;
+    }
     const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName) || e.target?.isContentEditable;
-    if (!GAME_KEYS.has(e.code) || editing || !this.enabled) return;
+    if (!GAME_KEYS.has(e.code) || editing) return;
     e.preventDefault();
+    if (isDown) this.#gameplayKeys.add(e.code);
     if (isDown && !e.repeat && this.enabled) {
       if (KEYS.jump.includes(e.code)) this.jumpQueued = true;
       if (KEYS.spin.includes(e.code)) this.spinQueued = true;
@@ -256,6 +267,10 @@ export class Input {
   /** Samples held controls; call once per frame, including while paused. */
   update(dt) {
     const pad = this.sampleGamepad();
+    // Menus keep their own intent while pause disables movement and queued actions.
+    const menuLength = Math.max(1, Math.hypot(pad.x, pad.y));
+    Object.assign(this.menu, {x: pad.x / menuLength, y: pad.y / menuLength,
+      confirm: Boolean(this.padButtons[0]), back: Boolean(this.padButtons[2])});
     if (!this.enabled) return;
     let x = this.stickVec.x + pad.x;
     let y = this.stickVec.y + pad.y;
