@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Mirio</title>
+  <meta name="description" content="Mirio: ein kleines Weltraum-Jump'n'Run im Browser. Mirio und seine Rakete hat Miro gezeichnet.">
+  <link rel="canonical" href="https://goodvantage.ch/mirio/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Mirio">
+  <meta property="og:description" content="Ein kleines Weltraum-Jump'n'Run im Browser. Mirio und seine Rakete hat Miro gezeichnet.">
+  <meta property="og:url" content="https://goodvantage.ch/mirio/">
+  <meta property="og:image" content="https://goodvantage.ch/mirio/img/titelbild.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#140b2e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="img/mirio.png">
+  <link rel="stylesheet" href="style.css?v=13">
+</head>
+<body>
+  <canvas id="game" aria-label="Spielfeld"></canvas>
+
+  <div id="hud" aria-live="polite">
+    <div class="pill">
+      <span id="hearts" aria-label="Leben" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.8 8.1 3 4 6.9 4c2.1 0 3.6 1.1 5.1 3 1.5-1.9 3-3 5.1-3C21 4 23.2 8.1 21.6 11.8 19.5 16.4 12 21 12 21z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.8 8.1 3 4 6.9 4c2.1 0 3.6 1.1 5.1 3 1.5-1.9 3-3 5.1-3C21 4 23.2 8.1 21.6 11.8 19.5 16.4 12 21 12 21z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.8 8.1 3 4 6.9 4c2.1 0 3.6 1.1 5.1 3 1.5-1.9 3-3 5.1-3C21 4 23.2 8.1 21.6 11.8 19.5 16.4 12 21 12 21z"/></svg>
+      </span>
+      <span class="bits" aria-label="Glitzersteine">
+        <svg viewBox="0 0 24 24"><path d="M6 3h12l4 6-10 13L2 9z"/></svg>
+        <span id="bits">0 / 0</span>
+      </span>
+    </div>
+    <div class="corner">
+      <button id="fullscreen" class="icon" hidden aria-label="Vollbild">
+        <svg viewBox="0 0 24 24"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
+      </button>
+      <button id="mute" class="icon" aria-label="Ton an oder aus">
+        <svg class="on" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12"/></svg>
+        <svg class="off" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="boss-bar" hidden>
+    <span class="boss-name">Finster-Mirio</span>
+    <span class="boss-hp"><i></i><i></i><i></i></span>
+  </div>
+
+  <div id="race-hud" hidden>
+    <span id="race-place">1.</span>
+    <span id="race-time">0:00</span>
+  </div>
+
+  <div id="toast" role="status"></div>
+  <p id="hint" role="status"></p>
+
+  <div id="touch-controls">
+    <div id="stick"><div id="knob"></div></div>
+    <button id="btn-pound" class="touch-btn" aria-label="Stampfen">&#10515;</button>
+    <button id="btn-spin" class="touch-btn" aria-label="Drehen">&#10227;</button>
+    <button id="btn-jump" class="touch-btn" aria-label="Springen">&#8593;</button>
+    <button id="btn-brake" class="touch-btn race-btn" aria-label="Bremse">Bremse</button>
+    <button id="btn-gas" class="touch-btn race-btn" aria-label="Gas">Gas</button>
+  </div>
+
+  <section id="title" class="overlay">
+    <div class="card">
+      <h1><span class="word">Mirio</span></h1>
+      <img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro">
+      <button id="start" class="big" disabled>Lädt …</button>
+      <p id="status" class="status"></p>
+      <section id="title-scores" class="title-scores" aria-labelledby="title-scores-heading" hidden>
+        <h3 id="title-scores-heading">Bestenliste</h3>
+        <ol id="title-board" class="board"></ol>
+      </section>
+      <p class="controls keys">Laufen: Pfeiltasten oder WASD · Springen: Leertaste · Drehen: Shift<br>Stampfen (in der Luft): C · Kamera: Maus ziehen oder Q/E</p>
+      <p class="controls touch">Links wischen: laufen · ↑ springen · ⟳ drehen · ⤓ stampfen<br>Rechts wischen: Kamera drehen</p>
+      <p class="portrait-tip">Tipp: Handy quer halten</p>
+      <p class="credit">Figur und Zeichnungen: Miro · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
+      <p class="credit">Programmiert mit Claude Opus 5.5, einer KI von Anthropic · <a href="https://github.com/Benema3000/mirio" target="_blank" rel="noopener">Quellcode auf GitHub</a> (MIT-Lizenz)</p>
+      <p class="legal">Mirio ist ein kostenloses, nicht kommerzielles Experiment. Figur und Zeichnungen stammen von Miro; Grafik, Musik und Programm sind eigens für dieses Spiel entstanden.</p>
+    </div>
+  </section>
+
+  <section id="win" class="overlay hidden">
+    <div class="card">
+      <h2>Du hast den Kristall!</h2>
+      <p id="win-stats" class="stats"></p>
+      <p id="win-extra" class="status"></p>
+      <p class="points"><b id="win-points">0</b> Punkte</p>
+      <form id="score-form" class="score-form" hidden>
+        <label for="score-name">Dein Name für die Bestenliste</label>
+        <span class="row">
+          <input id="score-name" name="name" maxlength="16" autocomplete="nickname" autocapitalize="words" spellcheck="false" required>
+          <button id="score-send" type="submit">Eintragen</button>
+        </span>
+        <small>Bitte nur einen Spitznamen: Die Bestenliste ist öffentlich.</small>
+      </form>
+      <p id="score-status" class="status" role="status"></p>
+      <ol id="win-board" class="board"></ol>
+      <button id="again" class="big">Nochmal spielen</button>
+    </div>
+  </section>
+
+  <!-- three.js from jsDelivr, pinned to one version; the integrity hashes are
+       those of the npm tarball's files (browsers without import-map integrity
+       support simply skip the check). -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"
+    },
+    "integrity": {
+      "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js": "sha384-m8JoFX52V6NGv2usipnlLJKnJfL7IE8dbniPDDCSGSQv3Hm4n6PjfV6syVwfuoRc",
+      "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.core.js": "sha384-mdKeCwPEcbDvzaxwhm+MVuLoMou+E7jQqrs4tmu/n8HBYPGI1kZt0MkJxlMR4zFM",
+      "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/utils/BufferGeometryUtils.js": "sha384-Rm97j4mcjlLkGsYC2LX3nZG9VU2R8lgK0QE+DmBr4thue+H7J+SHm+68If2ZLBVg"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js?v=13"></script>
+</body>
+</html>

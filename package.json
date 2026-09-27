@@ -1,0 +1,13 @@
+{
+  "name": "mirio",
+  "private": true,
+  "description": "Mirio 3D: a small 3D platformer and kart race in the browser, built from Miro's drawings",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/mirio-world.test.mjs"
+  },
+  "devDependencies": {
+    "three": "0.186.0"
+  }
+}
