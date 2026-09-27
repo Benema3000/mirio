@@ -149,15 +149,16 @@ function nextSpeed(v, throttle, brake, slope, boosting, dt) {
  */
 export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false } = {}) {
   const events = [];
-  const throttle = ctl.throttle ?? 0;
-  const brake = ctl.brake ?? 0;
-  k.steer += (ctl.steer - k.steer) * (1 - Math.exp(-DRIVE.steerResponse * dt));
+  const throttle = Math.max(0, Math.min(1, ctl.throttle ?? 0));
+  const brake = Math.max(0, Math.min(1, ctl.brake ?? 0));
+  const steer = Math.max(-1, Math.min(1, ctl.steer ?? 0));
+  k.steer += (steer - k.steer) * (1 - Math.exp(-DRIVE.steerResponse * dt));
   k.turbo = Math.max(0, k.turbo - dt);
 
   // Drifting: starts on the ground (after the hop that holding jump begins
   // with) while steering at speed; ends on release, paying out the charge.
-  if (!k.drift && !airborne && ctl.hold && Math.abs(ctl.steer) > 0.35 && k.v > DRIVE.driftSpeed) {
-    k.drift = Math.sign(ctl.steer);
+  if (!k.drift && !airborne && ctl.hold && Math.abs(steer) > 0.35 && k.v > DRIVE.driftSpeed) {
+    k.drift = Math.sign(steer);
     k.charge = 0;
     events.push('drift');
   }
@@ -170,7 +171,7 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
     k.drift = 0;
     k.charge = 0;
   }
-  if (k.drift) k.charge += dt;
+  if (k.drift && !airborne) k.charge += dt;
 
   // Speed along the heading; sliding scrubs some off.
   if (!airborne) {
@@ -197,7 +198,7 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
     const fade = Math.min(1, speed / DRIVE.turnFullSpeed) * (1 - (1 - DRIVE.turnAtTop) * Math.min(1, speed / DRIVE.top));
     const braking = brake > 0 && k.v > 0.5;
     let rate = k.steer * DRIVE.turn * fade * (braking ? DRIVE.brakeTurn : 1) * (k.v < 0 ? -1 : 1) * air + assist;
-    if (Math.abs(ctl.steer) < 0.1) rate -= DRIVE.recenter * k.yaw;
+    if (Math.abs(steer) < 0.1) rate -= DRIVE.recenter * k.yaw;
     k.yaw = clampYaw(k.yaw + (rate - bend) * dt);
     const sliding = braking && Math.abs(k.steer) > 0.3 && k.v > DRIVE.driftSpeed;
     const grip = airborne ? 0 : sliding ? DRIVE.slideGrip : DRIVE.grip;

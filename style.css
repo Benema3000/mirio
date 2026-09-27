@@ -1,5 +1,4 @@
-/* Mirio: page chrome around the canvas. Night-sky palette, chunky
-   rounded type, Miro's blobs as the touch buttons. */
+/* Mirio: responsive page chrome, menus and touch controls around the canvas. */
 
 :root {
   --night: #140b2e;
@@ -420,3 +419,152 @@ body.touch .controls.touch { display: block; }
   h1 { font-size: 48px; }
   .controls, .credit { margin-top: 8px; }
 }
+
+/* A quiet frame around Miro's bright, original drawing. */
+:root { --ink: #101b30; --gold: #ffdb83; --gold-deep: #f5b952; --muted: #abbacb; }
+body { font-family: ui-rounded, 'Avenir Next', 'Segoe UI', sans-serif; background: #0b1527; }
+button, input { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #83ece2; outline-offset: 5px; }
+[hidden] { display: none !important; }
+.overlay { z-index: 10; background: linear-gradient(115deg, rgba(8,19,34,.96), rgba(14,27,45,.85) 65%, rgba(22,41,60,.72)); backdrop-filter: blur(12px); }
+.title-shell { width: min(1050px, 100%); display: grid; grid-template-columns: 43% 57%; gap: 16px 0; padding: 28px 18px; }
+.title-art { position: relative; display: grid; place-items: center; min-height: 460px; isolation: isolate; }
+.title-art::before { content: ''; position: absolute; width: 320px; height: 320px; border-radius: 50%; background: radial-gradient(circle at 30% 20%, #f6dba5, #cfa879); box-shadow: 0 30px 90px #0005, inset 0 0 60px #fff3; z-index: -1; }
+.title-art .hero { height: 350px; max-width: 95%; object-fit: contain; margin: 0; filter: drop-shadow(2px 20px 12px #0005); animation: float-drawing 6s ease-in-out infinite; }
+.orbit { position: absolute; width: 380px; height: 380px; border: 1px solid #dbeaff18; border-radius: 50%; z-index: -2; }
+.orbit-two { width: 430px; height: 430px; border-style: dashed; transform: rotate(18deg); }
+.art-spark { position: absolute; color: var(--gold); font-size: 42px; }
+.spark-one { top: 45px; left: 35px; transform: rotate(14deg); }
+.spark-two { bottom: 62px; right: 25px; font-size: 52px; }
+.drawing-note { position: absolute; bottom: 8px; font-size: 12px; color: #d5dfeb; letter-spacing: .04em; }
+.title-copy { padding: 22px 0 0 46px; text-align: left; }
+.eyebrow { color: #85d7cf; font-size: 11px; font-weight: 800; letter-spacing: .2em; margin: 0 0 20px; }
+h1 { font-size: clamp(76px, 10vw, 128px); letter-spacing: -.065em; line-height: .95; }
+h1 .word { color: #fff8e8; -webkit-text-stroke: 0; text-shadow: none; }
+.title-dot { color: var(--gold); }
+.tagline { font-size: clamp(24px, 3vw, 34px); font-weight: 650; line-height: 1.2; margin: 24px 0 14px; letter-spacing: -.03em; }
+.intro { color: #aebed0; font-size: 15px; line-height: 1.65; max-width: 410px; margin: 0; }
+.journey-chips { display: flex; gap: 19px; margin: 24px 0; font-size: 10px; color: #82cfc7; letter-spacing: .04em; }
+.journey-chips b { color: #d7e1eb; margin-left: 5px; font-size: 12px; font-weight: 500; }
+.big { border-radius: 14px; font-size: 18px; padding: 16px 30px; box-shadow: 0 4px 0 #ae7b38, 0 12px 35px #0003; background: linear-gradient(140deg, #ffe3a0, #f6c46f); transition: transform .15s, box-shadow .15s; }
+.big:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #ae7b38, 0 16px 35px #0004; }
+.big:active { transform: translateY(2px); box-shadow: 0 2px 0 #ae7b38; }
+.controls { font-size: 11px; line-height: 2.1; color: #aebed0; margin-top: 22px; }
+kbd { display: inline-block; padding: 0 5px; margin: 0 2px; border: 1px solid #ddeaff25; border-bottom-width: 2px; border-radius: 5px; font: 10px/1.9 inherit; color: #e4edf4; }
+.title-footer { grid-column: 1/-1; display: grid; grid-template-columns: 1fr 310px; gap: 40px; margin-top: 20px; padding-top: 22px; border-top: 1px solid #e3eeff18; }
+.credit { color: #a4b4c8; margin: 0; font-size: 11px; line-height: 1.8; opacity: 1; }
+.credit b { color: #e5eaf1; }
+.legal { margin: 8px 0 0; color: #8092a9; font-size: 10px; max-width: 580px; opacity: 1; }
+.title-scores { max-width: none; margin: 0; }
+.title-scores h3 { color: #adbdcd; font-size: 9px; letter-spacing: .12em; }
+.title-scores .board { font-size: 11px; line-height: 1.5; margin: 6px 0 0; color: #92a6bf; }
+.title-scores .board li:nth-child(n+4) { display: none; }
+#status:empty { display: none; }
+#hud { z-index: 2; padding: max(18px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) 0 max(22px, env(safe-area-inset-left)); }
+.pill, .icon { border: 1px solid #e4f4ff32; background: #0c1c32ce; box-shadow: 0 6px 20px #0002; backdrop-filter: blur(10px); }
+.pill { border-radius: 15px; padding: 12px 16px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.icon { border-radius: 13px; width: 44px; height: 44px; }
+.icon:hover { background: #29445c; }
+#journey { position: fixed; top: max(86px, calc(env(safe-area-inset-top) + 68px)); left: max(22px, env(safe-area-inset-left)); display: none; gap: 11px; align-items: center; pointer-events: none; text-shadow: 0 2px 6px #0008; }
+body.playing #journey { display: flex; }
+body.racing #journey { display: none; }
+#journey small { display: block; color: #ffe5a0; font-size: 9px; font-weight: 750; letter-spacing: .14em; margin-bottom: 5px; }
+#journey strong { font-size: 13px; font-weight: 600; }
+.compass { border: 1px solid #fff4; background: #0c1c32a8; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; }
+.compass svg { width: 21px; height: 21px; fill: #ffdc87; }
+#trail-hud, #magnet-hud { position: fixed; left: 50%; transform: translateX(-50%); top: 24px; z-index: 2; padding: 12px 18px; border: 1px solid #ffdb8366; border-radius: 14px; background: #102336e8; font-size: 13px; }
+#trail-time { margin-left: 15px; color: var(--gold); font-variant-numeric: tabular-nums; }
+progress { height: 4px; border: 0; border-radius: 9px; overflow: hidden; background: #ffffff25; accent-color: #ffda83; }
+progress::-webkit-progress-bar { background: #ffffff25; }
+progress::-webkit-progress-value { background: #ffda83; border-radius: 9px; }
+progress::-moz-progress-bar { background: #ffda83; }
+#trail-progress { display: block; width: 100%; margin-top: 8px; }
+#magnet-hud { top: 100px; color: #94f4e5; border-color: #94f4e550; }
+#race-hud { flex-wrap: wrap; justify-content: center; width: 250px; border-radius: 18px; background: #0c1c32dd; border-width: 1px; top: 18px; gap: 4px 18px; padding: 10px 20px; }
+#race-place { -webkit-text-stroke: 0; font-size: 27px; }
+#race-time { font-size: 16px; }
+#race-speed { font-size: 16px; font-variant-numeric: tabular-nums; }
+#race-speed small { font-size: 9px; color: #a1bbce; }
+#race-progress { width: 100%; }
+#boss-bar { border-width: 1px; border-radius: 13px; font-size: 14px; }
+#hint { font-size: 13px; line-height: 1.5; padding: 10px 18px; border-radius: 12px; background: #0b1b31ba; text-shadow: none; max-width: min(88vw, 640px); }
+#toast { font-size: clamp(25px, 5vw, 42px); -webkit-text-stroke: 0; text-shadow: 0 3px 15px #0008; white-space: normal; text-align: center; width: 85vw; }
+#toast.big { font-size: clamp(60px, 14vw, 120px); }
+.pause-card, #win .card { width: min(100%, 470px); padding: 34px; border: 1px solid #bddbed25; border-radius: 26px; background: #11253bef; box-shadow: 0 24px 100px #0005; }
+h2 { font-size: 38px; -webkit-text-stroke: 0; text-shadow: none; letter-spacing: -.035em; color: #fff3d5; }
+.pause-card .eyebrow { margin-bottom: 14px; }
+.pause-objective { font-size: 13px; color: #adc3d5; margin-bottom: 22px; }
+.settings { display: grid; gap: 15px; padding: 25px 0 20px; text-align: left; }
+.settings label { display: flex; justify-content: space-between; align-items: center; font-size: 13px; gap: 15px; }
+.settings input[type=range] { width: 60%; accent-color: #ffda83; }
+.settings .check-setting { justify-content: flex-start; gap: 9px; }
+.check-setting small { margin-left: auto; font-size: 10px; color: #8da9c1; }
+.move-guide { color: #96afc4; font-size: 10px; line-height: 1.7; border-top: 1px solid #fff2; padding-top: 10px; }
+.trail-tip { font-size: 12px; line-height: 1.65; color: #d9c494; }
+.text-button { border: 0; background: transparent; color: #a5c3d9; text-decoration: underline; padding: 10px; font-size: 12px; }
+body.paused #touch-controls, body.paused #hint, body.paused #toast { display: none; }
+body.paused #hud { pointer-events: none; }
+body.paused #hud button { pointer-events: none; }
+#win .stats { font-size: 15px; line-height: 1.9; color: #adc3d5; }
+.win-badges { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; font-size: 11px; color: #ffe3a0; }
+.win-badges span { border: 1px solid #ffda8340; border-radius: 20px; padding: 6px 10px; }
+@keyframes float-drawing { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-10px) rotate(2deg); } }
+@media (max-width: 760px) {
+  .title-shell { grid-template-columns: 36% 64%; padding: 8px; }
+  .title-art { min-height: 300px; }
+  .title-art::before { width: 190px; height: 190px; }
+  .title-art .hero { height: 235px; }
+  .orbit { width: 220px; height: 220px; } .orbit-two { width: 250px; height: 250px; }
+  .title-copy { padding: 15px 5px 0 20px; } h1 { font-size: 86px; }
+  .tagline { font-size: 25px; margin: 18px 0 10px; } .intro { font-size: 13px; }
+  .eyebrow { font-size: 8px; margin-bottom: 15px; }
+  .drawing-note { display: none; } .spark-one { left: 0; top: 12px; } .spark-two { right: 0; bottom: 45px; }
+  .journey-chips { gap: 10px; margin: 18px 0; } .journey-chips b { font-size: 10px; }
+  .title-footer { gap: 20px; grid-template-columns: 1fr 200px; }
+}
+@media (max-width: 540px) and (orientation: portrait) {
+  .overlay { padding: 18px; }
+  .title-shell { display: flex; flex-direction: column; max-width: 410px; padding: 0; }
+  .title-art { min-height: 195px; order: 1; } .title-art .hero { height: 205px; }
+  .title-art::before { width: 180px; height: 180px; }
+  .orbit { width: 205px; height: 205px; } .orbit-two { width: 230px; height: 230px; }
+  .spark-one { top: 15px; left: 50px; font-size: 25px; } .spark-two { right: 50px; bottom: 10px; font-size: 30px; }
+  .title-copy { order: 2; text-align: center; padding: 0; } .title-copy .eyebrow { margin: 12px 0; }
+  h1 { font-size: 72px; } .tagline { font-size: 23px; margin: 16px 0 10px; } .tagline br { display: none; }
+  .intro { font-size: 12px; max-width: 310px; margin: auto; } .journey-chips { justify-content: center; }
+  .title-footer { order: 3; display: block; margin-top: 8px; padding-top: 14px; text-align: center; }
+  .title-scores { display: none; } .credit { font-size: 9px; } .legal { font-size: 9px; }
+  .controls { font-size: 10px; margin-top: 16px; } .portrait-tip { font-size: 10px; margin: 8px 0; }
+  #hud { padding: 12px; } .corner { gap: 5px; } .icon { width: 39px; height: 39px; }
+  .pill { font-size: 13px; padding: 10px; } #journey { left: 12px; top: 68px; }
+  #journey strong { font-size: 11px; } #journey small { font-size: 8px; }
+  #trail-hud { top: 122px; min-width: 190px; } #magnet-hud { top: 172px; font-size: 11px; }
+  #race-hud { top: 66px; width: 200px; } #boss-bar { top: 120px; }
+  .pause-card, #win .card { padding: 24px 18px; } h2 { font-size: 32px; }
+}
+@media (max-height: 560px) and (orientation: landscape) {
+  .title-shell { max-width: 800px; padding: 5px; gap: 5px; }
+  .title-art { min-height: 285px; } .title-art .hero { height: 245px; }
+  .title-copy { padding-top: 5px; } h1 { font-size: 68px; }
+  .tagline { font-size: 23px; margin: 12px 0 8px; } .tagline br { display: none; }
+  .intro { font-size: 11px; } .journey-chips { margin: 12px 0; }
+  .controls { margin-top: 12px; font-size: 10px; } .title-footer { margin-top: 5px; padding-top: 10px; }
+  .title-scores { display: none; } .title-footer { grid-template-columns: 1fr; }
+  .pause-card { margin: 10px 0; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+body.reduced-motion .hero { animation: none; }
+@media (min-width: 761px) and (min-height: 561px) and (max-height: 820px) {
+  .title-shell { padding: 12px 18px; }
+  .title-art { min-height: 410px; }
+  .title-art .hero { height: 320px; }
+  .title-copy { padding-top: 6px; }
+  h1 { font-size: 104px; }
+  .title-copy .tagline { font-size: 30px; margin: 20px 0 12px; }
+  .title-footer { margin-top: 12px; padding-top: 16px; }
+  .controls { margin-top: 16px; }
+}
+#race-hud small { font-size: 9px; color: #a1bbce; }
+#race-technique { width: 100%; margin-top: 4px; text-align: center; font-size: 10px; letter-spacing: .04em; color: #e1c88f; }
+#race-technique[data-charge="1"], #race-technique[data-charge="boost"] { color: #8ae5ff; }
+#race-technique[data-charge="2"] { color: #ffba6b; }

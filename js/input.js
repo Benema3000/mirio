@@ -1,4 +1,4 @@
-// Mirio: keyboard, mouse and touch, merged into one small intent:
+// Mirio: keyboard, mouse, touch and standard gamepads, merged into one intent:
 // move (x right, y forward), jump, spin, ground pound, and camera turns; and
 // for the kart, `drive`: steering, gas and brake, kept apart so that gas
 // never weakens the steering.
@@ -12,6 +12,16 @@ const STICK_RADIUS = 56;
 const MOUSE_TURN = 0.006;
 const TOUCH_TURN = 0.009;
 const KEY_TURN = 2.2;
+const PAD_DEADZONE = 0.18;
+const PAD_TURN = 2.4;
+
+/** A circular dead zone avoids drift without losing gentle analog movement. */
+export function analogStick(x = 0, y = 0, deadzone = PAD_DEADZONE) {
+  const length = Math.hypot(x, y);
+  if (length <= deadzone) return { x: 0, y: 0 };
+  const scale = Math.min(1, (length - deadzone) / (1 - deadzone)) / length;
+  return { x: x * scale, y: y * scale };
+}
 
 const KEYS = {
   left: ['ArrowLeft', 'KeyA'],
@@ -33,7 +43,7 @@ export class Input {
     this.buttonGas = false;
     this.buttonBrake = false;
     this.jumpHeld = false;
-    this.enabled = false;
+    this._enabled = false;
     this.down = new Set();
     this.jumpQueued = false;
     this.spinQueued = false;
@@ -46,21 +56,23 @@ export class Input {
     this.stick = stick;
     this.knob = knob;
     this.onTouch = () => {};
+    this.onPause = () => {};
+    this.buttons = [jumpButton, spinButton, poundButton, gasButton, brakeButton].filter(Boolean);
+    this.padButtons = [];
+    this.gamepadConnected = false;
 
     window.addEventListener('keydown', (e) => this.key(e, true));
     window.addEventListener('keyup', (e) => this.key(e, false));
-    window.addEventListener('blur', () => {
-      this.down.clear();
-      this.releaseStick();
-      this.buttonJumpHeld = false;
-      this.buttonGas = false;
-      this.buttonBrake = false;
+    window.addEventListener('blur', () => this.reset());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.reset();
     });
 
     surface.addEventListener('pointerdown', (e) => this.pointerDown(e));
     surface.addEventListener('pointermove', (e) => this.pointerMove(e));
     surface.addEventListener('pointerup', (e) => this.pointerUp(e));
     surface.addEventListener('pointercancel', (e) => this.pointerUp(e));
+    surface.addEventListener('lostpointercapture', (e) => this.pointerUp(e));
     surface.addEventListener('contextmenu', (e) => e.preventDefault());
 
     this.bindButton(jumpButton, () => {
@@ -87,13 +99,36 @@ export class Input {
     });
   }
 
+  get enabled() {
+    return this._enabled;
+  }
+
+  set enabled(value) {
+    this._enabled = Boolean(value);
+    if (!this._enabled) this.reset();
+  }
+
+  /** Clear held and queued intent at pause, restart, blur, or a lost touch. */
+  reset() {
+    this.down.clear();
+    this.releaseStick();
+    this.dragPointer = null;
+    this.buttonJumpHeld = this.buttonGas = this.buttonBrake = this.jumpHeld = false;
+    this.jumpQueued = this.spinQueued = this.poundQueued = false;
+    this.turn.x = this.turn.y = this.move.x = this.move.y = 0;
+    this.drive.steer = this.drive.gas = this.drive.brake = 0;
+    for (const button of this.buttons) button.classList.remove('pressed');
+  }
+
   bindButton(el, press, release = () => {}) {
+    if (!el) return;
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!this.enabled) return;
       el.setPointerCapture?.(e.pointerId);
       el.classList.add('pressed');
-      if (this.enabled) press();
+      press();
     });
     const up = (e) => {
       e.stopPropagation();
@@ -102,12 +137,14 @@ export class Input {
     };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
-    el.addEventListener('pointerleave', up);
+    el.addEventListener('lostpointercapture', up);
   }
 
   key(e, isDown) {
-    // Typing a name for the high score list.
-    if (!GAME_KEYS.has(e.code) || e.target?.tagName === 'INPUT') return;
+    // Always release a key, even if focus has since moved into a text field.
+    if (!isDown) this.down.delete(e.code);
+    const editing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName) || e.target?.isContentEditable;
+    if (!GAME_KEYS.has(e.code) || editing || !this.enabled) return;
     e.preventDefault();
     if (isDown && !e.repeat && this.enabled) {
       if (KEYS.jump.includes(e.code)) this.jumpQueued = true;
@@ -141,6 +178,7 @@ export class Input {
   }
 
   pointerMove(e) {
+    if (!this.enabled) return;
     if (this.stickTouch && e.pointerId === this.stickTouch.id) {
       this.updateStick(e.clientX, e.clientY);
       return;
@@ -179,10 +217,39 @@ export class Input {
     this.knob.style.transform = '';
   }
 
-  /** Samples held keys and the stick; call once per frame. */
+  /** Standard mapping: A jump, X spin, B pound; RT/LT drive; Start pauses. */
+  sampleGamepad() {
+    let pad = null;
+    // The API can be unavailable in an embedded page or browser policy.
+    try {
+      pad = Array.from(globalThis.navigator?.getGamepads?.() ?? []).find((p) => p?.connected && p.mapping === 'standard');
+    } catch { /* Keyboard and touch remain available. */ }
+    this.gamepadConnected = Boolean(pad);
+    const value = (i) => pad?.buttons[i]?.value ?? 0;
+    const buttons = [0, 2, 1, 9].map((i) => Boolean(pad?.buttons[i]?.pressed));
+    if (this.enabled) {
+      if (buttons[0] && !this.padButtons[0]) this.jumpQueued = true;
+      if (buttons[1] && !this.padButtons[1]) this.spinQueued = true;
+      if (buttons[2] && !this.padButtons[2]) this.poundQueued = true;
+    }
+    const pause = buttons[3] && !this.padButtons[3];
+    this.padButtons = buttons;
+    if (pause) this.onPause();
+    const left = analogStick(pad?.axes[0], pad?.axes[1]);
+    const right = analogStick(pad?.axes[2], pad?.axes[3]);
+    return {
+      x: left.x + value(15) - value(14), y: -left.y + value(12) - value(13),
+      cameraX: right.x, cameraY: -right.y, jump: buttons[0],
+      gas: Math.max(value(7), value(12)), brake: Math.max(value(6), value(13)),
+    };
+  }
+
+  /** Samples held controls; call once per frame, including while paused. */
   update(dt) {
-    let x = this.stickVec.x;
-    let y = this.stickVec.y;
+    const pad = this.sampleGamepad();
+    if (!this.enabled) return;
+    let x = this.stickVec.x + pad.x;
+    let y = this.stickVec.y + pad.y;
     if (this.held('left')) x -= 1;
     if (this.held('right')) x += 1;
     if (this.held('up')) y += 1;
@@ -194,13 +261,15 @@ export class Input {
     }
     this.move.x = this.enabled ? x : 0;
     this.move.y = this.enabled ? y : 0;
-    this.jumpHeld = this.enabled && (this.held('jump') || this.buttonJumpHeld);
-    const steer = this.stickVec.x + (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
+    this.jumpHeld = this.enabled && (this.held('jump') || this.buttonJumpHeld || pad.jump);
+    const steer = this.stickVec.x + pad.x + (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     this.drive.steer = this.enabled ? Math.max(-1, Math.min(1, steer)) : 0;
-    this.drive.gas = this.enabled && (this.held('up') || this.buttonGas) ? 1 : 0;
-    this.drive.brake = this.enabled && (this.held('down') || this.buttonBrake) ? 1 : 0;
+    this.drive.gas = Math.max(pad.gas, this.held('up') || this.buttonGas ? 1 : 0);
+    this.drive.brake = Math.max(pad.brake, this.held('down') || this.buttonBrake ? 1 : 0);
     if (this.held('camLeft')) this.turn.x -= KEY_TURN * dt;
     if (this.held('camRight')) this.turn.x += KEY_TURN * dt;
+    this.turn.x += pad.cameraX * PAD_TURN * dt;
+    this.turn.y += pad.cameraY * PAD_TURN * dt;
   }
 
   consumeJump() {

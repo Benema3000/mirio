@@ -12,8 +12,8 @@ import {
 } from './world.js';
 
 const SPIN_FALL_GRAVITY = 0.45;
-const COYOTE_TIME = 0.1;
-const JUMP_BUFFER = 0.14;
+const COYOTE_TIME = 0.12;
+const JUMP_BUFFER = 0.16;
 const SPIN_TIME = 0.42;
 const SPIN_AIR_BOOST = 7;
 // Ground pound: a short somersault in the air, then straight down, fast.
@@ -65,6 +65,8 @@ export class Player {
     this.body.vel.set(0, 0, 0);
     this.body.up.copy(checkpoint.dir);
     this.body.onGround = true;
+    this.body.skidding = false;
+    this.body.bumpedHead = false;
     this.body.planet = checkpoint.planet;
     this.visualUp.copy(checkpoint.dir);
     if (facing) tangentDir(facing, checkpoint.dir, this.facing);
@@ -87,6 +89,7 @@ export class Player {
     this.lost = 0;
     this.splashT = 0;
     this.wishSpeed = 0;
+    this.skidding = false;
     this.squash = 0;
     this.walkPhase = 0;
     this.winT = 0;
@@ -146,24 +149,11 @@ export class Player {
     const fallSpeed = -body.vel.dot(body.up);
     this.coyote = body.onGround ? COYOTE_TIME : Math.max(0, this.coyote - h);
     this.groundTime = body.onGround ? this.groundTime + h : 0;
-    const speed = tmp.copy(body.vel).addScaledVector(body.up, -body.vel.dot(body.up)).length();
-
-    if (this.jumpBuffer > 0 && this.coyote > 0 && !this.pound && this.stun === 0) {
-      const jump = jumpFor(this.chain, this.groundTime, speed);
-      const vUp = body.vel.dot(body.up);
-      body.vel.addScaledVector(body.up, jump.speed - vUp);
-      body.onGround = false;
-      this.coyote = 0;
-      this.jumpBuffer = 0;
-      this.chain = jump.level;
-      this.squash = 0.2 + 0.05 * jump.level;
-      if (jump.level === 3) this.flip = 1;
-      this.events.push({ type: 'jump', level: jump.level });
-    }
+    this.tryJump();
 
     if (this.spinRequest) {
       this.spinRequest = false;
-      if (this.spinT === 0 && !this.pound) {
+      if (this.spinT === 0 && !this.pound && this.stun === 0) {
         this.spinT = SPIN_TIME;
         if (!body.onGround && !this.airSpinUsed) {
           this.airSpinUsed = true;
@@ -176,7 +166,7 @@ export class Player {
 
     if (this.poundRequest) {
       this.poundRequest = false;
-      if (!body.onGround && !this.pound) {
+      if (!body.onGround && !this.pound && this.stun === 0) {
         this.pound = { phase: 'hang', t: 0 };
         this.spinT = 0;
         this.flip = 0;
@@ -191,7 +181,12 @@ export class Player {
     if (body.skidding && !this.skidding) this.events.push({ type: 'skid' });
     this.skidding = body.skidding;
 
-    if (body.onGround && !wasOnGround) this.land(fallSpeed);
+    if (body.onGround && !wasOnGround) {
+      this.land(fallSpeed);
+      // A press just before touchdown takes off immediately, even on a
+      // frame with only one physics tick. This makes the jump chain fluid.
+      this.tryJump();
+    }
     // The chain only survives a quick re-jump; standing around resets it.
     if (body.onGround && this.groundTime > 0.3) this.chain = 0;
 
@@ -207,6 +202,21 @@ export class Player {
     // Lost in space: no planet pulls on you for a while.
     this.lost = body.planet ? 0 : this.lost + h;
     if (this.lost > 2.5) this.respawn();
+  }
+
+  tryJump() {
+    const body = this.body;
+    if (this.jumpBuffer <= 0 || (!body.onGround && this.coyote <= 0) || this.pound || this.stun > 0) return false;
+    const speed = tmp.copy(body.vel).addScaledVector(body.up, -body.vel.dot(body.up)).length();
+    const jump = jumpFor(this.chain, this.groundTime, speed);
+    body.vel.addScaledVector(body.up, jump.speed - body.vel.dot(body.up));
+    body.onGround = false;
+    this.coyote = this.jumpBuffer = this.groundTime = 0;
+    this.chain = jump.level;
+    this.squash = 0.2 + 0.05 * jump.level;
+    if (jump.level === 3) this.flip = 1;
+    this.events.push({ type: 'jump', level: jump.level });
+    return true;
   }
 
   jumpOptions() {
@@ -272,6 +282,8 @@ export class Player {
       ?? tangentDir(this.facing, this.body.up, tmp)?.negate() ?? tangentDir(Y, this.body.up, tmp) ?? tmp.set(1, 0, 0);
     this.body.vel.copy(away).multiplyScalar(8).addScaledVector(this.body.up, 9);
     this.body.onGround = false;
+    this.coyote = 0;
+    this.jumpBuffer = 0;
     this.invulnerable = INVULNERABLE_TIME;
     this.stun = STUN_TIME;
   }
@@ -281,6 +293,8 @@ export class Player {
     const vUp = this.body.vel.dot(this.body.up);
     this.body.vel.addScaledVector(this.body.up, (this.jumpHeld ? BOUNCE_HELD_SPEED : BOUNCE_SPEED) - vUp);
     this.body.onGround = false;
+    this.coyote = 0;
+    this.jumpBuffer = 0;
     this.pound = null;
     this.airSpinUsed = false;
     this.squash = 0.3;

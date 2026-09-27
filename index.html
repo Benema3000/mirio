@@ -17,12 +17,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="img/mirio.png">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
   <canvas id="game" aria-label="Spielfeld"></canvas>
 
-  <div id="hud" aria-live="polite">
+  <div id="hud">
     <div class="pill">
       <span id="hearts" aria-label="Leben" hidden>
         <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.8 8.1 3 4 6.9 4c2.1 0 3.6 1.1 5.1 3 1.5-1.9 3-3 5.1-3C21 4 23.2 8.1 21.6 11.8 19.5 16.4 12 21 12 21z"/></svg>
@@ -35,6 +35,7 @@
       </span>
     </div>
     <div class="corner">
+      <button id="pause-button" class="icon" aria-label="Pause und Einstellungen" title="Pause (Esc)"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
       <button id="fullscreen" class="icon" hidden aria-label="Vollbild">
         <svg viewBox="0 0 24 24"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
       </button>
@@ -45,6 +46,13 @@
     </div>
   </div>
 
+  <div id="journey" aria-label="Dein nächstes Ziel">
+    <span class="compass" aria-hidden="true"><svg id="compass-arrow" viewBox="0 0 32 32"><path d="M16 4 26 26 16 21 6 26Z"/></svg></span>
+    <span><small id="chapter">01 / WIESENWELT</small><strong id="objective">Folge den Glitzersteinen</strong></span>
+  </div>
+  <div id="trail-hud" hidden><span id="trail-label"></span><strong id="trail-time"></strong><progress id="trail-progress" max="6" value="0"></progress></div>
+  <div id="magnet-hud" hidden>✦ Glitzermagnet <span id="magnet-time"></span></div>
+
   <div id="boss-bar" hidden>
     <span class="boss-name">Finster-Mirio</span>
     <span class="boss-hp"><i></i><i></i><i></i></span>
@@ -52,7 +60,7 @@
 
   <div id="race-hud" hidden>
     <span id="race-place">1.</span>
-    <span id="race-time">0:00</span>
+    <span id="race-time">0:00</span><span><span id="race-speed">0</span> <small>km/h</small></span><progress id="race-progress" max="1" value="0" aria-label="Rennfortschritt"></progress><span id="race-technique" hidden></span>
   </div>
 
   <div id="toast" role="status"></div>
@@ -68,27 +76,48 @@
   </div>
 
   <section id="title" class="overlay">
-    <div class="card">
-      <h1><span class="word">Mirio</span></h1>
-      <img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro">
-      <button id="start" class="big" disabled>Lädt …</button>
-      <p id="status" class="status"></p>
-      <section id="title-scores" class="title-scores" aria-labelledby="title-scores-heading" hidden>
-        <h3 id="title-scores-heading">Bestenliste</h3>
-        <ol id="title-board" class="board"></ol>
-      </section>
-      <p class="controls keys">Laufen: Pfeiltasten oder WASD · Springen: Leertaste · Drehen: Shift<br>Stampfen (in der Luft): C · Kamera: Maus ziehen oder Q/E</p>
-      <p class="controls touch">Links wischen: laufen · ↑ springen · ⟳ drehen · ⤓ stampfen<br>Rechts wischen: Kamera drehen</p>
-      <p class="portrait-tip">Tipp: Handy quer halten</p>
-      <p class="credit">Figur und Zeichnungen: Miro · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
-      <p class="credit">Programmiert mit Claude Opus 5.5, einer KI von Anthropic · <a href="https://github.com/Benema3000/mirio" target="_blank" rel="noopener">Quellcode auf GitHub</a> (MIT-Lizenz)</p>
-      <p class="legal">Mirio ist ein kostenloses, nicht kommerzielles Experiment. Figur und Zeichnungen stammen von Miro; Grafik, Musik und Programm sind eigens für dieses Spiel entstanden.</p>
+    <div class="title-shell">
+      <div class="title-art"><span class="orbit orbit-one"></span><span class="orbit orbit-two"></span><span class="art-spark spark-one">✦</span><span class="art-spark spark-two">✧</span><img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro"><span class="drawing-note">Eine Zeichnung. Ein ganzes Universum.</span></div>
+      <div class="title-copy">
+        <p class="eyebrow">MIROS KLEINES WELTRAUMABENTEUER</p>
+        <h1><span class="word">Mirio</span><span class="title-dot">.</span></h1>
+        <p class="tagline">Kleine Schritte. <br>Riesengrosses Abenteuer.</p>
+        <p class="intro">Über Wiesen hüpfen, zum Mond fliegen und um den Kristall rasen. Deine Reise beginnt mit einer Zeichnung.</p>
+        <div class="journey-chips" aria-label="Deine Reise"><span>01 <b>Entdecken</b></span><span>02 <b>Abheben</b></span><span>03 <b>Losrasen</b></span></div>
+        <button id="start" class="big" disabled>Lädt …</button>
+        <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
+        <p class="controls keys"><kbd>WASD</kbd> laufen <kbd>Leertaste</kbd> springen<br><kbd>Shift</kbd> drehen <kbd>C</kbd> stampfen <kbd>Esc</kbd> Pause</p>
+        <p class="controls touch">Links wischen: laufen · ↑ springen · ⟳ drehen · ⤓ stampfen<br>Rechts wischen: Kamera drehen</p>
+        <p class="portrait-tip">Tipp: Handy quer halten</p>
+      </div>
+      <footer class="title-footer">
+        <div><p class="credit">Figur und Zeichnungen: <b>Miro</b> · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
+        <p class="credit"><a href="https://github.com/Benema3000/mirio" target="_blank" rel="noopener">Quellcode (MIT)</a> · <a href="audio/CREDITS.md" target="_blank" rel="noopener">Audio &amp; Credits</a></p>
+        <p class="legal">Ein kostenloses, nicht kommerzielles Experiment. Miros Zeichnungen bleiben seine. Musik und Spielwelt wurden für Mirio gestaltet; zusätzliche Klänge sind gemeinfrei (CC0).</p></div>
+        <section id="title-scores" class="title-scores" aria-labelledby="title-scores-heading" hidden><h3 id="title-scores-heading">Kleine Helden, grosse Abenteuer</h3><ol id="title-board" class="board"></ol></section>
+      </footer>
+    </div>
+  </section>
+
+  <section id="pause" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+    <div class="card pause-card">
+      <p class="eyebrow">ZEIT ZUM DURCHATMEN</p><h2 id="pause-title">Kleine Pause.</h2>
+      <p class="pause-objective" id="pause-objective"></p>
+      <button id="resume" class="big">Weiter geht's</button>
+      <div class="settings">
+        <label for="music-volume">Musik <input id="music-volume" type="range" min="0" max="100" value="55"></label>
+        <label for="effects-volume">Geräusche <input id="effects-volume" type="range" min="0" max="100" value="80"></label>
+        <label class="check-setting"><input id="reduced-motion" type="checkbox"> Ruhiges Bild <small>Ohne Kamerawackeln</small></label>
+      </div>
+      <div class="move-guide"><p><kbd>WASD / ↑↓←→</kbd> Laufen <kbd>Leertaste</kbd> Springen</p><p><kbd>Shift</kbd> Drehen <kbd>C</kbd> Stampfen <kbd>Q / E</kbd> Kamera</p><p>Controller: linker Stick · A springen · X drehen · B stampfen<br>Kart: RT Gas · LT Bremse · A + lenken driften</p></div>
+      <p class="trail-tip">✦ Entdecke die leuchtenden Ringe! Eine ganze Spur schenkt dir 12 Sekunden Glitzermagnet.</p>
+      <button id="rescue" class="text-button">Zurück zum Checkpoint</button>
     </div>
   </section>
 
   <section id="win" class="overlay hidden">
     <div class="card">
-      <h2>Du hast den Kristall!</h2>
+      <p class="eyebrow">ABENTEUER GESCHAFFT</p><h2>Dein Kristall!</h2><p id="win-badges" class="win-badges"></p>
       <p id="win-stats" class="stats"></p>
       <p id="win-extra" class="status"></p>
       <p class="points"><b id="win-points">0</b> Punkte</p>
@@ -122,6 +151,6 @@
     }
   }
   </script>
-  <script type="module" src="js/main.js?v=13"></script>
+  <script type="module" src="js/main.js?v=14"></script>
 </body>
 </html>

@@ -65,6 +65,39 @@ the kart off, touched at an angle it scrapes along), and a rubber-banded rival
 so a child usually wins, narrowly. About 40 s on full gas; the camera swings
 round with the kart and widens when it goes fast.
 
+## Polished adventure edition
+
+The child's drawing remains the centre of the game. The surrounding world now
+has seamless grass and bark textures, softer terrain lighting, fuller orchard
+and fir trees, butterflies, contact shadows, reflective gems and a moving lake
+surface with caustics. The original floor scribble is still the moon, blocks,
+stepping stones and race road.
+
+- **Sternenspuren:** optional six-ring trails on the meadow and moon. Touch the
+  first glowing ring to start an 18-second challenge; finish in order to earn a
+  badge and a 12-second Glitzermagnet. It collects nearby existing gems, without
+  changing the public score rules. A missed trail is free to retry; a completed
+  trail reopens after 25 seconds. Trials stop quietly during story sequences.
+- **Wayfinding:** a surface-relative compass points toward the next checkpoint,
+  rocket, or moon collectable; the HUD explains the current objective. The race
+  shows speed and progress as well as place and time.
+- **Pause:** Esc, the pause button, or controller Start freezes the whole game,
+  including race countdowns and sound. Hidden tabs pause automatically. Resume
+  explicitly when ready. The menu offers music/effects sliders, a calmer camera,
+  control reminders, and a return to the current checkpoint.
+- **Movement:** 120 ms of late-jump forgiveness, a 160 ms jump buffer with takeoff
+  on the landing tick, responsive ground acceleration, more useful air steering,
+  thin-platform collision checks, and a camera that stays outside planets.
+- **Controller:** standard gamepads use the left stick / D-pad to move, A to jump,
+  X to spin, B to ground-pound, right stick for the camera, and Start to pause.
+  In the kart, RT is gas, LT is brake, and A while steering drifts. Keyboard and
+  touch controls remain available. Connect a controller and press a button to
+  make it available to the browser; hardware mappings vary by browser/device.
+- **Sound:** sampled grass/stone footsteps, layered impacts and movement cues,
+  a softer layered engine, independently mixed effects and music, and a score
+  that changes arrangement at musical bar boundaries. Only about 50 KB of CC0
+  recordings are downloaded; the instruments and room reverb are generated.
+
 ## Layout
 
 Plain ES modules, no build step; PHP only for the high score list. `index.html` holds the import map for
@@ -82,8 +115,10 @@ three.js and loads `js/main.js`.
 | `js/water.js` | The ring lake: waves, fresnel, sparkles, foam along both shores and round every stepping stone, one draw call |
 | `js/quality.js` | Renderer colour settings, and a governor that lowers the resolution (then drops the extras) to hold the frame rate on phones |
 | `js/mirio-model.js`, `js/props.js` | The 3D models built from the drawings: Mirio; the rocket and the checkpoint flag |
+| `js/adventure.js` | Optional ring-trail rules, gates, badges and magnet effect |
+| `js/environment-art.js` | Original seamless environment textures and gem reflection maps; no child artwork |
 | `js/art.js`, `js/materials.js` | Canvas helpers (crop, sticker border, filled face, scribble textures) and the shared toon and outline materials |
-| `js/player.js`, `js/camera.js`, `js/input.js`, `js/audio.js` | Mirio's movement and animation, the camera rig, keyboard/mouse/touch, WebAudio sound and an original eight-bar tune |
+| `js/player.js`, `js/camera.js`, `js/input.js`, `js/audio.js` | Mirio's movement and animation, the camera rig, keyboard/mouse/touch, WebAudio sound and an original adaptive sixteen-bar score and CC0 foley |
 three.js r186 comes from jsDelivr through the import map in `index.html`:
 `three` and `three/addons/` point at `three@0.186.0`, pinned, with sha384
 integrity hashes of the npm tarball's files (checked byte-identical against the
@@ -92,8 +127,9 @@ the check. To upgrade, change the version in both URLs and recompute the hashes.
 
 That is the game's only request outside its own folder: no fonts, no
 analytics, no cookies. It does send every player's IP address to jsDelivr, which
-is how every CDN request works. `localStorage` keeps the mute setting and
-the last name entered for the high score list.
+is how every CDN request works. `localStorage` keeps audio levels, mute, the reduced-motion preference, and
+the last name entered for the high score list. The optional foley files load
+from this same folder, with synthesized fallback effects if they cannot load.
 
 ## High score list
 
@@ -119,7 +155,7 @@ the points out itself from the run's Glitzersteine, time and place.
 
 ## Tests
 
-- `npm install && npm test` (the same pinned three.js, from npm): physics (walking
+- `npm install && npm test` (the same pinned three.js, from npm): ring-trail rules, controller/input cleanup, camera clearance, buffered jumps, and physics (walking
   round the world, momentum, skid and air momentum, the fall-speed cap, the
   jump chain, the moon's higher jump, box tops and head bumps, walking onto a
   hill, the lake) and level design (every glitter stone reachable and not buried,
@@ -151,6 +187,17 @@ the points out itself from the run's Glitzersteine, time and place.
   npx playwright install chromium webkit
   node tests/mirio-e2e.mjs
   ```
+- `node tests/mirio-polish-e2e.mjs` covers the pause menu, frozen timers,
+  controller pause/resume, ring trails and magnet rewards, replay reset,
+  checkpoint rescue, settings and phone layout. It uses the same server and
+  `PLAYWRIGHT` / `BASE_URL` environment variables as the main browser suite.
+
+- `node tests/mirio-audio-e2e.mjs` verifies all eleven sample decodes, mixer
+  persistence, pause/resume cleanup, every soundtrack arrangement and sound
+  effect, and unavailable-storage/offline fallback. Use `BROWSER=webkit` to run
+  the same checks with Safari's audio engine. It accepts `PLAYWRIGHT` and
+  `BASE_URL` like the other browser suites.
+
 - `php tests/mirio-scores.php` checks the high score rules: points,
   names, tokens, replays, the rate limit, ordering, the top 100, and that a
   damaged file is left alone.
@@ -185,14 +232,16 @@ The code is MIT-licensed (see `LICENSE`). Miro's drawings and the pictures
 that show them are not (see `img/LICENSE.md`): they are published with his
 parents' consent, not licensed for reuse.
 
-## Only its own
+## Artwork and sound provenance
 
-Everything in Mirio is its own: Miro's figure and drawings, and graphics,
-music and code made for the game. Nothing in the game, the blog post, the
-README, the docs or the code names or points to other games or
-their makers (operator decision, 2026-09-27); keep it that way when
-extending it. The name is plain "Mirio", the prize a crystal, the
-collectables cut gems. The start screen and the blog post end with the same
-statement: a free, non-commercial experiment; figure and drawings by Miro;
-graphics, music and program made for this game. Miro's parents consented to publishing his
-drawings and his first name.
+Miro's source images in `img/`, drawing-derived texture sampling in `art.js`,
+character model in `mirio-model.js`, and rocket/floor construction in `props.js`
+are preserved. Their private artwork license still applies. New environment
+surfaces are original procedural textures, generated locally at startup without
+additional downloads. All code remains MIT-licensed.
+
+The soundtrack is an original sixteen-bar composition with exploration, moon,
+boss, race and victory arrangements. The small foley library is CC0 by Kenney;
+see [audio/CREDITS.md](audio/CREDITS.md) for the exact source mapping and bundled
+license notices. No copyrighted game music or characters were added. Keep the
+world, names, collectables and visual identity Mirio's own when extending it.

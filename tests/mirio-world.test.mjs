@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { Vector3 } from 'three';
+import { PerspectiveCamera, Vector3 } from 'three';
 import { collidersFor, flightPoint, makeLevel } from '../js/level.js';
 import {
   CHAIN_WINDOW,
@@ -27,6 +27,9 @@ import {
 } from '../js/world.js';
 import { RACE_BITS, Track } from '../js/kart.js';
 import { DRIVE, driftLevel, driveKart, newKart, slideOf } from '../js/kart-physics.js';
+import { Player } from '../js/player.js';
+import { CameraRig } from '../js/camera.js';
+import { analogStick, Input } from '../js/input.js';
 
 const DT = 1 / 120;
 const BODY = { radius: 0.45, height: 2.1 };
@@ -494,4 +497,231 @@ test('the high score server knows how many Glitzersteine there are', () => {
   const php = readFileSync(new URL('../api/scores.inc', import.meta.url), 'utf8');
   const max = Number(php.match(/MIRIO_SCORES_MAX_BITS = (\d+);/)[1]);
   assert.equal(max, makeLevel().bits.length + RACE_BITS);
+});
+
+// ---- Movement and control regressions -----------------------------------------
+const testPlanet = () => ({ center: new Vector3(), radius: 100, gravityRadius: 200 });
+
+/** Exercise actual player state transitions without constructing the artwork. */
+function testPlayer(planet = testPlanet()) {
+  const player = Object.create(Player.prototype);
+  Object.assign(player, {
+    planets: [planet], collidersOf: noColliders, events: [],
+    body: bodyOn(planet, new Vector3(0, 1, 0)), visualUp: new Vector3(),
+    facing: new Vector3(1, 0, 0), wish: new Vector3(1, 0, 0),
+    model: { group: { visible: true } },
+  });
+  player.reset({ planet, dir: new Vector3(0, 1, 0) });
+  return player;
+}
+
+test('a buffered jump takes off in the same physics tick as touchdown', () => {
+  const player = testPlayer();
+  player.body.onGround = false;
+  player.body.pos.y = player.body.planet.radius + 0.015;
+  player.body.vel.y = -8;
+  player.jumpBuffer = 0.1;
+  player.step(DT);
+  assert.equal(player.body.onGround, false);
+  assert.ok(player.body.vel.y >= JUMP_SPEED);
+  assert.equal(player.events.filter((e) => e.type === 'jump').length, 1);
+  assert.equal(player.jumpBuffer, 0);
+});
+
+test('coyote time forgives a late jump but cannot become an extra air jump', () => {
+  const player = testPlayer();
+  player.body.onGround = false;
+  player.coyote = 0.11;
+  player.jumpBuffer = 0.1;
+  player.step(DT);
+  assert.equal(player.events.filter((e) => e.type === 'jump').length, 1);
+  player.jumpBuffer = 0.1;
+  player.step(DT);
+  assert.equal(player.events.filter((e) => e.type === 'jump').length, 1);
+
+  const late = testPlayer();
+  late.body.pos.y += 3;
+  late.body.onGround = false;
+  late.coyote = 0;
+  late.jumpBuffer = 0.1;
+  late.step(DT);
+  assert.equal(late.events.filter((e) => e.type === 'jump').length, 0);
+});
+
+test('boss bounce clears the landing buffer and coyote time', () => {
+  const player = testPlayer();
+  player.coyote = 0.1;
+  player.jumpBuffer = 0.1;
+  player.bounce();
+  player.step(DT);
+  assert.equal(player.coyote, 0);
+  assert.equal(player.jumpBuffer, 0);
+  assert.equal(player.events.filter((e) => e.type === 'jump').length, 0);
+  assert.ok(player.body.vel.y > 0);
+});
+
+test('fast falls land on thin platforms instead of clipping through their top lip', () => {
+  const planet = testPlanet();
+  for (const kind of ['box', 'cyl']) {
+    const collider = {
+      kind, base: new Vector3(0, 102.7, 0), axis: new Vector3(0, 1, 0), height: 0.3,
+      right: new Vector3(1, 0, 0), forward: new Vector3(0, 0, 1), halfW: 2, halfD: 2, radius: 2,
+    };
+    const body = bodyOn(planet, new Vector3(0, 1, 0), 3.1);
+    body.vel.y = -32;
+    stepBody(body, null, 0, [planet], () => [collider], 1 / 30, { terminal: 32 });
+    assert.equal(body.onGround, true, kind);
+    assert.ok(Math.abs(body.pos.y - 103) < 1e-8, `${kind}: ${body.pos.y}`);
+    assert.equal(body.vel.y, 0);
+  }
+});
+
+test('a fast upward crossing bumps the underside of a thin platform', () => {
+  const up = new Vector3(0, 1, 0);
+  for (const kind of ['box', 'cyl']) {
+    const collider = {
+      kind, base: new Vector3(0, 3, 0), axis: up, height: 0.3,
+      right: new Vector3(1, 0, 0), forward: new Vector3(0, 0, 1), halfW: 2, halfD: 2, radius: 2,
+    };
+    const feet = new Vector3(0, 2.8, 0);
+    const velocity = new Vector3(0, 30, 0);
+    assert.equal(collide(feet, velocity, BODY, collider, up, new Vector3(0, 0.3, 0)), 'head');
+    assert.ok(Math.abs(feet.y - (3 - BODY.height)) < 1e-8);
+    assert.equal(velocity.y, 0);
+  }
+});
+
+test('stale movement intent stays tangent as a planet curves underneath', () => {
+  const planet = testPlanet();
+  const body = bodyOn(planet, new Vector3(0, 1, 0));
+  // Camera intent may still use the previous frame's surface normal.
+  const staleWish = new Vector3(1, 0.2, 0).normalize();
+  for (let i = 0; i < 120; i++) stepBody(body, staleWish, RUN_SPEED, [planet], noColliders, DT);
+  assert.equal(body.onGround, true);
+  assert.ok(Math.abs(body.pos.length() - planet.radius) < 1e-7);
+  assert.ok(Math.abs(body.vel.dot(body.up)) < 1e-7);
+});
+
+test('camera smoothing stays outside planets, including a transition through their centre', () => {
+  const planet = { ...testPlanet(), radius: 10 };
+  const player = testPlayer(planet);
+  const camera = new PerspectiveCamera();
+  const rig = new CameraRig(camera, [planet]);
+  rig.snap(player, player.facing);
+  // Position and target are individually safe; their interpolated chord is not.
+  rig.pos.copy(camera.position).negate();
+  rig.place(player, 0.5);
+  assert.ok(camera.position.length() >= planet.radius + 1.19);
+  assert.ok(camera.position.toArray().every(Number.isFinite));
+  assert.ok(camera.quaternion.toArray().every(Number.isFinite));
+});
+
+function eventTarget() {
+  const listeners = new Map();
+  const classes = new Set();
+  return {
+    style: {}, classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
+    addEventListener: (name, callback) => listeners.set(name, [...(listeners.get(name) ?? []), callback]),
+    emit(name, event = {}) {
+      for (const callback of listeners.get(name) ?? []) callback({ preventDefault() {}, stopPropagation() {}, ...event });
+    },
+  };
+}
+
+function testInput(t, pads = () => []) {
+  const originals = new Map(['window', 'document', 'navigator'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const win = { ...eventTarget(), innerWidth: 1000 };
+  const doc = { ...eventTarget(), hidden: false };
+  for (const [key, value] of Object.entries({ window: win, document: doc, navigator: { getGamepads: pads } })) {
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  }
+  t.after(() => {
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+  });
+  const elements = Object.fromEntries(['surface', 'stick', 'knob', 'jumpButton', 'spinButton', 'poundButton', 'gasButton', 'brakeButton'].map((name) => [name, eventTarget()]));
+  const input = new Input(elements);
+  input.enabled = true;
+  return { input, win, doc, elements };
+}
+
+test('pause and focus loss clear queued actions, dragging and held controls', (t) => {
+  const { input, win, elements } = testInput(t);
+  win.emit('keydown', { code: 'KeyW' });
+  win.emit('keydown', { code: 'Space' });
+  elements.gasButton.emit('pointerdown', { pointerId: 3 });
+  input.turn.x = 2;
+  input.dragPointer = { id: 1 };
+  input.update(DT);
+  assert.equal(input.move.y, 1);
+  win.emit('blur');
+  assert.equal(input.move.y, 0);
+  assert.equal(input.drive.gas, 0);
+  assert.equal(input.consumeJump(), false);
+  assert.equal(input.dragPointer, null);
+  assert.deepEqual(input.consumeCamera(), { x: 0, y: 0 });
+  assert.equal(elements.gasButton.classList.contains('pressed'), false);
+
+  win.emit('keydown', { code: 'KeyX' });
+  input.enabled = false;
+  win.emit('keydown', { code: 'KeyQ' });
+  input.update(DT);
+  assert.equal(input.consumeSpin(), false);
+  assert.deepEqual(input.consumeCamera(), { x: 0, y: 0 });
+  input.enabled = true;
+  input.update(DT);
+  assert.equal(input.move.y, 0);
+});
+
+test('key release inside a text field does not leave movement stuck', (t) => {
+  const { input, win } = testInput(t);
+  win.emit('keydown', { code: 'KeyW' });
+  win.emit('keyup', { code: 'KeyW', target: { tagName: 'INPUT' } });
+  input.update(DT);
+  assert.equal(input.move.y, 0);
+  win.emit('keydown', { code: 'Space', target: { isContentEditable: true } });
+  assert.equal(input.consumeJump(), false);
+});
+
+test('gamepad analog controls have a dead zone, single press edges and separate triggers', (t) => {
+  const pad = { connected: true, mapping: 'standard', axes: [0.7, -0.7, 0.6, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })) };
+  let connected = true;
+  const { input } = testInput(t, () => connected ? [pad] : []);
+  assert.deepEqual(analogStick(0.1, -0.1), { x: 0, y: 0 });
+  pad.buttons[0] = { pressed: true, value: 1 };
+  pad.buttons[7] = { pressed: true, value: 0.65 };
+  input.update(DT);
+  assert.ok(input.move.x > 0 && input.move.y > 0 && Math.hypot(input.move.x, input.move.y) <= 1);
+  assert.equal(input.drive.gas, 0.65);
+  assert.ok(input.drive.steer > 0);
+  assert.equal(input.jumpHeld, true);
+  assert.equal(input.consumeJump(), true);
+  assert.ok(input.consumeCamera().x > 0);
+  input.update(DT);
+  assert.equal(input.consumeJump(), false, 'holding A must not queue more jumps');
+  let pauses = 0;
+  input.onPause = () => pauses++;
+  pad.buttons[9] = { pressed: true, value: 1 };
+  input.update(DT);
+  input.update(DT);
+  assert.equal(pauses, 1);
+  connected = false;
+  input.update(DT);
+  assert.deepEqual(input.move, { x: 0, y: 0 });
+  assert.equal(input.jumpHeld, false);
+  assert.equal(input.drive.gas, 0);
+});
+
+test('the kart can safely coast with empty controls and only charges drift on the road', () => {
+  const coast = kartAt();
+  driveFor(coast, 1, {}, straightRoad);
+  assert.ok(Object.values(coast).every((value) => typeof value !== 'number' || Number.isFinite(value)));
+  assert.ok(coast.v < CRUISING && coast.v > 0);
+  const k = kartAt({ drift: 1, charge: 0.4 });
+  driveFor(k, 0.5, { steer: 0.2, hold: true }, wideRoad, { airborne: true });
+  assert.equal(k.charge, 0.4);
+  driveFor(k, 0.1, { steer: 0.2, hold: true, throttle: 1 }, wideRoad);
+  assert.ok(k.charge > 0.49);
 });

@@ -13,6 +13,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hullGeometry, penOutline, toon } from './materials.js';
 import { bigCrystalGeometry, buildFlag, buildRocket, gemGeometry } from './props.js';
 import { deviceTier } from './quality.js';
+import { makeEnvironmentArt } from './environment-art.js';
 import { buildWater } from './water.js';
 import { mulberry32, surfacePoint, tangentDir } from './world.js';
 
@@ -100,6 +101,21 @@ const FEATURES = {
         transformed.z += cos(swayTime * 1.4 + swSeed * 1.3) * swK * 0.7;`);
   },
 
+  /** Wingbeats and a drifting orbit, all on the GPU; no per-frame matrices. */
+  flutter(shader, { time }) {
+    shader.uniforms.flutterTime = time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float flutterTime;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        float phase = dot(instanceMatrix[3].xyz, vec3(2.1, 3.7, 1.3));
+        float flap = sin(flutterTime * 15.0 + phase) * 1.05;
+        transformed.y += abs(position.x) * sin(flap);
+        transformed.x *= cos(flap);
+        transformed.x += sin(flutterTime * 0.65 + phase) * 0.65;
+        transformed.z += cos(flutterTime * 0.43 + phase) * 0.5;
+        transformed.y += sin(flutterTime * 1.7 + phase) * 0.2;`);
+  },
+
   /** The instance colour tints only the vertices whose `petal` attribute is 1. */
   petal(shader) {
     shader.vertexShader = shader.vertexShader
@@ -142,8 +158,7 @@ const FEATURES = {
 };
 
 /** toon() plus shader features from FEATURES, e.g. { rim: { color } }. */
-function toonWith(color, extra, features) {
-  const m = toon(color, extra);
+function withFeatures(m, features) {
   const names = Object.keys(FEATURES).filter((k) => features[k]);
   m.onBeforeCompile = (shader) => {
     for (const name of names) FEATURES[name](shader, features[name] === true ? {} : features[name]);
@@ -152,10 +167,27 @@ function toonWith(color, extra, features) {
   return m;
 }
 
+function toonWith(color, extra, features) {
+  return withFeatures(toon(color, extra), features);
+}
+
+// Smooth, satin light belongs to the scenery. Miro's drawings retain their
+// original toon materials and textures, so the hero stays unmistakably his.
+function surfaceWith(color, extra = {}, features = {}) {
+  return withFeatures(new THREE.MeshPhongMaterial({ color, shininess: 14, specular: 0x24301e, ...extra }), features);
+}
+
+function jewelWith(environment, extra = {}, features = {}) {
+  return surfaceWith(0xffffff, {
+    shininess: 95, specular: 0xf1fbff, envMap: environment,
+    reflectivity: 0.36, combine: THREE.MixOperation, ...extra,
+  }, features);
+}
+
 const LOOKS = {
-  grass: { tex: 'grass', size: 5, glow: 0x9dffb0, rim: 0xbfe8ff, deco: 'meadow' },
+  grass: { tex: 'meadow', size: 6, glow: 0x91ded7, rim: 0xbfe8ff, deco: 'meadow' },
   floor: { tex: 'floor', size: 2.2, glow: 0xb9c6ff, rim: 0xc9b8ff, deco: 'moon' },
-  // The Zielplanet: warm yellow-orange felt pen with little flowers and stones.
+  // The Zielplanet: a warm golden meadow with flowers and stones.
   gold: { tex: 'gold', size: 4.5, glow: 0xffc86b, rim: 0xffe6a8, deco: 'gold' },
 };
 const lookOf = (planet) => LOOKS[planet.look] ?? LOOKS.grass;
@@ -649,7 +681,7 @@ function atmosphere(planet, color) {
  * hull uses coarser spheres: only its silhouette shows.
  */
 function planetGeometry(planet, bumps, detail) {
-  const seg = Math.round(THREE.MathUtils.clamp(planet.radius * 2.3, 36, 60) * detail);
+  const seg = Math.round(THREE.MathUtils.clamp(planet.radius * 3.2, 48, 88) * detail);
   const parts = [new THREE.SphereGeometry(planet.radius, seg, Math.round(seg * 0.6))];
   const hulls = [new THREE.SphereGeometry(planet.radius, Math.round(seg * 0.6), Math.round(seg * 0.36))];
   for (const b of bumps) {
@@ -677,14 +709,33 @@ function stumpsGeometry(stumps) {
   const tops = [];
   for (const p of stumps) {
     const h = p.height + 0.3;
-    const trunk = cylinderUv(new THREE.CylinderGeometry(1.15, 1.3, h, 16, 1, true), 1.2, h, FELT_TILE);
+    const trunk = cylinderUv(new THREE.CylinderGeometry(1.15, 1.3, h, 32, 6, true), 1.2, h, FELT_TILE);
+    paint(trunk, TRUNK);
+    const vertices = trunk.attributes.position;
+    const colors = trunk.attributes.color;
+    for (let i = 0; i < vertices.count; i++) {
+      const a = Math.atan2(vertices.getZ(i), vertices.getX(i));
+      const y = vertices.getY(i);
+      const vein = Math.cos(a * 16 + Math.sin(y * 2.4 + a * 3) * 0.24);
+      const shade = 0.84 + vein * 0.16;
+      colors.setXYZ(i, colors.getX(i) * shade, colors.getY(i) * shade, colors.getZ(i) * shade);
+      const k = 1 + vein * 0.013;
+      vertices.setXYZ(i, vertices.getX(i) * k, y, vertices.getZ(i) * k);
+    }
     trunk.translate(0, h / 2 - 0.3, 0);
-    body.push(placed(paint(trunk, TRUNK), p.planet, p.dir));
-    const top = new THREE.CircleGeometry(1.15, 16).rotateX(-Math.PI / 2).translate(0, p.height, 0);
+    body.push(placed(trunk, p.planet, p.dir));
+    const top = new THREE.CircleGeometry(1.15, 32).rotateX(-Math.PI / 2).translate(0, p.height, 0);
     tops.push(placed(paint(top, STUMP_WOOD), p.planet, p.dir));
     // Growth rings.
-    for (const [r, w] of [[0.78, 0.06], [0.42, 0.05]]) {
-      const ring = new THREE.RingGeometry(r - w, r + w, 20).rotateX(-Math.PI / 2).translate(0, p.height + 0.01, 0);
+    for (const [r, w] of [[1.07, 0.022], [0.85, 0.025], [0.63, 0.02], [0.39, 0.02], [0.18, 0.015]]) {
+      const ring = new THREE.RingGeometry(r - w, r + w, 40);
+      const vertices = ring.attributes.position;
+      for (let i = 0; i < vertices.count; i++) {
+        const a = Math.atan2(vertices.getY(i), vertices.getX(i));
+        const k = 1 + Math.sin(a * 3 + r * 2) * 0.026 + Math.cos(a * 5) * 0.018;
+        vertices.setXYZ(i, vertices.getX(i) * k + 0.05, vertices.getY(i) * k, 0);
+      }
+      ring.rotateX(-Math.PI / 2).translate(0, p.height + 0.01, 0);
       tops.push(placed(paint(ring, STUMP_RING), p.planet, p.dir));
     }
   }
@@ -721,37 +772,60 @@ function floorGeometry(level, planet) {
 
 // ---- Trees -------------------------------------------------------------
 
-const TRUNK = 0x8a5a33;
-const STUMP_WOOD = 0xe8c48a;
-const STUMP_RING = 0xa8743f;
-const LEAVES = 0x55c23c;
-const PINE = 0x39a653;
+const TRUNK = 0x84522f;
+const STUMP_WOOD = 0xf3d29a;
+const STUMP_RING = 0xb27b42;
+const LEAVES = 0x6dad49;
+const PINE = 0x3d9b76;
 const APPLE = 0xff3b30;
 
-/** A round felt-pen tree, optionally with apples. Foot at the origin, +Y up. */
+/** A little orchard tree with flared roots, branches and layered leaf crowns. */
 function roundTree(apples, detail) {
-  const parts = [paint(cylinderUv(new THREE.CylinderGeometry(0.2, 0.34, 2.3, 7, 1, true), 0.3, 2.3, FELT_TILE).translate(0, 1.1, 0), TRUNK)];
-  // A cloud of leaf balls; the pen hull draws a line where they overlap.
-  const balls = [[0, 2.75, 0, 1.2], [0.8, 2.35, 0.25, 0.82], [-0.74, 2.42, -0.3, 0.86], [0.12, 3.45, -0.12, 0.8], [-0.22, 2.3, 0.8, 0.74]];
-  for (const [x, y, z, r] of balls.slice(0, detail ? 5 : 3)) {
-    const ball = new THREE.IcosahedronGeometry(r, 1);
+  const parts = [paint(cylinderUv(new THREE.CylinderGeometry(0.17, 0.35, 2.3, 9, 3, true), 0.3, 2.3, FELT_TILE).translate(0, 1.1, 0), TRUNK)];
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2 + 0.3;
+    parts.push(paint(new THREE.ConeGeometry(0.19, 0.75, 6).rotateZ(0.85).translate(0.25, 0.2, 0).rotateY(a), TRUNK));
+    parts.push(paint(new THREE.CylinderGeometry(0.08, 0.13, 1.1, 6).rotateZ(0.75).translate(-0.3, 1.9, 0).rotateY(a), TRUNK));
+  }
+  const balls = [[0, 2.8, 0, 1.16], [0.82, 2.5, 0.28, 0.88], [-0.78, 2.55, -0.3, 0.88], [0.12, 3.55, -0.12, 0.78], [-0.23, 2.5, 0.86, 0.76]];
+  for (const [j, [x, y, z, r]] of balls.slice(0, detail ? 5 : 3).entries()) {
+    const ball = new THREE.IcosahedronGeometry(r, detail ? 2 : 1);
+    const points = ball.attributes.position;
+    for (let i = 0; i < points.count; i++) {
+      const k = 1 + Math.sin(points.getX(i) * 8 + j) * Math.sin(points.getZ(i) * 7 + points.getY(i) * 6) * 0.045;
+      points.setXYZ(i, points.getX(i) * k, points.getY(i) * k * 0.88, points.getZ(i) * k);
+    }
     for (let i = 0; i < ball.attributes.uv.count; i++) ball.attributes.uv.setXY(i, ball.attributes.uv.getX(i) * r * 4, ball.attributes.uv.getY(i) * r * 2);
-    parts.push(paint(ball.translate(x, y, z), LEAVES));
+    paint(ball, new THREE.Color(LEAVES).offsetHSL(j * 0.009, -j * 0.01, j === 3 ? 0.085 : -j * 0.01));
+    const colors = ball.attributes.color;
+    for (let i = 0; i < points.count; i++) {
+      const shade = 0.78 + 0.22 * THREE.MathUtils.clamp(points.getY(i) / r + 0.6, 0, 1);
+      colors.setXYZ(i, colors.getX(i) * shade, colors.getY(i) * shade, colors.getZ(i) * shade);
+    }
+    parts.push(ball.translate(x, y, z));
   }
   if (apples) {
     for (const [x, y, z] of [[0.95, 2.6, 0.9], [-1.15, 2.9, 0.55], [0.4, 2.2, -1.25], [-0.3, 3.6, 0.9]]) {
-      parts.push(paint(new THREE.IcosahedronGeometry(0.16, 0).translate(x, y, z), APPLE));
+      parts.push(paint(new THREE.IcosahedronGeometry(0.18, 1).scale(1, 0.9, 1).translate(x, y, z), APPLE));
+      parts.push(paint(new THREE.CylinderGeometry(0.015, 0.022, 0.1, 4).translate(x, y + 0.18, z), TRUNK));
     }
   }
   return merge(parts, ['position', 'normal', 'uv', 'color']);
 }
 
-/** A fir of three felt-pen cones. */
+/** Layered fir boughs with scalloped hems and warm new growth at their tips. */
 function pineTree(detail) {
-  const seg = detail ? 10 : 7;
+  const seg = detail ? 18 : 10;
   const parts = [paint(cylinderUv(new THREE.CylinderGeometry(0.16, 0.28, 1.3, 7, 1, true), 0.22, 1.3, FELT_TILE).translate(0, 0.6, 0), TRUNK)];
-  for (const [r, h, y] of [[1.35, 1.7, 1.55], [1.08, 1.5, 2.5], [0.78, 1.3, 3.35]]) {
-    parts.push(paint(cylinderUv(new THREE.ConeGeometry(r, h, seg), r, h, FELT_TILE).translate(0, y, 0), PINE));
+  for (const [j, [r, h, y]] of [[1.35, 1.7, 1.55], [1.08, 1.5, 2.5], [0.78, 1.3, 3.35]].entries()) {
+    const bough = cylinderUv(new THREE.ConeGeometry(r, h, seg, 3), r, h, FELT_TILE);
+    const points = bough.attributes.position;
+    for (let i = 0; i < points.count; i++) {
+      const a = Math.atan2(points.getZ(i), points.getX(i));
+      const flare = 1 + Math.cos(a * 6) * 0.06;
+      points.setXYZ(i, points.getX(i) * flare, points.getY(i) + Math.sin(a * 6) * 0.055, points.getZ(i) * flare);
+    }
+    parts.push(paint(bough.translate(0, y, 0), new THREE.Color(PINE).offsetHSL(-j * 0.009, 0, j * 0.035)));
   }
   return merge(parts, ['position', 'normal', 'uv', 'color']);
 }
@@ -787,7 +861,7 @@ function petalFan(radius, y, points = 15) {
   for (let i = 0; i <= points; i++) {
     const a = (i / points) * Math.PI * 2;
     const r = radius * (0.62 + 0.38 * Math.abs(Math.cos(a * 2.5)));
-    pos.push(Math.cos(a) * r, y, Math.sin(a) * r);
+    pos.push(Math.cos(a) * r, y - radius * 0.2 + Math.sin(a * 2.5) ** 2 * radius * 0.18, Math.sin(a) * r);
   }
   const index = [];
   for (let i = 1; i <= points; i++) index.push(0, i + 1, i);
@@ -806,15 +880,36 @@ function flowerGeometry() {
   stem.setIndex([0, 1, 2]);
   const parts = [
     paint(stem, 0x2f8f2a, 0),
-    paint(petalFan(0.16, 0.335), PEN, 0),
-    paint(petalFan(0.13, 0.345), 0xffffff, 1),
-    paint(new THREE.CircleGeometry(0.045, 6).rotateX(-Math.PI / 2).translate(0, 0.352, 0), 0xffd23f, 0),
+    paint(petalFan(0.205, 0.335, 25), 0x6c543c, 0),
+    paint(petalFan(0.19, 0.345, 25), 0xffffff, 1),
+    paint(new THREE.SphereGeometry(0.051, 8, 4).scale(1, 0.45, 1).translate(0, 0.352, 0), 0xffd23f, 0),
   ];
   return Object.assign(merge(parts, ['position', 'normal', 'color', 'petal']), { name: 'flowers' });
 }
 
 function pebbleGeometry() {
-  return Object.assign(new THREE.IcosahedronGeometry(0.2, 0).scale(1, 0.55, 0.85).translate(0, 0.04, 0), { name: 'pebbles' });
+  return Object.assign(new THREE.IcosahedronGeometry(0.2, 1).scale(1, 0.55, 0.85).translate(0, 0.04, 0), { name: 'pebbles' });
+}
+
+/** Two pairs of softly pointed wings and a slim body, tinted per butterfly. */
+function butterflyGeometry() {
+  const pos = [];
+  const col = [];
+  const triangle = (vertices, shade) => {
+    pos.push(...vertices.flat());
+    for (let i = 0; i < 3; i++) col.push(shade, shade * 0.94, shade);
+  };
+  for (const side of [-1, 1]) {
+    triangle([[0, 0, -0.04], [side * 0.24, 0, -0.2], [side * 0.2, 0, 0.035]], 1);
+    triangle([[0, 0, -0.04], [side * 0.2, 0, 0.035], [side * 0.1, 0, 0.18]], 0.73);
+  }
+  triangle([[-0.018, 0.012, -0.12], [0.018, 0.012, -0.12], [0, 0.012, 0.16]], 0.23);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geometry.computeVertexNormals();
+  geometry.name = 'butterflies';
+  return geometry;
 }
 
 /** A red toadstool with white dots, as kids draw them. */
@@ -843,10 +938,11 @@ function crystalGeometry() {
 
 const DECO = {
   meadow: {
-    tufts: { density: 0.11, colors: [0x7fe05a, 0x6cd24a, 0x9be86a] },
-    flowers: { density: 0.028, colors: [0xff6fa8, 0xffd23f, 0xfff7e0, 0xc58bff, 0xff4a3d] },
+    tufts: { density: 0.18, colors: [0x92c965, 0x81b754, 0xb1d478] },
+    flowers: { density: 0.062, colors: [0xff91b7, 0xffdd77, 0xfff7e0, 0xc9a4f6, 0xff765e] },
     pebbles: { density: 0.012, colors: [0xa6a6b4, 0xb8ad98, 0x8e93a2] },
     mushrooms: { density: 0.0022 },
+    butterflies: { density: 0.003, colors: [0xffc95c, 0x8ae5fa, 0xed9bf5, 0xffa979] },
   },
   moon: {
     pebbles: { density: 0.045, colors: [0x858a9c, 0xa2a8ba, 0x6c7080] },
@@ -857,6 +953,7 @@ const DECO = {
     flowers: { density: 0.05, colors: [0xff4a3d, 0xfff7c2, 0xff8a1f, 0xff6fb5] },
     pebbles: { density: 0.02, colors: [0xc49467, 0xd8b384, 0x9c7048] },
     mushrooms: { density: 0.0018 },
+    butterflies: { density: 0.003, colors: [0xffffb9, 0xffaabd, 0xc6b6ff] },
   },
 };
 
@@ -917,6 +1014,42 @@ function groundAt(planet, hills, dir, outPos, outNormal) {
   if (hill) outNormal.subVectors(outPos, hill.center).normalize();
   else outNormal.copy(dir);
   return outPos;
+}
+
+/** Baked soft contact shadows, curved to the planet, in a single draw call. */
+function contactShadows(level, texture) {
+  const pieces = [];
+  const direction = new THREE.Vector3();
+  const point = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  for (const planet of level.planets) {
+    const hills = level.bumps.filter((b) => b.planet === planet).map((b) => ({
+      center: surfacePoint(planet, b.dir, b.height - b.radius), radius: b.radius,
+    }));
+    const items = [
+      ...level.trees.filter((t) => t.planet === planet).map((t) => [t.dir, 1.85 * t.scale]),
+      ...level.stumps.filter((s) => s.planet === planet).map((s) => [s.dir, 1.6]),
+      ...level.blocks.filter((b) => b.planet === planet && b.bottom <= 0).map((b) => [b.dir, b.size * 0.87]),
+    ];
+    for (const [dir, radius] of items) {
+      const geometry = placed(new THREE.PlaneGeometry(radius * 2, radius * 2, 6, 6).rotateX(-Math.PI / 2), planet, dir);
+      const vertices = geometry.attributes.position;
+      for (let i = 0; i < vertices.count; i++) {
+        direction.fromBufferAttribute(vertices, i).sub(planet.center).normalize();
+        groundAt(planet, hills, direction, point, normal).addScaledVector(normal, 0.025);
+        vertices.setXYZ(i, point.x, point.y, point.z);
+      }
+      pieces.push(geometry);
+    }
+  }
+  if (!pieces.length) return null;
+  const mesh = new THREE.Mesh(merge(pieces, ['position', 'uv']), new THREE.MeshBasicMaterial({
+    map: texture, color: 0x254024, opacity: 0.65,
+    transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1,
+  }));
+  mesh.name = 'scenery:contact-shadows';
+  mesh.renderOrder = -2;
+  return mesh;
 }
 
 /** Instance matrix: standing at `pos` along `normal`, turned `yaw`, sunk a touch. */
@@ -1036,6 +1169,7 @@ function decorate(group, level, planet, deco, tier, sway) {
       dir.divideScalar(len);
       if (!free(dir) || !accept(dir)) continue;
       groundAt(planet, hills, dir, pos, normal);
+      if (name === 'butterflies') pos.addScaledVector(normal, 0.9 + rnd() * 0.8);
       items.push({ pos: pos.clone(), normal: normal.clone(), color: spec.colors?.[Math.floor(rnd() * spec.colors.length)] });
     }
     layers[name] = items;
@@ -1045,6 +1179,7 @@ function decorate(group, level, planet, deco, tier, sway) {
     const n = Math.round(deco[name].density * area * amount);
     if (name === 'flowers') scatter(name, n, (d) => patch(d) > 0.1 || rnd() < 0.15);
     else if (name === 'mushrooms') scatter(name, tier === 0 ? 0 : n, (d) => patch(d) < -0.2);
+    else if (name === 'butterflies') scatter(name, tier === 0 ? 0 : n, (d) => patch(d) > 0);
     else scatter(name, n);
   }
 
@@ -1103,13 +1238,16 @@ function decorate(group, level, planet, deco, tier, sway) {
     built.flowers = plain(flowerGeometry(), toonWith(0xffffff, { vertexColors: true, side: THREE.DoubleSide }, { sway: { time: sway, amount: 0.12 }, petal: true }), layers.flowers, [0.9, 1.5], 0.6);
   }
   if (layers.pebbles?.length) {
-    built.pebbles = outlined(pebbleGeometry(), toonWith(0xffffff, {}, { rim: { color: 0x9fb0ff, strength: 0.6 } }), 0.035, layers.pebbles, [0.6, 1.8], 0.3);
+    built.pebbles = outlined(pebbleGeometry(), surfaceWith(0xffffff, { shininess: 6 }, { rim: { color: 0x9fb0ff, strength: 0.16 } }), 0.012, layers.pebbles, [0.6, 1.8], 0.3);
   }
   if (layers.mushrooms?.length) {
     built.mushrooms = outlined(mushroomGeometry(), toon(0xffffff, { vertexColors: true }), 0.02, layers.mushrooms, [0.9, 1.6], 0.6);
   }
   if (layers.crystals?.length) {
-    built.crystals = outlined(crystalGeometry(), toonWith(0xffffff, {}, { glow: { amount: 0.55 } }), 0.025, layers.crystals, [1.2, 2.2], 1.6);
+    built.crystals = outlined(crystalGeometry(), surfaceWith(0xffffff, { shininess: 90, specular: 0xffffff }, { glow: { amount: 0.2 }, rim: { color: 0xaadfff, strength: 0.4 } }), 0.01, layers.crystals, [1.2, 2.2], 1.6);
+  }
+  if (layers.butterflies?.length) {
+    built.butterflies = plain(butterflyGeometry(), surfaceWith(0xffffff, { vertexColors: true, side: THREE.DoubleSide, shininess: 25 }, { flutter: { time: sway } }), layers.butterflies, [0.8, 1.3], 1.2);
   }
   return built;
 }
@@ -1149,10 +1287,10 @@ function bubbleMaterial(color) {
 }
 
 /** The big crystal the boss guards: a glowing cluster with a halo and rays. */
-function makeGoalCrystal(art) {
+function makeGoalCrystal(art, environment) {
   const g = new THREE.Group();
-  const crystal = new THREE.Mesh(bigCrystalGeometry(), toon(CRYSTAL_COLOR, { emissive: CRYSTAL_GLOW }));
-  crystal.add(new THREE.Mesh(hullGeometry(crystal.geometry), penOutline(0.06, PEN, 0.25)));
+  const crystal = new THREE.Mesh(bigCrystalGeometry(), jewelWith(environment, { color: CRYSTAL_COLOR, emissive: CRYSTAL_GLOW }, { rim: { color: 0xa8efff, strength: 0.45 } }));
+  crystal.add(new THREE.Mesh(hullGeometry(crystal.geometry), penOutline(0.026, 0x2a617c, 0.15)));
   g.add(crystal);
   const rays = new THREE.Sprite(new THREE.SpriteMaterial({
     map: art.rays ?? art.glow, color: 0xc9f7ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.45,
@@ -1376,6 +1514,7 @@ const BIT_COLORS = [0xffe14d, 0xff6fb5, 0x5fe3ff, 0x8dff6a, 0xc58bff];
  */
 export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
   const detail = tier === 0 ? 0 : 1;
+  const environment = makeEnvironmentArt();
   const sky = makeSky(tier);
   sky.group.name = 'sky';
   scene.add(sky.group);
@@ -1388,9 +1527,10 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
 
   // The light rides with the camera (see update), so the side of a planet
   // you are looking at is never in the dark.
-  const ambient = new THREE.AmbientLight(0xc9c2ff, 1.05);
-  const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
-  scene.add(ambient, sun, sun.target);
+  const ambient = new THREE.AmbientLight(0xd0dcff, 0.87);
+  const sun = new THREE.DirectionalLight(0xffedcb, 2.15);
+  const fill = new THREE.DirectionalLight(0xa9d9ff, 0.6);
+  scene.add(ambient, sun, sun.target, fill, fill.target);
 
   const sway = { value: 0 };
   const decorations = [];
@@ -1404,9 +1544,13 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
       rim: { color: look.rim, from: 0.65, strength: 0.32 },
       lake: p.water ? { ...p.water, radius: p.radius } : null,
     };
-    const mesh = new THREE.Mesh(body, toonWith(0xffffff, { map: art[look.tex] ?? art.grass }, features));
+    // The moon deliberately keeps the actual floor drawing and its original material.
+    const material = p.look === 'floor'
+      ? toonWith(0xffffff, { map: art.floor }, features)
+      : surfaceWith(0xffffff, { map: environment[look.tex] ?? environment.meadow, shininess: 7 }, features);
+    const mesh = new THREE.Mesh(body, material);
     mesh.position.copy(p.center);
-    const line = new THREE.Mesh(hull, penOutline(0.05 + p.radius * 0.004, PEN, 0.15));
+    const line = new THREE.Mesh(hull, penOutline(0.035 + p.radius * 0.002, PEN, 0.15));
     line.position.copy(p.center);
     mesh.name = `planet:${p.id}`;
     line.name = `planet:${p.id}:pen`;
@@ -1424,7 +1568,7 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
 
   // The ring lake (water.js).
   const lakes = level.planets.filter((p) => p.water).map((p) => {
-    const w = buildWater(p, { stones: level.stones, bumps: level.bumps, scribble: art.water, detail });
+    const w = buildWater(p, { stones: level.stones, bumps: level.bumps, scribble: environment.water, detail });
     w.mesh.renderOrder = -1;
     w.mesh.name = `water:${p.id}`;
     scene.add(w.mesh);
@@ -1434,7 +1578,7 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
   const water = { flow: { value: 0 }, lakes, mesh: lakes[0]?.mesh ?? null };
 
   // Static props, merged: one mesh (and one pen hull) per material.
-  const felt = toonWith(0xffffff, { map: art.felt, vertexColors: true }, { rim: { color: 0xd8ffd0, strength: 0.4 } });
+  const felt = surfaceWith(0xffffff, { map: environment.grain, vertexColors: true, shininess: 8 }, { rim: { color: 0xd8ffd0, strength: 0.15 } });
   if (level.stumps.length) {
     const { geometry, outline } = stumpsGeometry(level.stumps);
     const stumps = new THREE.Mesh(geometry, felt);
@@ -1448,15 +1592,18 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
     if (geom) inked(scene, geom, floorMaterial, 0.055, { name: `floor:${p.id}` });
   }
 
+  const shadows = contactShadows(level, art.shadow);
+  if (shadows) scene.add(shadows);
+
   // Trees: round ones with and without apples, and firs; all instanced.
   const trees = level.trees.map((t, i) => ({ ...t, kind: t.scale > 1.3 || i % 3 !== 1 ? (i % 2 ? 'apple' : 'round') : 'pine' }));
-  const treeFelt = toonWith(0xffffff, { map: art.felt, vertexColors: true }, { rim: { color: 0xd8ffb0, strength: 0.45 } });
+  const treeFelt = surfaceWith(0xffffff, { map: environment.grain, vertexColors: true, shininess: 18 }, { rim: { color: 0xd8ffb0, strength: 0.22 } });
   const treeRnd = mulberry32(5);
   for (const [kind, geom] of [['round', roundTree(false, detail)], ['apple', roundTree(true, detail)], ['pine', pineTree(detail)]]) {
     const list = trees.filter((t) => t.kind === kind);
     if (!list.length) continue;
     const color = new THREE.Color();
-    const { body, line } = inked(scene, geom, treeFelt, 0.05, {
+    const { body, line } = inked(scene, geom, treeFelt, 0.028, {
       name: `trees:${kind}`,
       instanced: {
         count: list.length,
@@ -1499,8 +1646,8 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
 
   // Glitzersteine: each keeps a plain Object3D as `mesh` (position, rotation,
   // visible) and one instanced mesh draws them all from those.
-  const bitMesh = new THREE.InstancedMesh(gemGeometry(), toonWith(0xffffff, {}, { glow: { amount: 0.5 } }), level.bits.length);
-  const bitLine = new THREE.InstancedMesh(hullGeometry(bitMesh.geometry), penOutline(0.022, PEN, 0.2), level.bits.length);
+  const bitMesh = new THREE.InstancedMesh(gemGeometry(), jewelWith(environment.jewel, {}, { glow: { amount: 0.18 } }), level.bits.length);
+  const bitLine = new THREE.InstancedMesh(hullGeometry(bitMesh.geometry), penOutline(0.012, 0x3a3d64, 0.15), level.bits.length);
   const bitColor = new THREE.Color();
   const bits = level.bits.map((b, i) => {
     const mesh = new THREE.Object3D();
@@ -1550,7 +1697,7 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
   arena.disc.name = 'arena';
   scene.add(arena.disc);
 
-  const goal = makeGoalCrystal(art);
+  const goal = makeGoalCrystal(art, environment.jewel);
   placeOn(goal.group, level.goal.planet, level.goal.dir, level.goal.height);
   goal.group.name = 'goal';
   scene.add(goal.group);
@@ -1572,7 +1719,7 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
     flyers,
     arena: arena.disc,
     goal: { ...level.goal, ...goal, bubble, center: goal.group.position.clone() },
-    lights: { ambient, sun },
+    lights: { ambient, sun, fill },
 
     /** All decorative animation; call once per frame, after the camera has moved. */
     update(dt, t, camera, focus = null) {
@@ -1586,6 +1733,8 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
       sun.position.copy(camera.position).addScaledVector(camera.up, 30).addScaledVector(right, 12);
       if (focus) sun.target.position.copy(focus);
       else sun.target.position.copy(camera.position).addScaledVector(camDir, 10);
+      fill.position.copy(camera.position).addScaledVector(camera.up, 8).addScaledVector(right, -25);
+      fill.target.position.copy(sun.target.position);
       sunDir.subVectors(sun.position, sun.target.position).normalize();
 
       for (const lake of lakes) lake.update(t, sunDir);
@@ -1620,7 +1769,9 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
       for (const d of decorations) {
         d.tufts?.setHidden(!on);
         d.pebbles?.setHidden(!on);
+        d.butterflies?.setHidden(!on);
       }
+      if (shadows) shadows.visible = on;
       for (const lake of lakes) lake.uniforms.uSparkle.value = on ? 1 : 0;
       sky.shooting.enabled = on;
     },

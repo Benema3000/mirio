@@ -1,5 +1,5 @@
 // Mirio: the ring lake. One band of the sphere, one draw call, all of
-// it in a small shader: drifting felt-pen strokes, gentle waves, a lighter
+// it in a small shader: layered ripples, gentle waves, a lighter
 // shallow rim, foam along both shores and round every stepping stone (and
 // the foot of any hill that reaches into the lake), fresnel and sparkles.
 // No reflections and no render targets, so it stays cheap on phones.
@@ -18,11 +18,15 @@ const TILE = 4.5;
 const CELLS = 3;
 
 const vertexShader = /* glsl */`
+  uniform float uTime;
   varying vec3 vWorld;
   varying vec3 vUp;
   varying float vLat;
   void main() {
-    vec4 world = modelMatrix * vec4(position, 1.0);
+    vec3 up = normalize(position);
+    float wave = sin(dot(position, vec3(0.5, 0.8, 0.3)) * 1.5 + uTime) * 0.018
+               + sin(dot(position, vec3(-0.4, 0.3, 0.7)) * 2.1 - uTime * 1.3) * 0.012;
+    vec4 world = modelMatrix * vec4(position + up * wave, 1.0);
     vWorld = world.xyz;
     vUp = normalize(position);
     vLat = asin(clamp(vUp.y, -1.0, 1.0));
@@ -82,7 +86,7 @@ const fragmentShader = /* glsl */`
     g -= N * dot(g, N);
     vec3 n = normalize(N - g * 0.25);
 
-    // Two layers of Miro-style strokes drifting past each other.
+    // Two layers of original fine surface grain drifting past each other.
     // At the one meridian where the longitude wraps, the texture coordinate
     // jumps by whole tiles; take that jump out of the derivatives, or the
     // mipmap choice draws a seam.
@@ -94,12 +98,19 @@ const fragmentShader = /* glsl */`
     sdy.x -= sign(sdy.x) * period * step(period * 0.5, abs(sdy.x));
     float s1 = textureGrad(uScribble, st + vec2(uTime * 0.018, uTime * 0.007), sdx, sdy).g;
     float s2 = textureGrad(uScribble, st * 0.71 + vec2(-uTime * 0.011, uTime * 0.013) + g.xz * 0.04, sdx * 0.71, sdy * 0.71).g;
-    float stroke = (s1 + s2) * 0.5 - 0.39;
+    float stroke = (s1 + s2) * 0.5 - 0.34;
 
     // Shallow and light near every edge, deeper blue further out.
     float depth = smoothstep(0.1, 2.8, d);
     vec3 col = mix(uShallow, uDeep, depth);
-    col *= 1.0 + stroke * 1.5;
+    col *= 1.0 + stroke * 0.6;
+
+    // Refracted light traces a slow, broken lattice in the shallows. This is
+    // analytic: no depth texture, reflection pass or simulation to maintain.
+    float causticA = sin(dot(vWorld, vec3(2.2, 1.7, -1.1)) + sin(dot(vWorld, vec3(-0.8, 1.1, 1.7))) + uTime * 0.7);
+    float causticB = sin(dot(vWorld, vec3(-1.4, 2.6, 1.3)) + cos(dot(vWorld, vec3(1.5, -0.9, 0.8))) - uTime * 0.55);
+    float caustic = pow(max(0.0, 1.0 - abs(causticA + causticB) * 1.7), 5.0);
+    col += uShallow * caustic * (1.0 - depth) * 0.24 * uSparkle;
 
     // Two bands of light, like the toon ground; the sun rides with the camera.
     float lambert = dot(n, uSun);
@@ -112,7 +123,7 @@ const fragmentShader = /* glsl */`
     // Sparkles: a sharp sun glint, and little four-point stars that twinkle.
     vec3 h = normalize(uSun + V);
     float nh = max(dot(n, h), 0.0);
-    float glint = step(0.985, nh);
+    float glint = pow(nh, 110.0) * 0.8 + pow(nh, 12.0) * 0.14;
     vec2 cellUv = uv * ${(CELLS / TILE).toFixed(4)};
     vec2 cell = floor(cellUv);
     float r = hash(cell);
@@ -121,8 +132,8 @@ const fragmentShader = /* glsl */`
                + max(0.0, 1.0 - abs(f.x) * 40.0) * max(0.0, 1.0 - abs(f.y) * 4.5)
                + max(0.0, 1.0 - abs(f.y) * 40.0) * max(0.0, 1.0 - abs(f.x) * 4.5);
     float twinkle = step(0.8, r) * pow(max(0.0, sin(uTime * (1.5 + r * 2.5) + r * 60.0)), 4.0);
-    float sparkle = step(0.45, star * twinkle) * uSparkle * (0.4 + 0.6 * smoothstep(0.6, 0.95, nh));
-    col += vec3(1.0, 0.98, 0.9) * (glint * 0.8 + sparkle);
+    float sparkle = smoothstep(0.35, 0.65, star * twinkle) * uSparkle * (0.4 + 0.6 * smoothstep(0.6, 0.95, nh));
+    col += vec3(1.0, 0.98, 0.9) * (glint * 0.8 + sparkle * 0.7);
 
     // Foam: a wobbly felt-pen line along every edge, and dashed rings that
     // drift out from it.
@@ -138,7 +149,7 @@ const fragmentShader = /* glsl */`
 
     // Soft transparency: clearer near the shore, and the band fades out
     // just past the shore line onto the sand.
-    float alpha = mix(0.78, 0.95, max(depth, fres));
+    float alpha = mix(0.65, 0.94, max(depth, fres));
     alpha = max(alpha, foam);
     alpha *= smoothstep(-${OVERLAP.toFixed(2)}, -${(OVERLAP * 0.3).toFixed(2)}, shore);
 
@@ -189,8 +200,8 @@ export function buildWater(planet, { stones = [], bumps = [], scribble, detail =
     uLonScale: { value: (tiles * TILE) / (Math.PI * 2) },
     uSparkle: { value: 1 },
     uScribble: { value: scribble },
-    uDeep: { value: new THREE.Color(0x1f7fd0) },
-    uShallow: { value: new THREE.Color(0x5fe0e8) },
+    uDeep: { value: new THREE.Color(0x2477b0) },
+    uShallow: { value: new THREE.Color(0x6ad6cc) },
     uFoam: { value: new THREE.Color(0xf4fbff) },
     uSky: { value: new THREE.Color(0xc9d4ff) },
   };

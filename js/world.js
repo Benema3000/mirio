@@ -34,12 +34,12 @@ export const TERMINAL_FALL = 28;
 
 // Mirio builds up speed, turns with a little inertia, skids when you push the
 // other way, and keeps his momentum in the air.
-const GROUND_ACCEL = 30;
+const GROUND_ACCEL = 38;
 const GROUND_DECEL = 42;
 const SKID_DECEL = 95;
 const TURN_RATE = 11;
 const SLOW_TURN_BONUS = 20;
-const AIR_ACCEL = 16;
+const AIR_ACCEL = 20;
 const AIR_DRAG = 3;
 // How far below a top a falling body still lands on it rather than being
 // pushed off the side. Must exceed one physics step of fall. Also the height
@@ -60,6 +60,8 @@ const tmpTarget = new Vector3();
 const tmpTangent = new Vector3();
 const tmpAir = new Vector3();
 const tmpUp = new Vector3();
+const tmpWish = new Vector3();
+const tmpPrevious = new Vector3();
 const identity = new Quaternion();
 const tmpQ = new Quaternion();
 
@@ -150,19 +152,22 @@ function bumpHead(pos, vel, c, along, vAlong, bodyHeight) {
  * Upright cylinder: `c` = { kind: 'cyl', base, axis (unit), radius, height }.
  * Solid from `base` to `base + axis * height`; the base may float.
  */
-function collideCylinder(pos, vel, body, c) {
+function collideCylinder(pos, vel, body, c, previous) {
   const rel = tmp.subVectors(pos, c.base);
   const along = rel.dot(c.axis);
-  if (along > c.height + 0.01 || along + body.height < 0) return null;
+  const vAlong = vel.dot(c.axis);
+  const before = previous ? previous.dot(c.axis) - c.base.dot(c.axis) : along;
+  const crossedTop = previous && before >= c.height - 0.01 && along <= c.height && vAlong <= 0;
+  const crossedHead = previous && before + body.height <= 0.01 && along + body.height >= 0 && vAlong > 0;
+  if (!crossedTop && !crossedHead && (along > c.height + 0.01 || along + body.height < 0)) return null;
 
   const radial = tmpRadial.copy(rel).addScaledVector(c.axis, -along);
   const rd = radial.length();
   const reach = c.radius + body.radius;
   if (rd >= reach) return null;
 
-  const vAlong = vel.dot(c.axis);
-  if (along > c.height - TOP_LIP && vAlong <= 0.01) return landOnTop(pos, vel, c, along, vAlong);
-  if (along < 0 && along + body.height < HEAD_LIP && vAlong > -0.01) {
+  if (crossedTop || (along > c.height - TOP_LIP && vAlong <= 0.01)) return landOnTop(pos, vel, c, along, vAlong);
+  if (crossedHead || (along < 0 && along + body.height < HEAD_LIP && vAlong > -0.01)) {
     return bumpHead(pos, vel, c, along, vAlong, body.height);
   }
 
@@ -182,10 +187,14 @@ function collideCylinder(pos, vel, body, c) {
  * Upright box: `c` = { kind: 'box', base, axis, right, forward, halfW, halfD,
  * height }. `right` and `forward` are unit tangents at the base.
  */
-function collideBox(pos, vel, body, c) {
+function collideBox(pos, vel, body, c, previous) {
   const rel = tmp.subVectors(pos, c.base);
   const along = rel.dot(c.axis);
-  if (along > c.height + 0.01 || along + body.height < 0) return null;
+  const vAlong = vel.dot(c.axis);
+  const before = previous ? previous.dot(c.axis) - c.base.dot(c.axis) : along;
+  const crossedTop = previous && before >= c.height - 0.01 && along <= c.height && vAlong <= 0;
+  const crossedHead = previous && before + body.height <= 0.01 && along + body.height >= 0 && vAlong > 0;
+  if (!crossedTop && !crossedHead && (along > c.height + 0.01 || along + body.height < 0)) return null;
 
   const x = rel.dot(c.right);
   const z = rel.dot(c.forward);
@@ -193,9 +202,8 @@ function collideBox(pos, vel, body, c) {
   const pz = c.halfD + body.radius - Math.abs(z);
   if (px <= 0 || pz <= 0) return null;
 
-  const vAlong = vel.dot(c.axis);
-  if (along > c.height - TOP_LIP && vAlong <= 0.01) return landOnTop(pos, vel, c, along, vAlong);
-  if (along < 0 && along + body.height < HEAD_LIP && vAlong > -0.01) {
+  if (crossedTop || (along > c.height - TOP_LIP && vAlong <= 0.01)) return landOnTop(pos, vel, c, along, vAlong);
+  if (crossedHead || (along < 0 && along + body.height < HEAD_LIP && vAlong > -0.01)) {
     return bumpHead(pos, vel, c, along, vAlong, body.height);
   }
 
@@ -219,11 +227,11 @@ function collideBump(pos, vel, body, c, up) {
   return n.dot(up) > WALKABLE ? 'top' : 'side';
 }
 
-/** Resolves `pos` against one collider; 'top' | 'side' | 'head' | null. */
-export function collide(pos, vel, body, c, up) {
-  if (c.kind === 'box') return collideBox(pos, vel, body, c);
+/** Resolves a collider; previous feet position also catches fast surface crossings. */
+export function collide(pos, vel, body, c, up, previous = null) {
+  if (c.kind === 'box') return collideBox(pos, vel, body, c, previous);
   if (c.kind === 'bump') return collideBump(pos, vel, body, c, up);
-  return collideCylinder(pos, vel, body, c);
+  return collideCylinder(pos, vel, body, c, previous);
 }
 
 /** Moves vector `v` toward `target` by at most `maxDelta`. */
@@ -303,6 +311,7 @@ export function jumpFor(chain, sinceLanding, speed) {
  * overrides the fall-speed cap (the ground pound drops faster).
  */
 export function stepBody(body, wish, wishSpeed, planets, collidersOf, dt, opts = {}) {
+  tmpPrevious.copy(body.pos);
   const src = pickGravitySource(body.pos, planets);
   body.planet = src;
   if (src) upAt(body.pos, src, body.up);
@@ -311,9 +320,13 @@ export function stepBody(body, wish, wishSpeed, planets, collidersOf, dt, opts =
   const vUp = body.vel.dot(up);
   const tangent = tmpTangent.copy(body.vel).addScaledVector(up, -vUp);
 
+  // Intent is sampled once per rendered frame, but the surface normal
+  // changes every physics tick on a small planet. Keep steering tangent.
+  const direction = wish ? tangentDir(wish, up, tmpWish) : null;
+
   body.skidding = false;
-  if (body.onGround) body.skidding = steerGround(tangent, wish, wishSpeed, up, dt);
-  else steerAir(tangent, wish, wishSpeed, dt);
+  if (body.onGround) body.skidding = steerGround(tangent, direction, wishSpeed, up, dt);
+  else steerAir(tangent, direction, wishSpeed, dt);
 
   const g = src ? GRAVITY * (src.gravityScale ?? 1) * (opts.gravityScale ?? 1) : 0;
   const vUpNext = Math.max(vUp - g * dt, -(opts.terminal ?? TERMINAL_FALL));
@@ -338,10 +351,11 @@ export function stepBody(body, wish, wishSpeed, planets, collidersOf, dt, opts =
 
   const localUp = upAt(body.pos, src, tmpUp);
   for (const c of collidersOf(src)) {
-    const hit = collide(body.pos, body.vel, body, c, localUp);
+    const hit = collide(body.pos, body.vel, body, c, localUp, tmpPrevious);
     if (hit === 'top') body.onGround = true;
     else if (hit === 'head') body.bumpedHead = true;
   }
+  upAt(body.pos, src, body.up);
   return body;
 }
 

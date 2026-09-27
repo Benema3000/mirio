@@ -3,11 +3,13 @@
 
 import * as THREE from 'three';
 import { loadArt } from './art.js';
+import { Adventure } from './adventure.js';
 import { Sound } from './audio.js';
 import { Boss } from './boss.js';
 import { CameraRig } from './camera.js';
 import { Input } from './input.js';
 import { KartRace } from './kart.js';
+import { driftLevel } from './kart-physics.js';
 import { collidersFor, flightPoint, makeLevel } from './level.js';
 import { MAX_HEARTS, Player } from './player.js';
 import { QualityGovernor, tuneRenderer } from './quality.js';
@@ -152,7 +154,14 @@ async function main() {
     brakeButton: $('btn-brake'),
   });
 
+  const adventure = new Adventure(scene, level);
   let state = 'title';
+  let paused = false;
+  let finishDelay = 0;
+  let elapsed = 0;
+  let reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try { const saved = localStorage.getItem('mirio-motion'); if (saved !== null) reducedMotion = saved === 'quiet'; } catch {}
+  document.body.classList.toggle('reduced-motion', reducedMotion);
   const stats = { bits: 0, time: 0, splashes: 0, pounds: 0, bestJump: 0, raceTime: 0 };
   const shown = new Set();
   let hintTimer = 0;
@@ -348,7 +357,7 @@ async function main() {
           state = 'raceEnd';
           sound.play('star');
           bigToast(ev.place === 1 ? 'Gewonnen!' : 'Ziel!');
-          setTimeout(win, 2600);
+          finishDelay = 2.6;
           break;
         default:
       }
@@ -364,6 +373,8 @@ async function main() {
   // ---- Reset -----------------------------------------------------------------
   function resetGame() {
     document.body.classList.remove('racing');
+    adventure.reset();
+    finishDelay = 0;
     player.reset({ planet: welt, dir: level.spawn.dir.clone() }, startForward);
     for (const bit of world.bits) {
       bit.taken = false;
@@ -407,13 +418,64 @@ async function main() {
       [...$('hearts').children].forEach((el, i) => el.classList.toggle('lost', i >= player.hearts));
     }
     if (!$('race-hud').hidden) {
+      $('race-progress').value = race.progress;
+      $('race-speed').textContent = Math.round(Math.abs(race.player.v) * 3.6);
+      const boost = race.player.boost > 0 || race.player.turbo > 0;
+      const charge = driftLevel(race.player);
+      $('race-technique').hidden = !boost && !race.player.drift;
+      $('race-technique').textContent = boost ? '✦ TURBO!' : charge === 2 ? 'SUPER-TURBO · Loslassen!' : charge === 1 ? 'TURBO BEREIT · Loslassen!' : 'DRIFT · Weiter halten …';
+      $('race-technique').dataset.charge = boost ? 'boost' : String(charge);
       $('race-place').textContent = `${race.place}.`;
       $('race-time').textContent = formatTime(race.state === 'race' ? stats.raceTime : result?.time ?? 0);
     }
+    updateJourney();
+    const trail = adventure.activeTrail;
+    $('trail-hud').hidden = !trail || state !== 'play';
+    if (trail) {
+      $('trail-label').textContent = `${trail.name} · ${trail.run.next} / ${trail.run.count}`;
+      $('trail-time').textContent = `${Math.ceil(trail.run.time)} s`;
+      $('trail-progress').value = trail.run.next;
+    }
+    $('magnet-hud').hidden = adventure.magnet <= 0 || state !== 'play';
+    $('magnet-time').textContent = `${Math.ceil(adventure.magnet)} s`;
     if (force || hud.hp !== boss.hp) {
       hud.hp = boss.hp;
       [...document.querySelectorAll('.boss-hp i')].forEach((el, i) => el.classList.toggle('gone', i >= boss.hp));
     }
+  }
+
+  // Surface-relative compass: follows the journey even around a planet.
+  const guideDir = new THREE.Vector3();
+  const guideRight = new THREE.Vector3();
+  function updateJourney() {
+    let label = 'Folge den Glitzersteinen';
+    let chapter = '01 / WIESENWELT';
+    let target = null;
+    if (state === 'race' || state === 'raceEnd') { chapter = '03 / STERNENRENNEN'; label = 'Hol dir den Kristall!'; }
+    else if (state === 'rocket') { chapter = '02 / AUF ZUM MOND'; label = 'Nächster Halt: Miros Mond'; }
+    else if (state === 'cutscene') { chapter = '03 / STERNENRENNEN'; label = 'Dem Kristall hinterher!'; }
+    else if (player.body.planet === mond) {
+      chapter = '02 / MIROS MOND';
+      label = fight.on ? 'Spring auf die schwindlige Mütze' : 'Klettere zum Kristall';
+      // The nearest uncollected moon-route gem gives a useful direction on
+      // the far side, where the arena itself would point through the ground.
+      const gems = world.bits.filter(b => !b.taken && b.planet === mond);
+      target = gems.reduce((near, b) => !near || b.mesh.position.distanceToSquared(player.body.pos) < near.distanceToSquared(player.body.pos) ? b.mesh.position : near, null) ?? arenaCenter;
+      if (fight.on) target = null;
+    } else {
+      const next = world.flags.find(f => !f.reached);
+      label = next ? ['Über die Baumstümpfe zum See', 'Überquere den Glitzersee', 'Durch die Hügel zur Rakete'][world.flags.indexOf(next)] : 'Die Rakete wartet auf dem Plateau';
+      target = next?.center ?? padBase;
+    }
+    if ($('objective').textContent !== label) $('objective').textContent = label;
+    if ($('chapter').textContent !== chapter) $('chapter').textContent = chapter;
+    const direction = target && tangentDir(guideDir.subVectors(target, player.body.pos), player.body.up, guideDir);
+    const forward = tangentDir(rig.forward, player.body.up, tmp2);
+    if (direction && forward) {
+      guideRight.crossVectors(forward, player.body.up);
+      $('compass-arrow').style.transform = `rotate(${Math.atan2(direction.dot(guideRight), direction.dot(forward))}rad)`;
+    }
+    $('compass-arrow').style.opacity = target ? '1' : '.35';
   }
 
   let toastTimeout = 0;
@@ -442,21 +504,20 @@ async function main() {
   const bossEvents = [];
   function simulate(h) {
     player.step(h);
-    if (state === 'play') bossEvents.push(...boss.update(h, player));
-    if (state !== 'play' || player.state !== 'play') return;
-
-    if (!fight.on && !boss.defeated && onArena()) {
+    if (state === 'play' && !fight.on && !boss.defeated && onArena()) {
       fight.on = true;
       boss.start();
       $('boss-bar').hidden = false;
       $('hearts').hidden = false;
       renderHud(true);
     }
+    if (state === 'play') bossEvents.push(...boss.update(h, player));
+    if (state !== 'play' || player.state !== 'play') return;
 
     playerMid.copy(player.body.pos).addScaledVector(player.body.up, 1);
 
     for (const bit of world.bits) {
-      if (bit.taken || bit.mesh.position.distanceTo(playerMid) > BIT_RADIUS) continue;
+      if (bit.taken || bit.mesh.position.distanceTo(playerMid) > (adventure.magnet > 0 ? 3.8 : BIT_RADIUS)) continue;
       bit.taken = true;
       bit.mesh.visible = false;
       stats.bits += 1;
@@ -537,6 +598,7 @@ async function main() {
           particles.burst(player.body.pos, { count: 26, color: SPLASH, speed: 6, size: 0.7, life: 0.8, along: player.body.up, gravity: tmp.copy(player.body.up).multiplyScalar(-14) });
           break;
         case 'respawn':
+          rig.snap(player, player.facing);
           sound.play('respawn');
           if (stats.splashes > 0) hintOnce('longJump');
           break;
@@ -677,6 +739,11 @@ async function main() {
     $('win-extra').textContent = stats.bits === totalBits()
       ? 'Alle Glitzersteine gefunden. Wow!'
       : `${totalBits() - stats.bits} Glitzersteine sind noch versteckt.`;
+    $('win-badges').replaceChildren(...[
+      ...[...adventure.badges].map(id => id === 'meadow' ? '✦ Wiesenspuren' : '✦ Mondspuren'),
+      ...(stats.bestJump === 3 ? ['↟ Sprungkünstler'] : []),
+      ...(stats.bits >= 50 ? ['◇ Glitzersammler'] : []),
+    ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
     offerHighScore();
     $('win').classList.remove('hidden');
   }
@@ -732,6 +799,10 @@ async function main() {
   }
 
   function start() {
+    paused = false;
+    $('pause').classList.add('hidden');
+    document.body.classList.remove('paused');
+    sound.setPaused(false);
     enterFullscreen();
     sound.unlock();
     sound.startMusic();
@@ -757,8 +828,10 @@ async function main() {
   $('mute').addEventListener('click', () => {
     sound.setMuted(!sound.muted);
     $('mute').classList.toggle('muted', sound.muted);
+    $('mute').setAttribute('aria-pressed', String(sound.muted));
   });
   $('mute').classList.toggle('muted', sound.muted);
+  $('mute').setAttribute('aria-pressed', String(sound.muted));
   if (document.fullscreenEnabled || document.webkitFullscreenEnabled) {
     $('fullscreen').hidden = false;
     $('fullscreen').addEventListener('click', () => {
@@ -767,10 +840,60 @@ async function main() {
       else enterFullscreen();
     });
   }
+  function setPaused(value) {
+    if (state === 'title' || state === 'win') return;
+    paused = value;
+    input.enabled = !paused && state !== 'cutscene';
+    input.reset();
+    player.jumpBuffer = 0;
+    player.jumpHeld = false;
+    player.spinRequest = false;
+    player.poundRequest = false;
+    sound.setPaused(paused);
+    document.body.classList.toggle('paused', paused);
+    $('pause').classList.toggle('hidden', !paused);
+    $('rescue').hidden = state !== 'play' || player.state !== 'play';
+    if (paused) {
+      $('pause-objective').textContent = $('objective').textContent;
+      $('resume').focus();
+    } else $('pause-button').focus();
+  }
+  input.onPause = () => setPaused(!paused);
+  $('pause-button').addEventListener('click', () => setPaused(true));
+  $('resume').addEventListener('click', () => setPaused(false));
+  $('rescue').addEventListener('click', () => {
+    if (state !== 'play' || player.state !== 'play') return;
+    player.respawn();
+    boss.reset();
+    endFight();
+    rig.snap(player, player.facing);
+    setPaused(false);
+    hint('Zurück am Checkpoint. Auf ein Neues!', 4);
+  });
+  $('reduced-motion').checked = reducedMotion;
+  $('reduced-motion').addEventListener('change', e => {
+    reducedMotion = e.target.checked;
+    document.body.classList.toggle('reduced-motion', reducedMotion);
+    try { localStorage.setItem('mirio-motion', reducedMotion ? 'quiet' : 'full'); } catch {}
+  });
+  for (const [id, method] of [['music-volume', 'setMusicVolume'], ['effects-volume', 'setEffectsVolume']]) {
+    const slider = $(id);
+    slider.value = Math.round((id === 'music-volume' ? sound.musicVolume : sound.effectsVolume) * 100);
+    slider.addEventListener('input', () => {
+      sound[method](Number(slider.value) / 100);
+    });
+  }
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Escape' && !e.repeat) { e.preventDefault(); setPaused(!paused); }
+    if (e.code === 'Tab' && paused) {
+      const items = [...$('pause').querySelectorAll('button:not([hidden]), input')];
+      if (e.shiftKey && document.activeElement === items[0]) { e.preventDefault(); items.at(-1).focus(); }
+      else if (!e.shiftKey && document.activeElement === items.at(-1)) { e.preventDefault(); items[0].focus(); }
+    }
+  });
   document.addEventListener('visibilitychange', () => {
-    if (!sound.ctx) return;
-    if (document.hidden) sound.ctx.suspend();
-    else sound.ctx.resume();
+    if (document.hidden) { setPaused(true); sound.setPaused(true); }
+    else if (!paused) sound.setPaused(false);
   });
 
   resetGame();
@@ -800,7 +923,19 @@ async function main() {
       fpsT = 0;
     }
 
-    input.update(dt);
+    input.update(paused ? 0 : dt);
+    if (paused || document.hidden) return;
+    elapsed += dt;
+    sound.setScene(state === 'win' ? 'victory' : state === 'race' || state === 'raceEnd' ? 'race' : fight.on ? 'boss' : player.body.planet === mond || state === 'rocket' ? 'moon' : 'explore');
+    sound.footstep({ dt, speed: player.body.vel.length(), grounded: state === 'play' && player.state === 'play' && player.body.onGround, surface: player.body.planet === mond ? 'stone' : 'grass' });
+    if (finishDelay > 0) { finishDelay -= dt; if (finishDelay <= 0) win(); }
+    for (const ev of adventure.update(dt, player, state === 'play' && !fight.on, elapsed)) {
+      sound.play(ev.type);
+      if (ev.pos) particles.burst(ev.pos, {count: ev.type === 'trailWin' ? 28 : 10, color: ev.color, speed: 4, size: .4, life: .65});
+      if (ev.type === 'trailStart') hint('Folge den leuchtenden Ringen! Alle sechs schenken dir einen Glitzermagneten.', 6);
+      if (ev.type === 'trailWin') toast('Sternenspur! ✦ Glitzermagnet');
+      if (ev.type === 'trailFail') hint('Fast geschafft! Der erste Ring startet die Spur neu.', 5);
+    }
     if (state === 'play') {
       player.readInput(input, rig);
       stats.time += dt;
@@ -833,21 +968,22 @@ async function main() {
       if (hintTimer <= 0) $('hint').classList.remove('show');
     }
 
-    animateWorld(dt, now / 1000);
+    animateWorld(dt, elapsed);
     if (state === 'play') rig.distance = playDistance() + (fight.on ? 4 : 0);
     if (racing) race.updateCamera(camera, dt);
     else rig.update(dt, player, input);
-    const fov = baseFov() + (racing ? race.fovKick : 0);
+    const fov = baseFov() + (racing && !reducedMotion ? race.fovKick : 0);
     if (camera.fov !== fov) {
       camera.fov = fov;
       camera.updateProjectionMatrix();
     }
+    if (reducedMotion) shake = 0;
     if (shake > 0) {
       camera.position.addScaledVector(tmp.randomDirection(), shake * 0.35);
       shake = Math.max(0, shake - dt * 1.5);
     }
     player.render(dt);
-    world.update(dt, now / 1000, camera, racing ? null : player.body.pos);
+    world.update(dt, elapsed, camera, racing ? null : player.body.pos);
     governor.update(raw);
     renderer.render(scene, camera);
     renderHud();
@@ -859,6 +995,9 @@ async function main() {
     window.__mirio = {
       snapshot: () => ({
         state,
+        paused,
+        time: stats.time,
+        adventure: { badges: [...adventure.badges], magnet: adventure.magnet, trails: adventure.trails.map(t => ({id: t.id, next: t.run.next, active: t.run.active, time: t.run.time})) },
         fps,
         player: {
           state: player.state,
@@ -890,6 +1029,7 @@ async function main() {
         blocks: level.blocks.map((b) => ({ planet: b.planet.id, dir: b.dir.toArray(), top: b.top })),
         rocket: { planet: welt.id, dir: launchUp.toArray(), height: level.rocket.height },
         goal: { planet: level.goal.planet.id, dir: level.goal.dir.toArray(), height: level.goal.height },
+        trails: adventure.trails.map(t => ({id: t.id, planet: t.planet.id, dirs: t.dirs.map(d => d.toArray())})),
         lake: welt.water,
         arena: { planet: ar.planet.id, dir: ar.dir.toArray(), top: ar.top, radius: ar.radius, center: arenaCenter.toArray() },
       }),
