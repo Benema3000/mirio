@@ -4,9 +4,8 @@
 // Built for phones: the static props are merged into a few meshes per
 // material, repeated things (trees, Glitzersteine, grass, flowers, pebbles,
 // particles) are instanced, nothing casts real-time shadows, and the
-// decoration density follows the device tier (quality.js). The black pen
-// line round props is the classic back-face hull, merged and instanced the
-// same way.
+// decoration density follows the device tier (quality.js). Drawing-derived
+// props retain their pen hulls; natural scenery has smooth sculpted shading.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -14,6 +13,7 @@ import { hullGeometry, penOutline, toon } from './materials.js';
 import { bigCrystalGeometry, buildFlag, buildRocket, gemGeometry } from './props.js';
 import { deviceTier } from './quality.js';
 import { makeEnvironmentArt } from './environment-art.js';
+import { buildScenery } from './scenery.js';
 import { buildWater } from './water.js';
 import { mulberry32, surfacePoint, tangentDir } from './world.js';
 
@@ -739,8 +739,7 @@ function stumpsGeometry(stumps) {
       tops.push(placed(paint(ring, STUMP_RING), p.planet, p.dir));
     }
   }
-  const outline = merge(body.map((g) => g.clone()), ['position']);
-  return { geometry: merge([...body, ...tops], ['position', 'normal', 'uv', 'color']), outline };
+  return { bark: merge(body, ['position', 'normal', 'uv', 'color']), wood: merge(tops, ['position', 'normal', 'uv', 'color']) };
 }
 
 /** Blocks, stepping stones and the plateau on `planet`, in world coordinates. */
@@ -775,59 +774,92 @@ function floorGeometry(level, planet) {
 const TRUNK = 0x84522f;
 const STUMP_WOOD = 0xf3d29a;
 const STUMP_RING = 0xb27b42;
-const LEAVES = 0x6dad49;
-const PINE = 0x3d9b76;
-const APPLE = 0xff3b30;
 
-/** A little orchard tree with flared roots, branches and layered leaf crowns. */
-function roundTree(apples, detail) {
-  const parts = [paint(cylinderUv(new THREE.CylinderGeometry(0.17, 0.35, 2.3, 9, 3, true), 0.3, 2.3, FELT_TILE).translate(0, 1.1, 0), TRUNK)];
-  for (let i = 0; i < 4; i++) {
-    const a = i * Math.PI / 2 + 0.3;
-    parts.push(paint(new THREE.ConeGeometry(0.19, 0.75, 6).rotateZ(0.85).translate(0.25, 0.2, 0).rotateY(a), TRUNK));
-    parts.push(paint(new THREE.CylinderGeometry(0.08, 0.13, 1.1, 6).rotateZ(0.75).translate(-0.3, 1.9, 0).rotateY(a), TRUNK));
-  }
-  const balls = [[0, 2.8, 0, 1.16], [0.82, 2.5, 0.28, 0.88], [-0.78, 2.55, -0.3, 0.88], [0.12, 3.55, -0.12, 0.78], [-0.23, 2.5, 0.86, 0.76]];
-  for (const [j, [x, y, z, r]] of balls.slice(0, detail ? 5 : 3).entries()) {
-    const ball = new THREE.IcosahedronGeometry(r, detail ? 2 : 1);
-    const points = ball.attributes.position;
-    for (let i = 0; i < points.count; i++) {
-      const k = 1 + Math.sin(points.getX(i) * 8 + j) * Math.sin(points.getZ(i) * 7 + points.getY(i) * 6) * 0.045;
-      points.setXYZ(i, points.getX(i) * k, points.getY(i) * k * 0.88, points.getZ(i) * k);
-    }
-    for (let i = 0; i < ball.attributes.uv.count; i++) ball.attributes.uv.setXY(i, ball.attributes.uv.getX(i) * r * 4, ball.attributes.uv.getY(i) * r * 2);
-    paint(ball, new THREE.Color(LEAVES).offsetHSL(j * 0.009, -j * 0.01, j === 3 ? 0.085 : -j * 0.01));
-    const colors = ball.attributes.color;
-    for (let i = 0; i < points.count; i++) {
-      const shade = 0.78 + 0.22 * THREE.MathUtils.clamp(points.getY(i) / r + 0.6, 0, 1);
-      colors.setXYZ(i, colors.getX(i) * shade, colors.getY(i) * shade, colors.getZ(i) * shade);
-    }
-    parts.push(ball.translate(x, y, z));
-  }
-  if (apples) {
-    for (const [x, y, z] of [[0.95, 2.6, 0.9], [-1.15, 2.9, 0.55], [0.4, 2.2, -1.25], [-0.3, 3.6, 0.9]]) {
-      parts.push(paint(new THREE.IcosahedronGeometry(0.18, 1).scale(1, 0.9, 1).translate(x, y, z), APPLE));
-      parts.push(paint(new THREE.CylinderGeometry(0.015, 0.022, 0.1, 4).translate(x, y + 0.18, z), TRUNK));
-    }
-  }
-  return merge(parts, ['position', 'normal', 'uv', 'color']);
+/** A wood branch between two local points, with longitudinal bark UVs. */
+function woodBranch(from, to, bottom, top = bottom * 0.6) {
+  const a = new THREE.Vector3(...from);
+  const b = new THREE.Vector3(...to);
+  const direction = b.clone().sub(a);
+  const geometry = cylinderUv(new THREE.CylinderGeometry(top, bottom, direction.length(), 9, 2), bottom, direction.length(), 1.2);
+  geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, direction.normalize()));
+  geometry.translate(...a.add(b).multiplyScalar(0.5).toArray());
+  return paint(geometry, TRUNK);
 }
 
-/** Layered fir boughs with scalloped hems and warm new growth at their tips. */
+/** Rounded, lobed crowns; smooth light defines overlaps instead of ink seams. */
+function roundTree(apples, detail) {
+  const wood = [woodBranch([0, -.12, 0], [.1, 2.55, -.03], .34, .17)];
+  const foliage = [];
+  const fruit = [];
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2 + .25;
+    wood.push(woodBranch([0, .25, 0], [Math.cos(a) * .68, -.025, Math.sin(a) * .68], .18, .025));
+    wood.push(woodBranch([.04, 1.45, 0], [Math.cos(a) * .78, 2.65 + (i % 2) * .25, Math.sin(a) * .78], .13, .055));
+  }
+  const lobes = [[0, 2.85, 0, 1.17, 1.04], [.87, 2.62, .15, .92, .88], [-.78, 2.67, -.18, .94, .92],
+    [.16, 3.55, -.05, .87, .96], [-.4, 3.32, -.58, .79, .9], [-.28, 2.65, .82, .85, .9],
+    [.57, 3.16, .68, .75, .94], [.3, 2.55, -.8, .77, .86]];
+  const low = new THREE.Color(0x2f7951);
+  const middle = new THREE.Color(0x62ad49);
+  const high = new THREE.Color(0xafd971);
+  for (const [j, [x, y, z, r, squash]] of lobes.slice(0, detail ? 8 : 5).entries()) {
+    const ball = new THREE.IcosahedronGeometry(r, detail ? 3 : 1);
+    const points = ball.attributes.position;
+    paint(ball, 0xffffff);
+    const colors = ball.attributes.color;
+    const color = new THREE.Color();
+    for (let i = 0; i < points.count; i++) {
+      const px = points.getX(i), py = points.getY(i), pz = points.getZ(i);
+      const scale = 1 + Math.sin(px * 5.5 + j) * Math.sin(pz * 5.2 + py * 4) * .065;
+      points.setXYZ(i, px * scale, py * scale * squash, pz * scale);
+      const height = (py * squash + y - 1.8) / 2.5;
+      color.copy(height < .5 ? low : middle).lerp(height < .5 ? middle : high, THREE.MathUtils.clamp(height < .5 ? height * 2 : height * 2 - 1, 0, 1));
+      color.multiplyScalar(.95 + Math.sin(px * 3 + pz * 2 + j) * .045);
+      colors.setXYZ(i, color.r, color.g, color.b);
+    }
+    foliage.push(ball.translate(x, y, z));
+  }
+  if (apples) {
+    for (const [i, [x, y, z]] of [[1.14, 2.7, .7], [-1.12, 2.75, .66], [.42, 2.45, -1.24], [-.37, 3.55, .91],
+      [.78, 3.23, -.79], [-.65, 2.42, -.86]].entries()) {
+      fruit.push(paint(new THREE.SphereGeometry(.19, 12, 9).scale(1, .89, 1).translate(x, y, z), i % 3 === 0 ? 0xffac58 : 0xf94d4c));
+      wood.push(woodBranch([x, y + .15, z], [x + .03, y + .27, z], .018, .009));
+      foliage.push(paint(new THREE.SphereGeometry(.09, 7, 5).scale(1.5, .2, .65).rotateZ(.3).translate(x + .07, y + .23, z), 0x91c65c));
+    }
+  }
+  return {
+    wood: merge(wood, ['position', 'normal', 'uv', 'color']),
+    foliage: merge(foliage, ['position', 'normal', 'uv', 'color']),
+    fruit: fruit.length ? merge(fruit, ['position', 'normal', 'uv', 'color']) : null,
+  };
+}
+
+/** Softly swept fir skirts, each with a scalloped, brightly tipped hem. */
 function pineTree(detail) {
-  const seg = detail ? 18 : 10;
-  const parts = [paint(cylinderUv(new THREE.CylinderGeometry(0.16, 0.28, 1.3, 7, 1, true), 0.22, 1.3, FELT_TILE).translate(0, 0.6, 0), TRUNK)];
-  for (const [j, [r, h, y]] of [[1.35, 1.7, 1.55], [1.08, 1.5, 2.5], [0.78, 1.3, 3.35]].entries()) {
-    const bough = cylinderUv(new THREE.ConeGeometry(r, h, seg, 3), r, h, FELT_TILE);
+  const wood = [woodBranch([0, -.1, 0], [0, 3.9, 0], .25, .055)];
+  const foliage = [];
+  for (const [j, [radius, height, y]] of [[1.3, 1.45, 1.4], [1.09, 1.34, 2.16], [.85, 1.18, 2.89], [.58, 1.1, 3.55]].entries()) {
+    const profile = [[radius * .93, -height * .46], [radius, -height * .35], [radius * .72, -height * .16],
+      [radius * .45, height * .1], [radius * .2, height * .32], [.012, height * .55]].map(([x, yy]) => new THREE.Vector2(x, yy));
+    const bough = new THREE.LatheGeometry(profile, detail ? 24 : 12);
+    paint(bough, 0xffffff);
     const points = bough.attributes.position;
+    const colors = bough.attributes.color;
+    const low = new THREE.Color(0x286f62), high = new THREE.Color(0x88c889);
+    const color = new THREE.Color();
     for (let i = 0; i < points.count; i++) {
       const a = Math.atan2(points.getZ(i), points.getX(i));
-      const flare = 1 + Math.cos(a * 6) * 0.06;
-      points.setXYZ(i, points.getX(i) * flare, points.getY(i) + Math.sin(a * 6) * 0.055, points.getZ(i) * flare);
+      const fade = 1 - (points.getY(i) / height + .5);
+      const flare = 1 + Math.cos(a * 8 + j) * .08 * fade;
+      const h = points.getY(i) - Math.cos(a * 8 + j) * .08 * fade;
+      points.setXYZ(i, points.getX(i) * flare, h, points.getZ(i) * flare);
+      const brightness = .25 + j * .07 + Math.pow(Math.max(0, fade), 4) * .55;
+      color.copy(low).lerp(high, Math.min(1, brightness));
+      colors.setXYZ(i, color.r, color.g, color.b);
     }
-    parts.push(paint(bough.translate(0, y, 0), new THREE.Color(PINE).offsetHSL(-j * 0.009, 0, j * 0.035)));
+    foliage.push(bough.translate(0, y, 0));
   }
-  return merge(parts, ['position', 'normal', 'uv', 'color']);
+  return { wood: merge(wood, ['position', 'normal', 'uv', 'color']), foliage: merge(foliage, ['position', 'normal', 'uv', 'color']), fruit: null };
 }
 
 // ---- Decoration ---------------------------------------------------------------
@@ -1577,15 +1609,15 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
   // `flow` stays for older callers; the lake animates in update().
   const water = { flow: { value: 0 }, lakes, mesh: lakes[0]?.mesh ?? null };
 
-  // Static props, merged: one mesh (and one pen hull) per material.
-  const felt = surfaceWith(0xffffff, { map: environment.grain, vertexColors: true, shininess: 8 }, { rim: { color: 0xd8ffd0, strength: 0.15 } });
+  // Satin wood, gently raised fibres and cut end grain. The collision tops stay put.
+  const woodMaterial = surfaceWith(0xffffff, { map: environment.bark, bumpMap: environment.bark, bumpScale: .035, vertexColors: true, shininess: 12, specular: 0x423222 });
   if (level.stumps.length) {
-    const { geometry, outline } = stumpsGeometry(level.stumps);
-    const stumps = new THREE.Mesh(geometry, felt);
-    const pen = new THREE.Mesh(hullGeometry(outline), penOutline(0.05, PEN, 0.3));
+    const { bark, wood } = stumpsGeometry(level.stumps);
+    const stumps = new THREE.Mesh(bark, woodMaterial);
+    const tops = new THREE.Mesh(wood, surfaceWith(0xffffff, { map: environment.grain, vertexColors: true, shininess: 9 }));
     stumps.name = 'stumps';
-    pen.name = 'stumps:pen';
-    scene.add(stumps, pen);
+    tops.name = 'stumps:cut-wood';
+    scene.add(stumps, tops);
   }
   for (const p of level.planets) {
     const geom = floorGeometry(level, p);
@@ -1597,25 +1629,31 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
 
   // Trees: round ones with and without apples, and firs; all instanced.
   const trees = level.trees.map((t, i) => ({ ...t, kind: t.scale > 1.3 || i % 3 !== 1 ? (i % 2 ? 'apple' : 'round') : 'pine' }));
-  const treeFelt = surfaceWith(0xffffff, { map: environment.grain, vertexColors: true, shininess: 18 }, { rim: { color: 0xd8ffb0, strength: 0.22 } });
+  const canopyMaterial = surfaceWith(0xffffff, { map: environment.canopy, bumpMap: environment.canopy, bumpScale: .035, vertexColors: true, shininess: 25, specular: 0x49602c }, { rim: { color: 0xd8ffb0, strength: 0.16 }, sway: { time: sway, amount: .008 } });
+  const fruitMaterial = surfaceWith(0xffffff, { vertexColors: true, shininess: 65, specular: 0xffdba5 });
   const treeRnd = mulberry32(5);
-  for (const [kind, geom] of [['round', roundTree(false, detail)], ['apple', roundTree(true, detail)], ['pine', pineTree(detail)]]) {
+  for (const [kind, parts] of [['round', roundTree(false, detail)], ['apple', roundTree(true, detail)], ['pine', pineTree(detail)]]) {
     const list = trees.filter((t) => t.kind === kind);
     if (!list.length) continue;
     const color = new THREE.Color();
-    const { body, line } = inked(scene, geom, treeFelt, 0.028, {
-      name: `trees:${kind}`,
-      instanced: {
-        count: list.length,
-        matrices: list.map((t) => {
-          surfacePoint(t.planet, t.dir, -0.05, tmp);
-          return standing(tmp, t.dir, treeRnd() * Math.PI * 2, t.scale * (0.95 + treeRnd() * 0.1), 0);
-        }),
-        colors: list.map(() => color.setHSL(0, 0, 1).offsetHSL((treeRnd() - 0.5) * 0.05, 0, (treeRnd() - 0.5) * 0.1).clone()),
-      },
+    const matrices = list.map((t) => {
+      surfacePoint(t.planet, t.dir, -.05, tmp);
+      return standing(tmp, t.dir, treeRnd() * Math.PI * 2, t.scale * (.95 + treeRnd() * .1), 0);
     });
-    culls.push(new HorizonCull([body, line], list.map((t) => ({ planet: t.planet, dir: t.dir, top: 4.2 * t.scale }))));
+    const colors = list.map(() => color.setHSL(0, 0, 1).offsetHSL((treeRnd() - .5) * .035, 0, (treeRnd() - .5) * .05).clone());
+    const meshes = [];
+    for (const [part, material] of [['wood', woodMaterial], ['foliage', canopyMaterial], ['fruit', fruitMaterial]]) {
+      if (!parts[part]) continue;
+      const mesh = new THREE.InstancedMesh(parts[part], material, list.length);
+      mesh.name = `trees:${kind}:${part}`;
+      matrices.forEach((matrix, i) => { mesh.setMatrixAt(i, matrix); mesh.setColorAt(i, colors[i]); });
+      scene.add(mesh);
+      meshes.push(mesh);
+    }
+    culls.push(new HorizonCull(meshes, list.map((t) => ({ planet: t.planet, dir: t.dir, top: 4.5 * t.scale }))));
   }
+
+  const scenery = buildScenery(scene, level, environment, { tier, time: sway, makeCull: (meshes, items) => new HorizonCull(meshes, items) });
 
   const north = new THREE.Vector3(0, 1, 0);
   const flags = level.flags.map((f) => {
@@ -1739,6 +1777,7 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
 
       for (const lake of lakes) lake.update(t, sunDir);
       sway.value = t;
+      scenery.update(t, camera);
 
       for (const r of flyers) {
         // Round the world on a tilted circle, nose first, flame on.
@@ -1772,6 +1811,7 @@ export function buildScene(scene, level, art, { tier = deviceTier() } = {}) {
         d.butterflies?.setHidden(!on);
       }
       if (shadows) shadows.visible = on;
+      scenery.setQuality(level);
       for (const lake of lakes) lake.uniforms.uSparkle.value = on ? 1 : 0;
       sky.shooting.enabled = on;
     },

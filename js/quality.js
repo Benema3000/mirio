@@ -46,11 +46,16 @@ const RAISE_AFTER = 4;
 // A lower resolution that did not help (a 30 Hz power-saving cap, or a
 // busy CPU) is not tried again for this long.
 const FLOOR_TIMEOUT = 60;
+// One shader/fullscreen hitch is noise. Several very slow frames in a row
+// are a struggling renderer and must not be discarded forever.
+const HITCH = 0.25;
+const VERY_SLOW = 0.1;
+const SLOW_CONFIRM = 3;
 
 /**
- * Adapts the pixel ratio to hold the frame rate. Call update() with the raw
- * frame time every frame. `level`: 2 = full resolution for this device,
- * 1 = reduced, 0 = lowest and still slow (drop the extras). `onChange(level)`
+ * Adapts resolution and optional scenery to hold the frame rate. Call
+ * update() with raw frame time while active. `level`: 2 = full quality,
+ * 1 = reduced resolution, 0 = lightweight scenery. `onChange(level)`
  * fires when it changes; pass it on to world.setQuality().
  */
 export class QualityGovernor {
@@ -75,6 +80,7 @@ export class QualityGovernor {
     this.fastRuns = 0;
     this.probe = null;
     this.starved = false;
+    this.slowFrames = 0;
     this.current = this.computeLevel();
     this.apply();
   }
@@ -88,18 +94,26 @@ export class QualityGovernor {
   }
 
   update(rawDt) {
-    // A hidden tab or a hitch (shader compile, fullscreen switch) says
-    // nothing about the steady frame rate.
-    if (!(rawDt > 0) || rawDt > 0.25) {
+    // The game does not call update while paused or hidden. A one-off gap
+    // on returning, or a shader/fullscreen hitch, is not sustained load.
+    if (!(rawDt > 0) || !Number.isFinite(rawDt)) {
+      this.sum = 0;
+      this.frames = 0;
+      this.slowFrames = 0;
+      return;
+    }
+    this.slowFrames = rawDt > VERY_SLOW ? this.slowFrames + 1 : 0;
+    if (rawDt > HITCH && this.slowFrames < SLOW_CONFIRM) {
       this.sum = 0;
       this.frames = 0;
       return;
     }
+    const sample = Math.min(rawDt, 1);
     if (this.floorTimer > 0) {
-      this.floorTimer -= rawDt;
+      this.floorTimer -= sample;
       if (this.floorTimer <= 0) this.floor = 0;
     }
-    this.sum += rawDt;
+    this.sum += sample;
     this.frames += 1;
     if (this.sum < WINDOW) return;
     const avg = this.sum / this.frames;
@@ -112,10 +126,13 @@ export class QualityGovernor {
     const probe = this.probe;
     this.probe = null;
     if (probe?.dir < 0 && avg > probe.before * 0.93) {
-      // Fewer pixels did not help: this device is capped or CPU-bound.
+      // Fewer pixels did not help: preserve sharpness and reduce the work
+      // that resolution cannot remove (extra foliage, creatures, props).
       this.floor = probe.from;
       this.floorTimer = FLOOR_TIMEOUT;
       this.index = probe.from;
+      this.starved = true;
+      this.fastRuns = 0;
       this.apply();
       return;
     }
@@ -131,7 +148,9 @@ export class QualityGovernor {
       if (this.index > this.floor) {
         this.probe = { dir: -1, from: this.index, before: avg };
         this.index -= 1;
-      } else if (this.floor === 0) {
+      } else {
+        // A remembered resolution floor must not block the decoration
+        // fallback after a brief recovery brought the extras back.
         this.starved = true;
       }
     } else if (avg < FAST) {

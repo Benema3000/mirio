@@ -4,6 +4,9 @@
 import * as THREE from 'three';
 import { loadArt } from './art.js';
 import { Adventure } from './adventure.js';
+import { SpringGarden } from './garden.js';
+import { EnemySystem } from './enemies.js';
+import { Wildlife } from './wildlife.js';
 import { Sound } from './audio.js';
 import { Boss } from './boss.js';
 import { CameraRig } from './camera.js';
@@ -46,6 +49,8 @@ const HINTS = {
   boss: 'Wenn er schwindlig ist: spring ihm auf die Mütze!',
   bossWon: 'Hinterher! Ab ins Kart!',
   faint: 'Nochmal! Spring über die Schockwelle.',
+  creatures: 'Die kleinen Wächter kannst du von oben besiegen. Drehen macht sie schwindlig!',
+  spring: 'Boing! Stampfe auf eine grosse Blüte, dann federt sie dich noch höher.',
   raceKeys: 'Gas: ↑ · Bremse: ↓ · Lenken: ← → · Driften: beim Lenken Leertaste halten, loslassen: Turbo!',
   raceTouch: 'Links wischen: lenken · Rechts: Gas und Bremse · Driften: beim Lenken beide halten, Bremse loslassen: Turbo!',
 };
@@ -137,8 +142,11 @@ async function main() {
   const [welt, mond] = level.planets;
   const colliders = collidersFor(level);
   const world = buildScene(scene, level, art);
+  const garden = new SpringGarden(scene, level, art);
+  const enemies = new EnemySystem(scene, level, art);
+  const wildlife = new Wildlife(scene, level, art);
   // Trades resolution for frame rate on phones; see quality.js.
-  const governor = new QualityGovernor(renderer, { onChange: (l) => world.setQuality(l) });
+  const governor = new QualityGovernor(renderer, { onChange: (l) => { world.setQuality(l); enemies.setQuality(l); wildlife.setQuality(l); } });
   const particles = new Particles(scene, art.sparkle);
   const player = new Player(scene, art, level.planets, colliders);
   const rig = new CameraRig(camera, level.planets);
@@ -162,8 +170,9 @@ async function main() {
   let reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   try { const saved = localStorage.getItem('mirio-motion'); if (saved !== null) reducedMotion = saved === 'quiet'; } catch {}
   document.body.classList.toggle('reduced-motion', reducedMotion);
-  const stats = { bits: 0, time: 0, splashes: 0, pounds: 0, bestJump: 0, raceTime: 0 };
+  const stats = { bits: 0, time: 0, splashes: 0, pounds: 0, bestJump: 0, raceTime: 0, creatures: 0 };
   const shown = new Set();
+  const friends = new Set();
   let hintTimer = 0;
   // Camera shake after a ground pound or the boss's slam, decays by itself.
   let shake = 0;
@@ -374,6 +383,9 @@ async function main() {
   function resetGame() {
     document.body.classList.remove('racing');
     adventure.reset();
+    garden.reset();
+    enemies.reset();
+    wildlife.reset();
     finishDelay = 0;
     player.reset({ planet: welt, dir: level.spawn.dir.clone() }, startForward);
     for (const bit of world.bits) {
@@ -401,7 +413,12 @@ async function main() {
     stats.pounds = 0;
     stats.bestJump = 0;
     stats.raceTime = 0;
+    stats.creatures = 0;
     shown.clear();
+    friends.clear();
+    $('friend-bird').classList.remove('found');
+    $('friend-squirrel').classList.remove('found');
+    $('garden-guide').textContent = '0 / 3 Sprungblüten';
     rig.snap(player, startForward);
     renderHud(true);
   }
@@ -409,6 +426,7 @@ async function main() {
   // ---- HUD ---------------------------------------------------------------
   const hud = { bits: -1, hearts: -1, hp: -1 };
   function renderHud(force = false) {
+    $('hearts').hidden = state !== 'play';
     if (force || hud.bits !== stats.bits) {
       hud.bits = stats.bits;
       $('bits').textContent = `${stats.bits} / ${totalBits()}`;
@@ -502,8 +520,11 @@ async function main() {
 
   // ---- Rules ---------------------------------------------------------------
   const bossEvents = [];
+  const natureEvents = [];
   function simulate(h) {
+    natureEvents.push(...garden.step(h, player, state === 'play' && !fight.on));
     player.step(h);
+    natureEvents.push(...enemies.step(h, player, {active: state === 'play' && !fight.on}));
     if (state === 'play' && !fight.on && !boss.defeated && onArena()) {
       fight.on = true;
       boss.start();
@@ -529,6 +550,7 @@ async function main() {
       if (f.reached || f.center.distanceTo(player.body.pos) > FLAG_RADIUS) continue;
       f.reached = true;
       player.checkpoint = { planet: f.planet, dir: f.dir.clone() };
+      player.hearts = MAX_HEARTS;
       sound.play('flag');
       toast('Checkpoint!');
       particles.burst(tmp.copy(f.center).addScaledVector(f.dir, 3), { count: 14, color: CONFETTI, speed: 4, size: 0.5 });
@@ -579,11 +601,12 @@ async function main() {
           setTimeout(() => document.body.classList.remove('ouch'), 250);
           break;
         case 'faint':
-          // Out of hearts: back to the moon's landing spot, the boss starts over.
+          // Both meadow encounters and the boss return to the last safe flag.
+          const wasBoss = fight.on;
           boss.reset();
           endFight();
           toast('Nochmal!');
-          hint(HINTS.faint, 6);
+          hint(wasBoss ? HINTS.faint : 'Der Checkpoint passt auf dich auf. Spring auf die kleinen Wächter oder drehe dich!', 6);
           break;
         case 'spin':
           sound.play('spin');
@@ -611,6 +634,28 @@ async function main() {
       }
     }
     player.events.length = 0;
+
+    for (const ev of natureEvents) {
+      sound.play(ev.type);
+      if (ev.type === 'enemyNotice') hintOnce('creatures', 8);
+      if (ev.type === 'enemyStun') {
+        particles.burst(ev.pos, {count: 8, color: [0xffde81, 0xffffff], speed: 2, size: .3, life: .6});
+      }
+      if (ev.type === 'enemyDefeat') {
+        stats.creatures++;
+        particles.burst(ev.pos, {count: 18, color: [ev.color, 0xffe3a0, 0xffffff], speed: 4, size: .45, life: .75});
+        if (stats.creatures === 1) toast('Gut gemacht!');
+        // A defeated guardian leaves a little kindness: one heart back.
+        player.hearts = Math.min(MAX_HEARTS, player.hearts + 1);
+      }
+      if (ev.type === 'spring') {
+        hintOnce('spring', 7);
+        particles.burst(ev.pos, {count: 12, color: [ev.color, 0xffefa5], speed: 4, size: .3, life: .65});
+        $('garden-guide').textContent = `${garden.used.size} / 3 Sprungblüten`;
+        if (ev.strong) toast('Blütensprung!');
+      }
+    }
+    natureEvents.length = 0;
 
     for (const ev of bossEvents) {
       switch (ev.type) {
@@ -743,6 +788,9 @@ async function main() {
       ...[...adventure.badges].map(id => id === 'meadow' ? '✦ Wiesenspuren' : '✦ Mondspuren'),
       ...(stats.bestJump === 3 ? ['↟ Sprungkünstler'] : []),
       ...(stats.bits >= 50 ? ['◇ Glitzersammler'] : []),
+      ...(stats.creatures >= 3 ? ['✦ Wiesenwächter'] : []),
+      ...(friends.size === 2 ? ['♡ Tierfreund'] : []),
+      ...(garden.used.size === 3 ? ['❀ Blütenflieger'] : []),
     ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
     offerHighScore();
     $('win').classList.remove('hidden');
@@ -983,6 +1031,17 @@ async function main() {
       shake = Math.max(0, shake - dt * 1.5);
     }
     player.render(dt);
+    enemies.update(elapsed, camera);
+    garden.update(elapsed, camera);
+    for (const ev of wildlife.update(dt, elapsed, player, {active: state === 'play' && !fight.on, camera})) {
+      if (ev.type === 'wildlifeMeet') {
+        friends.add(ev.kind);
+        $(`friend-${ev.kind}`).classList.add('found');
+        toast(ev.kind === 'bird' ? 'Ein kleiner Wiesenvogel!' : 'Ein neugieriges Eichhörnchen!');
+        sound.play('ring');
+      } else sound.wildlife(ev);
+    }
+    sound.ambience({active: state === 'play' && !fight.on && player.body.planet === welt, dt});
     world.update(dt, elapsed, camera, racing ? null : player.body.pos);
     governor.update(raw);
     renderer.render(scene, camera);
@@ -999,6 +1058,11 @@ async function main() {
         time: stats.time,
         adventure: { badges: [...adventure.badges], magnet: adventure.magnet, trails: adventure.trails.map(t => ({id: t.id, next: t.run.next, active: t.run.active, time: t.run.time})) },
         fps,
+        rendering: { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, quality: governor.level, pixelRatio: governor.pixelRatio },
+        creatures: stats.creatures,
+        enemies: enemies.snapshot(),
+        wildlife: wildlife.snapshot(),
+        garden: garden.snapshot(),
         player: {
           state: player.state,
           planet: player.body.planet?.id ?? null,
@@ -1030,6 +1094,9 @@ async function main() {
         rocket: { planet: welt.id, dir: launchUp.toArray(), height: level.rocket.height },
         goal: { planet: level.goal.planet.id, dir: level.goal.dir.toArray(), height: level.goal.height },
         trails: adventure.trails.map(t => ({id: t.id, planet: t.planet.id, dirs: t.dirs.map(d => d.toArray())})),
+        enemies: enemies.layout(),
+        wildlife: wildlife.layout(),
+        garden: garden.layout(),
         lake: welt.water,
         arena: { planet: ar.planet.id, dir: ar.dir.toArray(), top: ar.top, radius: ar.radius, center: arenaCenter.toArray() },
       }),

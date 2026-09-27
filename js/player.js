@@ -78,6 +78,7 @@ export class Player {
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.jumpHeld = false;
+    this.launchGravity = null;
     this.spinRequest = false;
     this.poundRequest = false;
     this.spinT = 0;
@@ -168,6 +169,7 @@ export class Player {
       this.poundRequest = false;
       if (!body.onGround && !this.pound && this.stun === 0) {
         this.pound = { phase: 'hang', t: 0 };
+        this.launchGravity = null;
         this.spinT = 0;
         this.flip = 0;
         body.vel.set(0, 0, 0);
@@ -178,6 +180,7 @@ export class Player {
     const opts = this.poundOptions(h) ?? this.jumpOptions();
     const canMove = !this.pound && this.stun === 0;
     stepBody(body, canMove ? this.wish : null, canMove ? this.wishSpeed : 0, this.planets, this.collidersOf, h, opts);
+    if (this.launchGravity !== null && body.vel.dot(body.up) <= 0) this.launchGravity = null;
     if (body.skidding && !this.skidding) this.events.push({ type: 'skid' });
     this.skidding = body.skidding;
 
@@ -194,6 +197,7 @@ export class Player {
       this.state = 'splash';
       this.splashT = 0;
       this.pound = null;
+      this.launchGravity = null;
       body.vel.set(0, 0, 0);
       this.events.push({ type: 'splash' });
       return;
@@ -211,6 +215,7 @@ export class Player {
     const jump = jumpFor(this.chain, this.groundTime, speed);
     body.vel.addScaledVector(body.up, jump.speed - body.vel.dot(body.up));
     body.onGround = false;
+    this.launchGravity = null;
     this.coyote = this.jumpBuffer = this.groundTime = 0;
     this.chain = jump.level;
     this.squash = 0.2 + 0.05 * jump.level;
@@ -221,7 +226,8 @@ export class Player {
 
   jumpOptions() {
     const vUp = this.body.vel.dot(this.body.up);
-    if (vUp > 0) return { gravityScale: this.jumpHeld ? HOLD_GRAVITY : RELEASE_GRAVITY };
+    if (vUp > 0) return { gravityScale: this.launchGravity ?? (this.jumpHeld ? HOLD_GRAVITY : RELEASE_GRAVITY) };
+    this.launchGravity = null;
     return { gravityScale: this.spinning ? SPIN_FALL_GRAVITY : FALL_GRAVITY };
   }
 
@@ -243,6 +249,7 @@ export class Player {
   }
 
   land(fallSpeed) {
+    this.launchGravity = null;
     this.airSpinUsed = false;
     this.flip = 0;
     if (this.pound?.phase === 'drop') {
@@ -272,6 +279,7 @@ export class Player {
     if (this.invulnerable > 0 || this.state !== 'play') return;
     this.hearts -= 1;
     this.pound = null;
+    this.launchGravity = null;
     this.events.push({ type: 'hurt', hearts: this.hearts });
     if (this.hearts <= 0) {
       this.respawn();
@@ -288,10 +296,11 @@ export class Player {
     this.stun = STUN_TIME;
   }
 
-  /** Springs off something Mirio landed on (the boss's cap). */
-  bounce() {
+  /** Springs off a creature, or a blossom with its own rising arc. */
+  bounce({ speed = this.jumpHeld ? BOUNCE_HELD_SPEED : BOUNCE_SPEED, gravityScale = null } = {}) {
     const vUp = this.body.vel.dot(this.body.up);
-    this.body.vel.addScaledVector(this.body.up, (this.jumpHeld ? BOUNCE_HELD_SPEED : BOUNCE_SPEED) - vUp);
+    this.body.vel.addScaledVector(this.body.up, speed - vUp);
+    this.launchGravity = gravityScale;
     this.body.onGround = false;
     this.coyote = 0;
     this.jumpBuffer = 0;
@@ -306,6 +315,7 @@ export class Player {
     this.state = 'boarding';
     this.body.vel.set(0, 0, 0);
     this.pound = null;
+    this.launchGravity = null;
     this.model.group.visible = false;
     this.shadow.visible = false;
   }
@@ -329,6 +339,7 @@ export class Player {
     this.state = 'win';
     this.winT = 0;
     this.pound = null;
+    this.launchGravity = null;
     this.body.vel.set(0, 0, 0);
   }
 

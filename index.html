@@ -17,7 +17,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="img/mirio.png">
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
   <canvas id="game" aria-label="Spielfeld"></canvas>
@@ -82,7 +82,7 @@
         <p class="eyebrow">MIROS KLEINES WELTRAUMABENTEUER</p>
         <h1><span class="word">Mirio</span><span class="title-dot">.</span></h1>
         <p class="tagline">Kleine Schritte. <br>Riesengrosses Abenteuer.</p>
-        <p class="intro">Über Wiesen hüpfen, zum Mond fliegen und um den Kristall rasen. Deine Reise beginnt mit einer Zeichnung.</p>
+        <p class="intro">Wiesenvögel treffen, über Riesenblüten hüpfen und zum Mond fliegen. Deine Reise beginnt mit einer Zeichnung.</p>
         <div class="journey-chips" aria-label="Deine Reise"><span>01 <b>Entdecken</b></span><span>02 <b>Abheben</b></span><span>03 <b>Losrasen</b></span></div>
         <button id="start" class="big" disabled>Lädt …</button>
         <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
@@ -109,8 +109,9 @@
         <label for="effects-volume">Geräusche <input id="effects-volume" type="range" min="0" max="100" value="80"></label>
         <label class="check-setting"><input id="reduced-motion" type="checkbox"> Ruhiges Bild <small>Ohne Kamerawackeln</small></label>
       </div>
+      <div class="field-guide" aria-label="Entdeckte Tierfreunde"><span id="friend-bird">Wiesenvogel</span><span id="friend-squirrel">Eichhörnchen</span><small id="garden-guide">0 / 3 Sprungblüten</small></div>
       <div class="move-guide"><p><kbd>WASD / ↑↓←→</kbd> Laufen <kbd>Leertaste</kbd> Springen</p><p><kbd>Shift</kbd> Drehen <kbd>C</kbd> Stampfen <kbd>Q / E</kbd> Kamera</p><p>Controller: linker Stick · A springen · X drehen · B stampfen<br>Kart: RT Gas · LT Bremse · A + lenken driften</p></div>
-      <p class="trail-tip">✦ Entdecke die leuchtenden Ringe! Eine ganze Spur schenkt dir 12 Sekunden Glitzermagnet.</p>
+      <p class="trail-tip">✦ Entdecke die leuchtenden Ringe! Eine ganze Spur schenkt dir 12 Sekunden Glitzermagnet.<br>❀ Grosse Blüten federn dich hoch. Kleine Wächter: von oben hüpfen oder drehen!</p>
       <button id="rescue" class="text-button">Zurück zum Checkpoint</button>
     </div>
   </section>
@@ -151,6 +152,6 @@
     }
   }
   </script>
-  <script type="module" src="js/main.js?v=14"></script>
+  <script type="module" src="js/main.js?v=15"></script>
 </body>
 </html>

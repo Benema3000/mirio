@@ -35,7 +35,7 @@ models are built from them at load time.
 | `rakete.png` | The rocket: its outline turned on a lathe, wrapped in the drawing's brown strokes, plus fins, a porthole and a flame (`js/props.js`). `left_btn.png`/`right_btn.png` in the old game were the same drawing rotated, so they are not copied. |
 | `floor.png` | The moon's ground, the stepping stones, the plateau and the floor blocks |
 
-The only enemy is the boss, **Finster-Mirio** (`js/boss.js`): Miro has not
+The main boss is **Finster-Mirio** (`js/boss.js`): Miro has not
 drawn a villain, so it is his hero turned into a giant dark twin with glowing
 red eyes. He chases, leaps and slams a shockwave across the arena; after a slam
 he is dizzy and three jumps (or ground pounds) on his cap beat him. Mirio has
@@ -98,6 +98,33 @@ stepping stones and race road.
   that changes arrangement at musical bar boundaries. Only about 50 KB of CC0
   recordings are downloaded; the instruments and room reverb are generated.
 
+## A living little world
+
+The meadow has birds that peck, perch and take wing, and squirrels that forage,
+nibble acorns, twitch their tails and scurry away when Mirio approaches. These
+are original articulated 3D animals, with shared geometry and instanced parts.
+Nearby birdsong, rustling leaves and a quiet breeze complete the meadow. Meeting
+both species fills in the pause menu's little field guide and earns a Tierfreund
+badge at the end. The wildlife is harmless.
+
+Seven optional little guardians live in clear patches away from the main path:
+five **Mooskrabbler** with glossy sprout shells and two hopping **Mondkiesel**.
+They patrol, visibly wind up a short attack, then recover and return home. A jump
+onto their head or a ground pound defeats them; spinning stuns them, and a second
+spin after releasing the first finishes the encounter. A defeat restores one
+heart. New checkpoints also restore health. Fainting returns Mirio to the last
+checkpoint, while already defeated guardians stay defeated until a new run.
+
+Three giant spring blossoms are optional toys. Walk or land on their centres to
+bounce high, or ground-pound them for an extra lift. Trying all three earns the
+Blütenflieger badge. These additions reuse the existing gem total and score rules.
+
+The scenery now has sculpted, softly shaded tree crowns, separate wood and fruit
+materials, detailed bark and cut wood, composed fern and flowering shrub beds,
+lakeside reeds, falling petals and soft cloud wisps. Decorative batches are
+horizon-culled and reduced on slower devices. Miro's original images, sampled
+textures, character, rocket, and floor construction remain unchanged.
+
 ## Layout
 
 Plain ES modules, no build step; PHP only for the high score list. `index.html` holds the import map for
@@ -115,6 +142,9 @@ three.js and loads `js/main.js`.
 | `js/water.js` | The ring lake: waves, fresnel, sparkles, foam along both shores and round every stepping stone, one draw call |
 | `js/quality.js` | Renderer colour settings, and a governor that lowers the resolution (then drops the extras) to hold the frame rate on phones |
 | `js/mirio-model.js`, `js/props.js` | The 3D models built from the drawings: Mirio; the rocket and the checkpoint flag |
+| `js/wildlife.js`, `js/wildlife-models.js` | Reactive birds and squirrels, shared articulated geometry, discovery and culling |
+| `js/enemies.js`, `js/enemy-rules.js` | Original optional guardians, safe placements, readable attacks and renderer-independent rules |
+| `js/garden.js`, `js/scenery.js` | Spring blossoms; batched plants, petals and cloud wisps |
 | `js/adventure.js` | Optional ring-trail rules, gates, badges and magnet effect |
 | `js/environment-art.js` | Original seamless environment textures and gem reflection maps; no child artwork |
 | `js/art.js`, `js/materials.js` | Canvas helpers (crop, sticker border, filled face, scribble textures) and the shared toon and outline materials |
@@ -191,6 +221,10 @@ the points out itself from the run's Glitzersteine, time and place.
   controller pause/resume, ring trails and magnet rewards, replay reset,
   checkpoint rescue, settings and phone layout. It uses the same server and
   `PLAYWRIGHT` / `BASE_URL` environment variables as the main browser suite.
+
+- `node tests/mirio-living-e2e.mjs` checks spring launches, wildlife discoveries
+  and reactions, enemy stomps/contact/spin combat, health restoration, pause and
+  replay resets, and browser/shader errors. It uses the same server and variables.
 
 - `node tests/mirio-audio-e2e.mjs` verifies all eleven sample decodes, mixer
   persistence, pause/resume cleanup, every soundtrack arrangement and sound

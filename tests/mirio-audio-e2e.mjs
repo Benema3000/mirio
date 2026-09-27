@@ -71,15 +71,15 @@ try {
   await check('pause stops the scheduler, engine and voices; resume starts cleanly', async () => {
     await page.evaluate(() => {
       const s = window.sound;
-      s.startMusic(); s.play('star'); s.engine({ speed: 25, gas: 1 });
+      s.startMusic(); s.play('star'); s.engine({ speed: 25, gas: 1 }); s.ambience({ active: true, dt: 1 / 60 });
     });
     await page.waitForFunction(() => window.sound.step > 0);
     await page.evaluate(() => window.sound.setPaused(true));
     await page.waitForFunction(() => window.sound.ctx.state === 'suspended');
     const paused = await page.evaluate(() => ({
-      timer: Boolean(window.sound.timer), voices: window.sound.voices.size, motor: window.sound.motor,
+      timer: Boolean(window.sound.timer), voices: window.sound.voices.size, motor: window.sound.motor, ambient: window.sound.ambient,
     }));
-    assert.deepEqual(paused, { timer: false, voices: 0, motor: null });
+    assert.deepEqual(paused, { timer: false, voices: 0, motor: null, ambient: null });
     // Resume is bound to a gesture too, for browsers with strict autoplay.
     await page.evaluate(() => { document.getElementById('unlock').onclick = () => window.sound.setPaused(false); });
     await page.click('#unlock');
@@ -93,7 +93,7 @@ try {
     const render = await page.evaluate(async () => {
       const s = new window.SoundForTest();
       s.muted = false;
-      const ctx = new OfflineAudioContext(2, 22050 * 18, 22050);
+      const ctx = new OfflineAudioContext(2, 22050 * 20, 22050);
       let time = 0;
       // Offline scheduling has a stationary clock. Advance only the clock
       // seen by Sound, queue everything, then let the native graph render it.
@@ -104,19 +104,24 @@ try {
       const scenes = ['explore', 'moon', 'boss', 'race', 'victory'];
       const cues = ['jump', 'jump2', 'triple', 'skid', 'poundStart', 'pound', 'hurt', 'roar', 'bossJump', 'slam',
         'bossHit', 'go', 'boost', 'bump', 'bossDown', 'spin', 'bit', 'land', 'board', 'beep', 'liftoff', 'flag',
-        'splash', 'arrive', 'respawn', 'star', 'trailStart', 'ring', 'trailWin', 'trailFail', 'click'];
+        'splash', 'arrive', 'respawn', 'star', 'trailStart', 'ring', 'trailWin', 'trailFail', 'click', 'spring', 'enemyNotice', 'enemyStun', 'enemyDefeat'];
       const heard = new Set();
       let nextCue = 0;
-      for (let frame = 0; frame < 340; frame++) {
+      for (let frame = 0; frame < 380; frame++) {
         time = frame * 0.05;
         s.setScene(scenes[Math.min(4, Math.floor(time / 3.4))]);
         s.schedule();
+        s.ambience({ active: true, dt: .05 });
+        if (frame === 30) s.wildlife({ type: 'birdChirp', distance: 4, pan: -.6, variant: 1 });
+        if (frame === 130) s.wildlife({ type: 'squirrel', distance: 3, pan: .3 });
+        if (frame === 230) s.wildlife({ type: 'leafRustle', distance: 5, pan: -.2 });
         heard.add(s.scene);
         if (nextCue < cues.length && time >= nextCue * 0.5) s.play(cues[nextCue++]);
         // Live source.onended releases the polyphony budget as time passes.
         // Offline rendering hasn't begun yet, so emulate only that budget.
         s.voices.clear();
       }
+      s.ambience({ active: false });
       delete ctx.currentTime; delete ctx.state;
       const audio = await ctx.startRendering();
       let peak = 0, energy = 0, invalid = 0;
@@ -130,7 +135,7 @@ try {
       return { scenes: [...heard], cues: nextCue, invalid, peak, rms: Math.sqrt(energy / (audio.length * 2)), cache: s.instruments.size };
     });
     assert.deepEqual(render.scenes, ['explore', 'moon', 'boss', 'race', 'victory']);
-    assert.equal(render.cues, 31);
+    assert.equal(render.cues, 35);
     assert.equal(render.invalid, 0);
     assert.ok(render.peak < 0.99, `clipping peak ${render.peak}`);
     assert.ok(render.rms > 0.008, `unexpectedly quiet mix ${render.rms}`);
@@ -165,11 +170,11 @@ try {
 
   await check('teardown releases all voices and reports no browser errors', async () => {
     const clean = await page.evaluate(() => {
-      window.sound.play('star'); window.sound.engine({ speed: 18, gas: 0.5 });
+      window.sound.play('star'); window.sound.engine({ speed: 18, gas: 0.5 }); window.sound.ambience({ active: true, dt: .1 });
       window.sound.dispose();
-      return { ctx: window.sound.ctx, voices: window.sound.voices.size, timer: Boolean(window.sound.timer), motor: window.sound.motor };
+      return { ctx: window.sound.ctx, voices: window.sound.voices.size, timer: Boolean(window.sound.timer), motor: window.sound.motor, ambient: window.sound.ambient };
     });
-    assert.deepEqual(clean, { ctx: null, voices: 0, timer: false, motor: null });
+    assert.deepEqual(clean, { ctx: null, voices: 0, timer: false, motor: null, ambient: null });
     assert.deepEqual(errors, []);
   });
 } finally {

@@ -64,6 +64,9 @@ export class Sound {
     this.instruments = new Map();
     this.voices = new Set();
     this.cooldowns = new Map();
+    this.ambient = null;
+    this.ambienceTime = 0;
+    this.leafWait = 7;
   }
 
   /** Call from a user gesture; missing audio hardware must never stop play. */
@@ -166,6 +169,7 @@ export class Sound {
       clearInterval(this.timer);
       this.timer = null;
       this.engine(null);
+      this.ambience({ active: false });
       this.stopVoices();
       this.ctx.suspend().catch(() => {});
     } else {
@@ -473,10 +477,96 @@ export class Sound {
       case 'trailFail':
         this.chime([76, 74, 72], { gap: 0.16, vol: 0.1 });
         break;
+      case 'spring':
+        this.sample('cloth', { vol: 0.16, rate: 1.6 });
+        this.tone(190, 0.42, { type: 'triangle', to: 1150, vol: 0.13 });
+        this.tone(340, 0.3, { to: 1650, vol: 0.045, at: 0.04 });
+        this.chime([79, 84, 88], { gap: 0.06, at: 0.1, vol: 0.1 });
+        break;
+      case 'enemyNotice':
+        this.note(72, 0.13, { kind: 'mallet', bus: 'effects', vol: 0.15 });
+        this.note(79, 0.19, { kind: 'mallet', bus: 'effects', vol: 0.17, at: 0.12 });
+        break;
+      case 'enemyStun':
+        this.sample('tap', { vol: 0.3, rate: 1.35 });
+        this.chime([86, 81, 88, 83], { gap: 0.065, vol: 0.12 });
+        this.tone(330, 0.26, { type: 'triangle', to: 125, vol: 0.085 });
+        break;
+      case 'enemyDefeat':
+        this.sample('land', { vol: 0.28, rate: 0.8 });
+        this.noise(0.22, { vol: 0.09, from: 800, to: 1800 });
+        this.chime([76, 79, 84], { gap: 0.065, vol: 0.17 });
+        break;
       case 'click':
         this.sample('tap', { vol: 0.15, rate: 1.7 });
         break;
       default:
+    }
+  }
+
+  /** Local animal voices, softened by distance and their camera-relative pan. */
+  wildlife({ type, distance = 0, pan = 0, variant = 0 } = {}) {
+    if (!this.audible || this.muted) return;
+    const attenuation = 1 / (1 + (Math.max(0, distance) / 8) ** 2);
+    if (attenuation < 0.06) return;
+    pan = clamp(pan, -0.8, 0.8);
+    const now = this.ctx.currentTime;
+    const key = `wildlife:${type}`;
+    if (now - (this.cooldowns.get(key) ?? -10) < (type === 'birdChirp' ? 0.6 : 0.3)) return;
+    this.cooldowns.set(key, now);
+    if (type === 'birdChirp') {
+      const base = [2100, 2500, 1800][Math.abs(Math.round(variant)) % 3];
+      const vol = 0.075 * attenuation;
+      this.tone(base, 0.1, { to: base * 1.45, vol, pan, attack: 0.016 });
+      this.tone(base * 1.2, 0.13, { to: base * 0.88, vol: vol * .8, at: .15, pan, attack: .018 });
+      this.tone(base * 1.1, 0.075, { to: base * 1.38, vol: vol * .65, at: .34, pan, attack: .013 });
+      if (variant === 1) this.tone(base, .1, { to: base * 1.25, vol: vol * .6, at: .48, pan });
+    } else if (type === 'squirrel') {
+      this.sample('cloth', { vol: 0.12 * attenuation, rate: 1.5, pan });
+      this.tone(1350, .055, { to: 1850, vol: .035 * attenuation, pan });
+      this.tone(1700, .05, { to: 1300, vol: .026 * attenuation, at: .085, pan });
+    } else if (type === 'leafRustle') {
+      this.sample('grass-3', { vol: .25 * attenuation, rate: .82, pan });
+      this.noise(.35, { vol: .06 * attenuation, from: 1800, to: 650, q: .5, pan });
+    }
+  }
+
+  /** A restrained moving canopy breeze. Call once per frame in the meadow. */
+  ambience({ active = false, dt = 0 } = {}) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (!active || this.paused) {
+      if (!this.ambient) return;
+      const old = this.ambient;
+      old.gain.gain.setTargetAtTime(0, t, .08);
+      old.source.stop(this.paused ? t : t + .4);
+      if (this.paused) for (const node of old.nodes) node.disconnect();
+      else old.source.onended = () => { for (const node of old.nodes) node.disconnect(); };
+      this.ambient = null;
+      return;
+    }
+    if (!this.ambient) {
+      const source = this.ctx.createBufferSource();
+      source.buffer = this.noiseBuffer;
+      source.loop = true;
+      const low = this.ctx.createBiquadFilter();
+      low.type = 'lowpass'; low.frequency.value = 620; low.Q.value = .45;
+      const high = this.ctx.createBiquadFilter();
+      high.type = 'highpass'; high.frequency.value = 160; high.Q.value = .45;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0;
+      source.connect(low).connect(high).connect(gain).connect(this.effectsBus);
+      source.start();
+      this.ambient = { source, low, gain, nodes: [source, low, high, gain] };
+    }
+    this.ambienceTime += Math.min(.1, Math.max(0, Number(dt) || 0));
+    const gust = (Math.sin(this.ambienceTime * .43) + Math.sin(this.ambienceTime * .17 + 1)) * .25 + .5;
+    this.ambient.gain.gain.setTargetAtTime(.018 + gust * .034, t, .5);
+    this.ambient.low.frequency.setTargetAtTime(460 + gust * 560, t, .8);
+    this.leafWait -= Math.min(.1, Math.max(0, Number(dt) || 0));
+    if (this.leafWait <= 0) {
+      this.leafWait = 9 + Math.random() * 9;
+      if (!this.muted) this.noise(.7, { vol: .035, from: 1600, to: 450, q: .5, pan: Math.sin(this.ambienceTime) * .65 });
     }
   }
 
@@ -635,6 +725,7 @@ export class Sound {
     this.paused = true;
     this.stopMusic();
     this.engine(null);
+    this.ambience({ active: false });
     this.stopVoices();
     if (this.ctx) this.ctx.close().catch(() => {});
     this.ctx = null;

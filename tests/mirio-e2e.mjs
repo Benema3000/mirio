@@ -43,7 +43,7 @@ async function open(browser, options) {
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
-  await page.goto(GAME_URL);
+  await page.goto(GAME_URL, {waitUntil: 'domcontentloaded', timeout: 120000});
   // Generous: software WebGL on a busy box can take a minute to build the scene.
   await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 120000 });
   return { page, errors };
@@ -90,10 +90,10 @@ function norm(a) {
 
   await check('arrow keys walk Mirio and collect Glitzersteine', async () => {
     const before = await snap(page);
-    // Mirio builds up speed now, and the first frames of software WebGL are
-    // slow: give him a few seconds.
+    // Measure simulated play time: first-frame shader compilation can take
+    // most of a wall-clock delay in the software renderer.
     await page.keyboard.down('ArrowUp');
-    await page.waitForTimeout(3000);
+    await until(page, time => window.__mirio.snapshot().time >= time, before.time + 1);
     await page.keyboard.up('ArrowUp');
     const after = await snap(page);
     const moved = Math.hypot(...sub(after.player.pos, before.player.pos));

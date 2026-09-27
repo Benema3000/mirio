@@ -84,12 +84,81 @@ function jewelEnvironment() {
   return texture;
 }
 
+/** Painted woodgrain and leaf scales, independent of every drawing asset. */
+function detailTexture(kind) {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const rnd = mulberry32(kind === 'bark' ? 902 : 615);
+  ctx.fillStyle = kind === 'bark' ? '#e9d7ba' : '#dfedca';
+  ctx.fillRect(0, 0, size, size);
+  if (kind === 'bark') {
+    for (let i = 0; i < 24; i++) {
+      const x = i / 24 * size + rnd() * 4;
+      const phase = rnd() * 6.283;
+      for (const dx of [-size, 0, size]) {
+        for (const [offset, color, width] of [[0, '#b49b76', 3.5], [2.5, '#fff4da', 1.7]]) {
+          ctx.beginPath();
+          for (let y = 0; y <= size; y += 4) {
+            const px = x + dx + offset + Math.sin(y / size * Math.PI * 4 + phase) * 3;
+            if (y === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+          }
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.stroke();
+        }
+      }
+    }
+    // Small knots interrupt the long fibres; their soft inner rings are wood,
+    // never letters or symbols borrowed from the child's drawing.
+    for (let i = 0; i < 7; i++) {
+      const x = 18 + rnd() * 220;
+      const y = 20 + rnd() * 210;
+      for (const r of [11, 6, 2]) {
+        ctx.beginPath();
+        ctx.ellipse(x, y, r * 0.48, r, 0.15, 0, Math.PI * 2);
+        ctx.strokeStyle = r === 2 ? '#b49976' : '#c5ae8d';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+    }
+  } else {
+    for (let i = 0; i < 110; i++) {
+      const x = rnd() * size;
+      const y = rnd() * size;
+      const r = 8 + rnd() * 13;
+      const a = rnd() * Math.PI * 2;
+      for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) {
+        ctx.save();
+        ctx.translate(x + dx, y + dy);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.moveTo(-r, 0);
+        ctx.quadraticCurveTo(0, -r * 0.65, r, 0);
+        ctx.quadraticCurveTo(0, r * 0.65, -r, 0);
+        ctx.fillStyle = i % 3 ? '#ebf4db' : '#c5d7ad';
+        ctx.globalAlpha = 0.45;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.anisotropy = 4;
+  return texture;
+}
+
 export function makeEnvironmentArt() {
   return {
-    meadow: surface({ base: [104, 155, 65], light: [153, 183, 88], dark: [67, 122, 57], seed: 91, grass: true }),
+    meadow: surface({ base: [111, 164, 73], light: [164, 196, 105], dark: [66, 123, 65], seed: 91, grass: true }),
     gold: surface({ base: [202, 155, 71], light: [237, 204, 117], dark: [167, 116, 56], seed: 71, grass: true }),
     grain: surface({ base: [228, 229, 220], light: [255, 253, 237], dark: [189, 204, 176], seed: 43 }),
     water: surface({ base: [153, 159, 161], light: [209, 212, 211], dark: [112, 126, 134], seed: 123 }),
     jewel: jewelEnvironment(),
+    bark: detailTexture('bark'),
+    canopy: detailTexture('canopy'),
   };
 }
