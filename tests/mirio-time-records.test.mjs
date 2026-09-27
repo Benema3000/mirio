@@ -69,6 +69,17 @@ test('Klangkugel saves separately without replacing existing course records', as
   assert.equal(reloaded.readPersonalBest('marble'), 61000);
 });
 
+test('Seifenstern persists its own best while keeping musical and legacy times', async t => {
+  const storage = store({'mirio-time-best-v2:marble': '52380', 'mirio-time-best-v1:sky': '21000'});
+  const records = await fixture(t, storage);
+  assert.equal(records.savePersonalBest('tilt', 66000).isNew, true);
+  assert.equal(records.readPersonalBest('tilt'), 66000);
+  assert.equal(records.readPersonalBest('marble'), 52380);
+  assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
+  const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
+  assert.equal(reloaded.readPersonalBest('tilt'), 66000);
+});
+
 test('unknown levels and invalid durations cannot create or replace records', async t => {
   const storage = store();
   const { readPersonalBest, savePersonalBest } = await fixture(t, storage);

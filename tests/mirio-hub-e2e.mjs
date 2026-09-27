@@ -159,7 +159,7 @@ try {
   const paused=await snapshot(page);await page.waitForTimeout(200);
   assert.deepEqual((await snapshot(page)).hub.pos,paused.hub.pos);
   await page.check('#reduced-motion');assert.equal(await page.evaluate(()=>localStorage.getItem('mirio-motion')),'quiet');
-  await pad(0,true);await until(page,()=>!window.__mirio.snapshot().paused);await pad(0,false);
+  await pad(1,true);await until(page,()=>!window.__mirio.snapshot().paused);await pad(1,false);
   await driveTo(page,layout.portals.find(p=>p.level==='ribbon').pos,{device:'controller'});
   assert.equal((await snapshot(page)).selectedLevel,'ribbon');
   await pad(9,true);await until(page,()=>window.__mirio.snapshot().paused);await pad(9,false);
@@ -188,10 +188,12 @@ try {
     assert.ok(box&&box.x>=0&&box.x+box.width<=390&&box.y>=0&&box.y+box.height<=844,`${selector} leaves phone viewport`);
   }
   await shot(phone,'hub-phone');
-  const skyPortal=await phone.evaluate(()=>window.__mirio.layout().hub.portals.find(p=>p.level==='sky').pos);
-  await touchPortal(phone,client,skyPortal);
-  assert.equal((await snapshot(phone)).selectedLevel,'sky');
-  await returnFromPause(phone);
+  for(const level of ['sky','tilt']) {
+    const portal=await phone.evaluate(level=>window.__mirio.layout().hub.portals.find(p=>p.level===level).pos,level);
+    await touchPortal(phone,client,portal);
+    assert.equal((await snapshot(phone)).selectedLevel,level);
+    await returnFromPause(phone);
+  }
   // The accessibility route chooser is explicit; the normal start remains the garden.
   await phone.tap('#pause-button');await phone.tap('#pause-quick');
   await phone.tap('[data-level="ribbon"]');await until(phone,()=>window.__mirio.snapshot().state==='chapter');

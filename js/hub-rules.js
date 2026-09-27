@@ -8,11 +8,12 @@ export const HUB = Object.freeze({
 });
 
 export const HUB_PORTALS = Object.freeze([
-  {level: 'adventure', label: 'Planetenreise', x: -11, z: -6, color: 0xf5bb78},
-  {level: 'sky', label: 'Wolkenpost', x: -6, z: -11, color: 0x88cbd7},
-  {level: 'marble', label: 'Klangkugel', x: 0, z: -14, color: 0xf2ce6d},
-  {level: 'ribbon', label: 'Blütenpfad', x: 6, z: -11, color: 0xe9a7c3},
-  {level: 'kart', label: 'Sternenrennen', x: 11, z: -6, color: 0xbbafe4},
+  {level: 'adventure', label: 'Planetenreise', x: -11.5, z: -4, color: 0xf5bb78},
+  {level: 'sky', label: 'Wolkenpost', x: -8.2, z: -10, color: 0x88cbd7},
+  {level: 'marble', label: 'Klangkugel', x: -3.4, z: -14, color: 0xf2ce6d},
+  {level: 'tilt', label: 'Seifenstern', x: 3.4, z: -14, color: 0x94d6c4},
+  {level: 'ribbon', label: 'Blütenpfad', x: 8.2, z: -10, color: 0xe9a7c3},
+  {level: 'kart', label: 'Sternenrennen', x: 11.5, z: -4, color: 0xbbafe4},
 ]);
 
 export const HUB_STONE_RADIUS = 1.05;

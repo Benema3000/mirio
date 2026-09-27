@@ -11,6 +11,7 @@ import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBound
 const UP = new THREE.Vector3(0, 1, 0), FORWARD = new THREE.Vector3(0, 0, -1);
 const CREAM = 0xfff0ce, LEAF = 0x8bc8a2, GOLD = 0xf5c864, INK = 0x435a65;
 const PHYSICS_STEP = 1 / 120, MAX_FRAME = .05;
+const PORTRAIT_DISTANCE = 42;
 const NOTE_COLORS = [0xef9ead, 0x9ccfa5, 0x91cbdc];
 const groundY = (x, z) => Math.sqrt(Math.max(0, HUB.radius ** 2 - x * x - z * z)) - HUB.radius;
 const point = (x, z, height = 0) => new THREE.Vector3(x, groundY(x, z) + height, z);
@@ -158,6 +159,14 @@ export class HubWorld {
       }
       parts.push(box(-2.65, .45, .2, 1.1, .35, .9, NOTE_COLORS[0]), box(2.65, .45, .2, 1.1, .35, .9, NOTE_COLORS[2]));
     }
+    if (spec.level === 'tilt') {
+      // An open bubble rim keeps the seesaw readable through the landmark.
+      parts.push(paint(new THREE.TorusGeometry(.92, .12, 7, 28).translate(.15, 4.7, .25), spec.color));
+      parts.push(paint(new THREE.TorusGeometry(.78, .065, 6, 18, Math.PI * .65).rotateZ(.4).translate(.15, 4.7, .33), CREAM));
+      parts.push(paint(new THREE.BoxGeometry(2.5, .17, .35).rotateZ(.16).translate(0, 3.8, .25), 0xe9a7c3));
+      parts.push(paint(new THREE.ConeGeometry(.3, .5, 3).translate(0, 3.5, .25), GOLD));
+      parts.push(ball(-.3, 5.1, .38, .13, .2, .07, CREAM), ball(2.5, 1.25, .1, .42, .42, .42, spec.color));
+    }
     if (spec.level === 'adventure') {
       const rocket = buildRocket(art); rocket.group.scale.setScalar(.28); rocket.group.position.set(-2.8, .05, .3); rocket.flame.visible = false;
       group.add(rocket.group);
@@ -206,6 +215,12 @@ export class HubWorld {
         const x = (i - 1) * .53, y = .55 + i * .22;
         parts.push(ball(x, y, 0, .24, .17, .14, color), rod(x + .18, y + .45, 0, .045, .9, color));
       }
+    }
+    if (spec.level === 'tilt') {
+      parts.push(paint(new THREE.TorusGeometry(.58, .075, 6, 24).translate(.18, 1.55, 0), spec.color));
+      parts.push(paint(new THREE.TorusGeometry(.46, .045, 5, 12, Math.PI * .7).rotateZ(.4).translate(.18, 1.55, .05), CREAM));
+      parts.push(paint(new THREE.BoxGeometry(1.6, .12, .25).rotateZ(.16).translate(0, .8, 0), 0xe9a7c3));
+      parts.push(paint(new THREE.ConeGeometry(.22, .4, 3).translate(0, .55, 0), GOLD));
     }
     const toy = merge(parts, material); group.add(toy);
     const sign = label('↻ ♪', '#967c45', 256); sign.position.set(0, 2.65, 0); sign.scale.set(1.6, .65, 1); group.add(sign);
@@ -260,7 +275,7 @@ export class HubWorld {
 
   #prepareCamera(camera) {
     if (!this.#rig) this.#rig = new CameraRig(camera, [this.#planet]);
-    this.#rig.distance = camera.aspect < 1 ? 40 : 24;
+    this.#rig.distance = camera.aspect < 1 ? PORTRAIT_DISTANCE : 24;
     if (!this.#snapCamera) return;
     this.#rig.pitch = .68; this.#rig.snap(this.#player, this.#facing); this.#snapCamera = false;
   }

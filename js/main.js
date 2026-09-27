@@ -14,6 +14,7 @@ import { Biplane, chooseBiplaneHome } from './biplane.js';
 import { SkyFlight } from './sky-flight.js';
 import { RibbonRun } from './ribbon-run.js';
 import { MarbleRun } from './marble-run.js';
+import { TiltRun } from './tilt-run.js';
 import { CHAPTERS, medalFor, MEDALS } from './chapters.js';
 import { MenuNavigation } from './menu-navigation.js';
 import { formatRunTime, readPersonalBest, savePersonalBest } from './time-records.js';
@@ -42,8 +43,9 @@ const MAX_FRAME = 1 / 15;
 const TEST_MODE = new URLSearchParams(location.search).has('test');
 // Focused level suites keep their old navigation fixture; real play starts in the hub.
 const TEST_MENU = TEST_MODE && new URLSearchParams(location.search).has('menu');
-const CHAPTER_TYPES = Object.freeze({sky: SkyFlight, ribbon: RibbonRun, marble: MarbleRun});
-const CHAPTER_MODE_CLASSES = Object.keys(CHAPTER_TYPES).map(id => `chapter-${id}`);
+const CHAPTER_TYPES = Object.freeze({sky: SkyFlight, ribbon: RibbonRun, marble: MarbleRun, tilt: TiltRun});
+const SINGLE_ACTION_CLASS = 'chapter-single-action';
+const CHAPTER_MODE_CLASSES = [...Object.keys(CHAPTER_TYPES).map(id => `chapter-${id}`), SINGLE_ACTION_CLASS];
 
 const BIT_RADIUS = 1.3;
 const FLAG_RADIUS = 2.4;
@@ -480,6 +482,7 @@ async function main() {
       const run = chapterGame.snapshot();
       $('hearts').hidden = true;
       $('bits').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} / ${run.totalDeliveries}`
+        : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} / ${run.totalCheckpoints}`
         : selectedLevel === 'marble' ? `♪ ${run.notes} / ${run.totalNotes}` : `✧ ${run.seeds} / ${run.totalSeeds}`;
       for (const id of ['ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud']) $(id).hidden = true;
       $('chapter-hud').hidden = state !== 'chapter';
@@ -490,21 +493,24 @@ async function main() {
       const cooldown = run.cooldown ?? 0;
       const touchKeys = document.body.classList.contains('touch');
       const actionKey = input.gamepadConnected ? 'X' : touchKeys ? CHAPTERS[selectedLevel].actionIcon : 'Shift';
-      const jumpKey = input.gamepadConnected ? 'A' : touchKeys ? '↻' : 'Leertaste';
+      const jumpKey = input.gamepadConnected ? 'A' : touchKeys ? CHAPTERS[selectedLevel].jumpIcon : 'Leertaste';
       let ability = run.actionHint ? `${actionKey} ${run.actionHint.replace('↻ ', '')}` : `${actionKey}: Luftwirbel`;
       if (selectedLevel === 'sky') {
         ability = run.parcelInFlight ? '✉ Unterwegs …' : run.deliveryTarget ? `${run.deliveryTarget.icon} → ${run.deliveryTarget.ready ? `${actionKey}: werfen` : 'Zum Korb'}`
           : run.chimeNear ? `♪ ${jumpKey}: Rolle` : run.boost > 0 ? '✦ Rückenwind!'
           : cooldown > 0 ? `✦ ${Math.ceil(cooldown)} s · ${jumpKey}: Rolle` : `${actionKey}: Turbo · ${jumpKey}: Rolle`;
       } else if (selectedLevel === 'marble') {
-        const brakeKey = input.gamepadConnected ? 'A' : touchKeys ? '◎' : 'Leertaste';
-        ability = run.notesNear && !run.noteReady ? `${brakeKey} halten: bremsen`
-          : run.noteReady ? `${actionKey}: Glocke wecken` : `${brakeKey}: Bremse · ${actionKey}: Klangstoss`;
+        ability = run.notesNear && !run.noteReady ? `${jumpKey} halten: bremsen`
+          : run.noteReady ? `${actionKey}: Glocke wecken` : `${jumpKey}: Bremse · ${actionKey}: Klangstoss`;
+      } else if (selectedLevel === 'tilt') {
+        ability = run.basinNear && !run.bridgeOpen ? `${jumpKey} halten: Schaumsteg ${Math.round(run.bridgeCharge * 100)}%`
+          : `${jumpKey} halten: bremsen`;
       }
       $('chapter-ability').textContent = chapterCountdown > 0 ? 'Bereit?' : ability;
       $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? (run.deliveryTarget ? 'Paket werfen' : 'Turbo') : (run.actionHint || CHAPTERS[selectedLevel].actionLabel));
       $('chapter').textContent = CHAPTERS[selectedLevel].eyebrow;
       $('objective').textContent = selectedLevel === 'sky' ? '✉ Folge den Paketzeichen'
+        : selectedLevel === 'tilt' ? `${run.zoneName} · ${run.checkpoint === run.totalCheckpoints ? '⚑ Zum Handtuch' : '⚑ Zur nächsten Insel'}`
         : selectedLevel === 'marble' ? `${run.roomName} · ${run.finishReady ? '♪ Zur Trommel · bremsen' : '♪ Glocken wecken'}`
         : `${run.roomName} · ${run.hint || (run.gateOpen ? '✿ ↑ Blütenhof' : '✧ Laternensamen finden')}`;
       return;
@@ -899,12 +905,14 @@ async function main() {
       short: 'Sternenhof', description: 'Laufe in ein Tor. Deine Reisen lassen den Sternenhof wachsen.',
       keys: 'WASD / Pfeile laufen · Leertaste springen · Shift drehen · C stampfen',
       touch: 'Links laufen · ↑ springen · ⟳ drehen · ⤓ stampfen',
+      controller: 'Linker Stick laufen · A springen · X drehen · B stampfen',
     } : Object.hasOwn(CHAPTERS, id) ? CHAPTERS[id] : null;
     if (!chapter) return;
     $('help-title').textContent = `Hilfe · ${chapter.short}`;
     $('chapter-description').textContent = chapter.description;
     $('chapter-keys').textContent = `${chapter.keys} · Esc: Pause`;
     $('chapter-touch').textContent = chapter.touch;
+    $('chapter-controller').textContent = `Controller: ${chapter.controller} · Start: Pause`;
     for (const button of document.querySelectorAll('[data-help-level]')) button.setAttribute('aria-pressed', String(button.dataset.helpLevel === id));
   }
 
@@ -1034,8 +1042,10 @@ async function main() {
     hint('', 0);
     const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
     $('win-eyebrow').textContent = `${chapter.short.toUpperCase()} GESCHAFFT`;
-    $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Die Trommel singt!' : 'Der Blütenhof leuchtet!';
+    $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Die Trommel singt!'
+      : selectedLevel === 'tilt' ? 'Weich gelandet!' : 'Der Blütenhof leuchtet!';
     $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ♪ ${run.chimes} Glocken · ◇ ${run.collectibles} Ringe`
+      : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} Inseln · ↗ ${run.shortcuts} Abkürzungen · ↺ ${run.recoveries} Landungen`
       : selectedLevel === 'marble' ? `♪ ${run.notes} Töne · ${run.bankTrips} Klangkurven · ${run.bumps} Kissenhüpfer`
       : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
     $('win-extra').textContent = selectedLevel === 'sky' && run.choir ? 'Der Wolkenwal singt für dich!' : 'Welchen Weg nimmst du nächstes Mal?';
@@ -1048,13 +1058,14 @@ async function main() {
 
   function handleChapterEvents(events) {
     for (const event of events ?? []) {
-      if (event.type !== 'finish') sound.play(({note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
+      if (event.type !== 'finish') sound.play(({foam: 'spring', note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
       if (event.penalty > 0) hint(`${event.id?.startsWith('sky-balloon-') ? 'Ballon berührt' : 'Zurück am Checkpoint'} · +${event.penalty} s. Weiter geht’s!`, 4);
       else if (event.type === 'delivery') { toast(`✉ ${event.deliveries} / ${chapterGame.snapshot().totalDeliveries}`); hint(({garden: 'Blumenwind!', bakery: 'Warmer Rückenwind!', kite: 'Drachen voraus!'})[event.id] ?? 'Post ist da!', 4); }
       else if (event.type === 'parcel-return') hint('Der Vogel bringt dein Paket zurück.', 4);
       else if (event.type === 'choir') hint('Der Wolkenwal singt mit!', 5);
       else if (event.type === 'arrival') toast('Willkommen bei der Wolkenpost!');
       else if (event.type === 'note') toast(`♪ ${event.notes} / ${chapterGame.snapshot().totalNotes}`);
+      else if (event.type === 'foam') hint('○ Der Schaumsteg ist bereit!', 5);
       else if (event.type === 'bit' && event.kind === 'seed') toast(`✧ ${event.seeds} / ${chapterGame.snapshot().totalSeeds}`);
       else if (event.type === 'spring' && event.kind === 'song') toast(event.dream === 'awake' ? '♪ ☀' : '♪ ☾');
       else if (event.type === 'checkpoint' && event.kind === 'gate') hint('✿ Zurück zum Blütenhof — hinauf!', 6);
@@ -1147,11 +1158,12 @@ async function main() {
       state = 'chapter';
       document.body.classList.add('chapter-mode', `chapter-${selectedLevel}`);
       const chapter = CHAPTERS[selectedLevel];
+      document.body.classList.toggle(SINGLE_ACTION_CLASS, !chapter.actionIcon);
       $('btn-jump').textContent = chapter.jumpIcon;
       $('btn-jump').setAttribute('aria-label', chapter.jumpLabel);
       $('btn-spin').textContent = chapter.actionIcon;
       $('btn-spin').setAttribute('aria-label', chapter.actionLabel);
-      $('chapter-guide').textContent = `${chapter.keys}. Controller: linker Stick, A und X. ${selectedLevel === 'sky' ? 'Ballons bremsen dich kurz: +2,5 Sekunden. Eine Rolle schützt dich.' : 'Eine weiche Landung bringt dich zum Checkpoint zurück: +2 Sekunden.'} Die Uhr pausiert mit dir.`;
+      $('chapter-guide').textContent = `${chapter.keys}. Controller: ${chapter.controller}. ${selectedLevel === 'sky' ? 'Ballons bremsen dich kurz: +2,5 Sekunden. Eine Rolle schützt dich.' : 'Eine weiche Landung bringt dich zum Checkpoint zurück: +2 Sekunden.'} Die Uhr pausiert mit dir.`;
       hint(document.body.classList.contains('touch') ? chapter.touch : chapter.keys, 12);
       chapterGame.render(camera, 0, {reducedMotion});
     } else {

@@ -3,7 +3,7 @@ import test from 'node:test';
 import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBoundary, hubSpawn, hubSouvenir, hubChorusReady, stepHubVisit} from '../js/hub-rules.js';
 
 test('all destinations are visible on a compact safe cap and central spawn cannot enter', () => {
-  assert.deepEqual(new Set(HUB_PORTALS.map(p => p.level)), new Set(['adventure', 'sky', 'marble', 'ribbon', 'kart']));
+  assert.deepEqual(new Set(HUB_PORTALS.map(p => p.level)), new Set(['adventure', 'sky', 'marble', 'tilt', 'ribbon', 'kart']));
   const visit = createHubVisit();
   for (const portal of HUB_PORTALS) assert.ok(Math.hypot(portal.x, portal.z) + HUB.portalReach < HUB.boundary);
   assert.deepEqual(stepHubVisit(visit, 5, {...HUB.spawn, grounded: true}), []);
@@ -38,10 +38,15 @@ test('souvenir interaction areas never overlap a portal entrance or the central 
     const souvenir = hubSouvenir(portal.level);
     for (const entrance of HUB_PORTALS) assert.ok(Math.hypot(souvenir.x - entrance.x, souvenir.z - entrance.z) > HUB.echoReach + HUB.portalReach);
     assert.ok(Math.hypot(souvenir.x - HUB.toy.x, souvenir.z - HUB.toy.z) > HUB.echoReach + HUB.toyReach);
+    for (const other of HUB_PORTALS) {
+      if (other.level === portal.level) continue;
+      const neighbor = hubSouvenir(other.level);
+      assert.ok(Math.hypot(souvenir.x - neighbor.x, souvenir.z - neighbor.z) > HUB.echoReach * 2, `${portal.level} and ${other.level} echoes overlap`);
+    }
   }
 });
 
-test('nearby signs name the closest portal in the five-way fan', () => {
+test('nearby signs name the closest portal in the fan', () => {
   const visit = createHubVisit();
   stepHubVisit(visit, .1, {x: -1, z: -11, height: 0, grounded: true});
   assert.equal(visit.near.level, 'marble');
@@ -106,5 +111,16 @@ test('optional stepping stones leave direct portal and return routes walkable', 
     const t = Math.max(0, Math.min(1, ((stone.x - from.x) * dx + (stone.z - from.z) * dz) / (dx * dx + dz * dz || 1)));
     const distance = Math.hypot(stone.x - from.x - t * dx, stone.z - from.z - t * dz);
     assert.ok(distance > clearance, `${JSON.stringify(from)} → ${to.level ?? 'flower'} crosses stone ${stone.x},${stone.z}`);
+  }
+});
+
+test('direct return routes cannot enter a different portal on the way', () => {
+  const starts = [HUB.spawn, ...HUB_PORTALS.map(p => hubSpawn(p.level))];
+  for (const from of starts) for (const to of HUB_PORTALS) for (const other of HUB_PORTALS) {
+    if (other === to) continue;
+    const dx = to.x - from.x, dz = to.z - from.z;
+    const t = Math.max(0, Math.min(1, ((other.x - from.x) * dx + (other.z - from.z) * dz) / (dx * dx + dz * dz)));
+    const distance = Math.hypot(other.x - from.x - t * dx, other.z - from.z - t * dz);
+    assert.ok(distance > HUB.portalReach, `route to ${to.level} enters ${other.level}`);
   }
 });

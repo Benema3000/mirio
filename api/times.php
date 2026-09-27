@@ -1,5 +1,5 @@
 <?php
-// GET ?level=adventure|sky|ribbon|kart|marble -> {ok, level, top, token}
+// GET ?level=adventure|sky|ribbon|kart|marble|tilt -> {ok, level, top, token}
 // POST {level, token, name, timeMs} -> {ok, level, timeMs, rank, top}
 require __DIR__ . '/times.inc';
 

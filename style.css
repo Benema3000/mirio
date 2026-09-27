@@ -631,6 +631,10 @@ body.flying #toast { top: max(130px, 18%); }
 .marble-preview::before { width: 30%; aspect-ratio: 1; top: 12%; left: 34%; }
 .marble-preview::after { width: 13%; aspect-ratio: 1; top: 48%; left: 17%; background: radial-gradient(circle at 30% 25%,#e8fff7,#7cd2cb 55%,#438997); }
 .marble-preview i { position: absolute; width: 70%; height: 17%; left: 15%; top: 47%; border: 3px solid #fff0b7aa; border-radius: 50%; transform: rotate(-19deg); }
+.tilt-preview { position: absolute; z-index: -2; inset: 0; background: radial-gradient(circle at 80% 24%,#f5c6d960 0 10%,transparent 11%),radial-gradient(circle at 18% 46%,#c1ede94a 0 8%,transparent 9%),linear-gradient(145deg,#729aa7,#34537b); }
+.tilt-preview::before { content: ''; position: absolute; width: 75%; height: 13%; left: 12%; top: 51%; border: 3px solid #c5ede1; border-radius: 50%; background: #86baa6; box-shadow: 0 8px 0 #467c73; transform: rotate(-12deg); }
+.tilt-preview::after { content: ''; position: absolute; width: 33%; aspect-ratio: 1; left: 33%; top: 13%; border: 2px solid #edfffccc; border-radius: 50%; background: radial-gradient(circle at 29% 22%,#fff 0 4%,#d1f9fc30 11% 52%,#f3c9df90 82%); box-shadow: inset -5px -4px 9px #aff4ec88,0 7px 14px #16365533; }
+.tilt-preview i { position: absolute; z-index: 1; width: 33%; left: 33%; top: 18%; color: #fff0a7; text-align: center; font-size: clamp(26px,4vw,42px); font-style: normal; text-shadow: 0 2px 8px #fff5a4; }
 .chapter-card:hover { transform: translateY(-4px); }
 .chapter-card.selected { transform: translateY(-6px); border: 3px solid #ffe29e; box-shadow: 0 0 0 4px #ffe29e1c,0 14px 30px #0006; }
 .chapter-card strong { font-size: clamp(15px,1.9vw,22px); letter-spacing: -.025em; text-shadow: 0 2px 5px #0009; }
@@ -676,6 +680,7 @@ body.chapter-mode #journey .compass, body.chapter-mode #btn-pound { display: non
 body.chapter-mode .field-guide, body.chapter-mode .move-guide, body.chapter-mode .trail-tip, body.chapter-mode .plane-guide { display: none; }
 body.chapter-mode #toast { top: max(130px,22%); }
 body.chapter-mode #btn-spin { color: #ffe2a0; }
+body.chapter-single-action #btn-spin { display: none; }
 body.chapter-mode #hint { max-width: min(78vw,600px); }
 body.paused #chapter-hud { display: none; }
 @media (max-width: 700px) {

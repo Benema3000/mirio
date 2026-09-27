@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {CHAPTERS} from '../js/chapters.js';
 
-const TIMEOUT = 120000;
+const TIMEOUT = Number(process.env.TIMEOUT_MS ?? 120000);
+assert.ok(Number.isFinite(TIMEOUT) && TIMEOUT > 0, 'TIMEOUT_MS must be positive');
+const levelIds = process.env.LEVELS === undefined ? Object.keys(CHAPTERS) : [...new Set(process.env.LEVELS.split(',').map(id => id.trim()))];
+assert.ok(levelIds.length && levelIds.every(id => Object.hasOwn(CHAPTERS, id)), 'LEVELS must name existing journeys');
 const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.186.0/';
 const browserName = process.env.BROWSER ?? 'chromium';
 const playwright = await import(process.env.PLAYWRIGHT ?? 'playwright');
@@ -45,7 +48,8 @@ try {
   await page.click('#start'); await wait(() => window.__mirio.snapshot().state === 'hub');
   console.log(`ok ${browserName}: normal title → hub`);
 
-  for (const [id, chapter] of Object.entries(CHAPTERS)) {
+  for (const id of levelIds) {
+    const chapter = CHAPTERS[id];
     await page.click('#pause-button'); await page.click('#pause-quick');
     await page.click(`[data-level="${id}"]`);
     const expectedState = id === 'adventure' ? 'play' : id === 'kart' ? 'race' : 'chapter';
@@ -89,7 +93,7 @@ try {
     console.log(`ok ${browserName}: ${id} movement, pause, hub return`);
   }
   assert.deepEqual(errors, []);
-  console.log(`PASS ${browserName}: ${Object.keys(CHAPTERS).length} journeys, no runtime errors`);
+  console.log(`PASS ${browserName}: ${levelIds.join(', ')}, no runtime errors`);
 } catch (error) {
   console.error('Browser smoke failure:', error.message);
   console.error('Runtime errors:', errors);

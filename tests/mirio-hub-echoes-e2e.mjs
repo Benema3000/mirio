@@ -69,12 +69,12 @@ async function walk(page, target, arrival = 'stop') {
 
 try {
   const context = await browser.newContext({viewport: {width: 1100, height: 760}});
-  const page = await open(context, ['sky', 'ribbon']);
+  const page = await open(context, ['sky', 'tilt']);
   const layout = await page.evaluate(() => window.__mirio.layout().hub);
   assert.equal(layout.portals.length, HUB_PORTALS.length);
   assert.deepEqual((await snapshot(page)).hub.echoes, []);
-  await page.screenshot({path: '/tmp/hub-five-desktop.png'});
-  for (const level of ['sky', 'ribbon']) {
+  await page.screenshot({path: '/tmp/hub-six-desktop.png'});
+  for (const level of ['sky', 'tilt']) {
     await walk(page, layout.souvenirs.find(s => s.level === level).pos);
     assert.equal((await snapshot(page)).hub.actionHint, '↻ ♪ Echo wecken');
     await page.keyboard.press('ShiftLeft');
@@ -92,7 +92,7 @@ try {
   assert.equal((await snapshot(page)).state, 'hub');
   assert.equal((await snapshot(page)).time, 0, 'hub discoveries never start the run clock');
   const bests = await page.evaluate(prefix => Object.fromEntries(Object.keys(localStorage).filter(k => k.startsWith(prefix)).map(k => [k.slice(prefix.length), localStorage.getItem(k)])), PERSONAL_BEST_PREFIX);
-  assert.deepEqual(bests, {sky: '60000', ribbon: '60000'});
+  assert.deepEqual(bests, {sky: '60000', tilt: '60000'});
   console.log('PASS ordinary keyboard souvenir loop, flower chorus, expiry, and unchanged records', (await snapshot(page)).rendering);
   await walk(page, layout.portals.find(p => p.level === 'marble').pos, 'enter');
   assert.equal((await snapshot(page)).selectedLevel, 'marble');
@@ -102,7 +102,7 @@ try {
   const phone = await browser.newContext({viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true, reducedMotion: 'reduce'});
   const phonePage = await open(phone, HUB_PORTALS.map(p => p.level));
   await gameTime(phonePage, .2);
-  await phonePage.screenshot({path: '/tmp/hub-five-phone.png'});
+  await phonePage.screenshot({path: '/tmp/hub-six-phone.png'});
   assert.equal((await snapshot(phonePage)).hub.echoTotal, HUB_PORTALS.length);
   for (const id of ['#btn-spin', '#btn-jump', '#btn-pound']) {
     const b = await phonePage.locator(id).boundingBox();

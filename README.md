@@ -85,6 +85,7 @@ Pause provides help and separate time boards without leaving the current run.
 | **Wolkenpost** | Three parcel deliveries, upper currents, windmills, cloud arches and a singing cloud whale | WASD/arrows/stick steer; Space/A roll; Shift/X toss near baskets, turbo elsewhere |
 | **Blütenpfad** | Connected courtyard, orchard, musical conservatory and cellar; three lantern seeds open the final ascent | A/D or ←/→/stick move; Space/A jump; Shift/X air spin, song or door |
 | **Klangkugel** | A rolling musical bubble, pudding floors, bumpers and a raised shortcut; carry three bell notes home to the drum | WASD/arrows/stick roll; hold Space/A/◎ to brake; Shift/X/♪ rings nearby bells |
+| **Seifenstern** | Tilt floating paths beneath a soap bubble; balance over rainbow ribbons, inflate a foam bridge and reach the towel | WASD/arrows/stick tilt; hold Space/A/◎ to level and brake, or inflate the marked soap basin |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
 keyboard/controller/touch controls and no game-over screen. Recovery adds a
@@ -124,6 +125,11 @@ are documented in `assets/README.md`.
   bumpers announce their bounce and gutters return you to a safe checkpoint.
   Collected notes orbit Mirio and survive falls. Follow the gold return arrows
   and settle on the starting drum to play your tune.
+- **Seifenstern:** tilt drives gravity and momentum. Broad bends reconnect with
+  narrow banked ribbons at safe checkpoint islands. Stop on the soap basin and
+  hold the brake to inflate a lasting foam bridge; the broad route stays open.
+  Falls return Mirio to the latest island and keep the bridge inflated. The
+  camera stays upright; reduced motion calms the board's visible tilt.
 
 All scenery is procedural. Original drawings, derived models and floor textures
 are unchanged. Public and device records use **playground-v2**; older records
@@ -238,6 +244,7 @@ three.js and loads `js/main.js`.
 | `js/sky-flight.js`, `js/sky-flight-rules.js` | Wolkenpost scene and deterministic flight course rules |
 | `js/ribbon-run.js`, `js/ribbon-rules.js` | Blütenpfad diorama and deterministic side-scroll physics |
 | `js/marble-run.js`, `js/marble-rules.js` | Klangkugel scene, rolling physics and musical circuit |
+| `js/tilt-run.js`, `js/tilt-rules.js`, `js/tilt-course.js` | Seifenstern scene, tilt physics and shared branching course |
 | `js/menu-navigation.js` | Controller focus, dialogs and settings navigation |
 | `api/times.php`, `api/times.inc` | Separate public time boards for every level |
 | `js/biplane.js`, `js/biplane-physics.js`, `js/biplane-model.js` | Boarding and safe landing; bounded spherical flight; the original Wiesensummer model |
@@ -380,6 +387,8 @@ The playground update adds:
   wake their echoes and return to the flower for the chorus.
 - `tests/mirio-marble-e2e.mjs`: full keyboard bell circuit, raised bank,
   recovery, controller, touch and held-brake replay regression.
+- `tests/mirio-tilt-e2e.mjs`: balance-course routes, foam bridge, recovery,
+  controller, touch, pause, replay and reduced motion.
 - `tests/mirio-menu-e2e.mjs`: controller settings, independent help/time tabs
   and phone dialogs through normal hub navigation.
 - `tests/mirio-browser-smoke-e2e.mjs`: every mode through normal navigation,
@@ -406,6 +415,8 @@ The playground update adds:
 Browser suites accept `PLAYWRIGHT` and `BASE_URL`; new suites also accept
 `CHROMIUM` for an explicit Chromium executable. Full keyboard runs use normal
 input; the kart geometry suite also advances production physics directly.
+The cross-browser smoke accepts `LEVELS=tilt` for a focused run and
+`TIMEOUT_MS` for slower software renderers.
 
 ## Running it
 
