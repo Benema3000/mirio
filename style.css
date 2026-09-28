@@ -728,6 +728,10 @@ body.chapter-marble #toast.big { font-size: 24px; }
   body.chapter-marble #chapter-hud { top: 70px; padding: 7px 12px; }
   body.chapter-marble #toast { top: 150px; font-size: 13px; }
 }
+@media (max-height: 560px) and (orientation: landscape) {
+  body.chapter-marble #chapter-hud { top: 86px; left: 18px; width: min(200px, 23vw); transform: none; }
+  body.chapter-marble #toast { top: 178px; left: 18px; max-width: 23vw; transform: none; }
+}
 @media (orientation: portrait) {
   body.touch #discovery-action { bottom: 190px; max-width: calc(100% - 30px); white-space: nowrap; }
   body.touch #bonus-hud { top: 74px; max-width: 190px; font-size: 11px; }
