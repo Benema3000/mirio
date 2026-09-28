@@ -24,6 +24,8 @@ const HEAD = { y: 0.22, rx: 0.42, ry: 0.37, rz: 0.37 };
 const SHOULDER = { x: 0.27, y: 1.14 };
 const HIP = { x: 0.15, y: 0.58 };
 const ARM_LENGTH = 0.44;
+// The elbow, below the shoulder; the sleeve bends here.
+const ELBOW_Y = -0.2;
 // Out from hanging straight down: ~57 deg like the drawing, and up in a V.
 const ARM_REST = 1.0;
 const ARM_RAISED = 2.45;
@@ -261,14 +263,23 @@ function fingerFan(side, palmY) {
   }));
 }
 
+/**
+ * The sleeve in two: upper arm and forearm, whose round ends overlap at the
+ * elbow, so a straight arm looks like the one sleeve it always was. The palm
+ * and the fingers turn together at the wrist. Returns the joints to animate.
+ */
 function buildArm(limb, side, mats) {
-  const sleeve = new THREE.CapsuleGeometry(0.078, 0.3, 4, 10).translate(0, -0.19, 0);
-  limb.add(mesh(sleeve, mats.sleeve, mats.thin));
-  const palmY = -ARM_LENGTH;
-  const palm = mesh(ellipsoid(0.07, 0.06, 0.055, 10, 8), mats.shoe, mats.thin);
-  palm.position.y = palmY;
-  limb.add(palm);
-  limb.add(new THREE.Mesh(fingerFan(side, palmY), mats.finger));
+  limb.add(mesh(new THREE.CapsuleGeometry(0.078, 0.16, 4, 10).translate(0, -0.12, 0), mats.sleeve, mats.thin));
+  const elbow = new THREE.Group();
+  elbow.position.y = ELBOW_Y;
+  limb.add(elbow);
+  elbow.add(mesh(new THREE.CapsuleGeometry(0.078, 0.14, 4, 10).translate(0, -0.07, 0), mats.sleeve, mats.thin));
+  const hand = new THREE.Group();
+  hand.position.y = -ARM_LENGTH - ELBOW_Y;
+  elbow.add(hand);
+  hand.add(mesh(ellipsoid(0.07, 0.06, 0.055, 10, 8), mats.shoe, mats.thin));
+  hand.add(new THREE.Mesh(fingerFan(side, 0), mats.finger));
+  return { elbow, hand };
 }
 
 function buildLeg(limb, mats) {
@@ -388,12 +399,16 @@ export function buildMirio(art) {
   buildHead(head, img, tex, mats);
 
   const arms = {};
+  const elbows = {};
+  const hands = {};
   const legs = {};
   for (const [key, side] of [['L', 1], ['R', -1]]) {
     const arm = joint(body, SHOULDER.x * side, SHOULDER.y);
-    buildArm(arm.limb, side, mats);
+    const { elbow, hand } = buildArm(arm.limb, side, mats);
     arm.pivot.rotation.z = -ARM_REST * side;
     arms[key] = arm.pivot;
+    elbows[key] = elbow;
+    hands[key] = hand;
 
     const leg = joint(body, HIP.x * side, HIP.y);
     buildLeg(leg.limb, mats);
@@ -411,6 +426,11 @@ export function buildMirio(art) {
     legR: legs.R,
     armL: arms.L,
     armR: arms.R,
+    // Bent forward with a negative rotation.x, like a real elbow and wrist.
+    elbowL: elbows.L,
+    elbowR: elbows.R,
+    handL: hands.L,
+    handR: hands.R,
     // The joints are mirrored (see joint()), so Mirio's left arm goes out and
     // up with a negative rotation.z.
     armRestZ: { L: -ARM_REST, R: ARM_REST },

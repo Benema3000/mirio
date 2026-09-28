@@ -173,7 +173,7 @@ try {
 
   const mobile=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,isMobile:true,hasTouch:true});
   const phone=await load(mobile);await phone.tap('#start');await until(phone,()=>window.__mirio.snapshot().state==='hub');
-  assert.ok(await phone.locator('#btn-pound').isVisible(),'touch must expose the flower spring action');
+  assert.ok(await phone.locator('#btn-pound').isVisible(),'touch keeps the ground-pound button');
   const client=await mobile.newCDPSession(phone),stick={x:72,y:730};
   const initial=await snapshot(phone);
   await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...stick,id:1}]});
@@ -183,7 +183,7 @@ try {
   await phone.tap('#btn-jump');await until(phone,()=>!window.__mirio.snapshot().hub.grounded);
   await phone.tap('#pause-button');await until(phone,()=>window.__mirio.snapshot().paused);
   await phone.tap('#resume');await until(phone,()=>!window.__mirio.snapshot().paused);
-  for(const selector of ['#journey','#btn-jump','#btn-spin','#pause-button']) {
+  for(const selector of ['#btn-jump','#btn-spin','#pause-button']) {
     const box=await phone.locator(selector).boundingBox();
     assert.ok(box&&box.x>=0&&box.x+box.width<=390&&box.y>=0&&box.y+box.height<=844,`${selector} leaves phone viewport`);
   }

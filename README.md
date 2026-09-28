@@ -66,18 +66,18 @@ round with the kart and widens when it goes fast.
 ## Adventures from Sternenhof
 
 The start screen (Miro's drawing, the logo and the top 5 of the Planetenreise
-list) opens into **Sternenhof**, a playable garden hub: six landmark portals
-stand in a ring round the central flower, Planetenreise straight ahead and
-its neighbours to either side, the others a turn away. The camera stays
-inside the ring, and the portal you stand at shows its name large at the
-bottom. Walk into a portal to start an adventure. Every level is
-available immediately; pause and results return to the hub, while replay
-restarts the same level. Completed adventures light their portal medals.
-The hub has no timer or score. Help, time boards and an optional quick selector
-open on demand. Spin at its musical flower to summon birds, or ground-pound
-for a spring jump; the soft garden rim keeps practice safe.
-Completed worlds leave musical souvenirs. Spin beside them to wake their
-echoes; collect at least two, then spin at the central flower for a bird chorus.
+list) opens into **Sternenhof**, a little home planet under a starry sky
+(`js/hub-world.js`, rules in `js/hub-rules.js`). Mirio runs round it exactly as
+on the Planetenreise's planets. Six launch pads are scattered over it, each
+with its journey's name floating above it and a beam of light up to that
+journey's planet: a meadow planet with Miro's rocket, a planet with a
+checkered race ring, a cloud planet with a letter, a flower planet, a golden
+planet with notes, a star in a soap bubble. Step onto a pad and Mirio is flung
+up the beam into the journey; the pad you stand at also shows its name large
+at the bottom. Coming back, Mirio lands beside the pad he left from, and that
+pad waits until he steps away. Completed journeys get a gold star by their
+name. Every journey is open from the start; pause and results return to the
+Sternenhof, replay restarts the same journey. No timer and no score here.
 Pause provides help and separate time boards without leaving the current run.
 
 | Level | What you play | Main controls |
@@ -381,12 +381,11 @@ chapterSeek). It is absent without the parameter. Focused level suites use
 
 The playground update adds:
 
-- `tests/mirio-hub-e2e.mjs`: normal start, portal travel, returns, replay,
+- `tests/mirio-hub-e2e.mjs`: normal start, pad launches, returns, replay,
   completion markers and keyboard/controller/touch hub controls.
-- `tests/mirio-hub-toys-e2e.mjs`: walk, spin and ground-pound at the hub flower;
-  verify its spring and the garden's safe boundary.
-- `tests/mirio-hub-echoes-e2e.mjs`: walk between completed-world souvenirs,
-  wake their echoes and return to the flower for the chorus.
+- `tests/mirio-hub.test.mjs` (unit): six pads kept apart, a short run from the
+  spawn, the right name shown, a launch only from standing on a pad, and the
+  return spot beside the pad that waits.
 - `tests/mirio-marble-e2e.mjs`: full keyboard bell circuit, raised bank,
   recovery, controller, touch and held-brake replay regression.
 - `tests/mirio-tilt-e2e.mjs`: balance-course routes, foam bridge, recovery,

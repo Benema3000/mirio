@@ -29,6 +29,9 @@ const STUN_TIME = 0.4;
 export const MAX_HEARTS = 3;
 // Height of Mirio's middle above his feet, the somersault's pivot.
 const MIDDLE = 1.1;
+// Relaxed elbows and wrists, standing (radians of forward bend).
+const ELBOW_REST = 0.14;
+const WRIST_REST = 0.12;
 
 const Y = new THREE.Vector3(0, 1, 0);
 const tmp = new THREE.Vector3();
@@ -94,7 +97,7 @@ export class Player {
     this.squash = 0;
     this.walkPhase = 0;
     this.winT = 0;
-    this.limbs = { legs: 0, arms: 0, raise: 0, lean: 0 };
+    this.limbs = { legs: 0, arms: 0, raise: 0, lean: 0, elbow: ELBOW_REST, wrist: WRIST_REST };
     this.model.group.visible = true;
   }
 
@@ -379,39 +382,65 @@ export class Player {
     const swing = Math.sin(this.walkPhase);
 
     // Limb targets: walking swings, jumping lifts the arms, skidding leans
-    // back, the ground pound tucks in, winning cheers.
-    let legs = swing * 0.75 * run;
-    let arms = -swing * 0.6 * run;
+    // back, the ground pound tucks in, winning cheers. The arms swing against
+    // the legs, wider the faster Mirio goes; the elbows bend a little walking
+    // and a lot running; running leans him forward.
+    const idle = body.onGround && !walking ? Math.sin(performance.now() * 0.0021) : 0;
+    // A walk already swings clearly; the gait fades in over the first steps.
+    const gait = Math.min(1, run * 3);
+    let legs = swing * (0.35 + 0.45 * run) * gait;
+    let arms = -swing * (0.3 + 0.6 * run) * gait + idle * 0.05;
+    let elbow = ELBOW_REST + 0.7 * run;
+    let wrist = WRIST_REST + 0.15 * run;
     let raise = 0;
-    let lean = 0;
+    let lean = 0.13 * run;
     if (!body.onGround && this.state === 'play') {
       legs = 0.5;
       arms = -0.3;
       raise = body.vel.dot(body.up) > 0 ? 0.75 : 0.35;
+      // Arms stretched up, fingers spread, in the air.
+      elbow = 0.1;
+      wrist = -0.2;
+      lean = 0;
     }
     if (body.skidding) {
       legs = 0.6;
       arms = 0.4;
       raise = 0.3;
       lean = -0.35;
+      elbow = 0.2;
+      wrist = -0.4;
     }
     if (this.pound) {
       legs = 1.1;
       arms = 0.2;
       raise = 0.9;
+      elbow = 1.1;
+      wrist = 0.4;
     }
-    if (this.state === 'win') raise = 1;
+    if (this.state === 'win') {
+      raise = 1;
+      elbow = 0.15;
+      wrist = -0.5;
+    }
     const L = this.limbs;
     L.legs = damp(L.legs, legs, 18, dt);
     L.arms = damp(L.arms, arms, 18, dt);
     L.raise = damp(L.raise, raise, 12, dt);
     L.lean = damp(L.lean, lean, 14, dt);
+    L.elbow = damp(L.elbow, elbow, 14, dt);
+    L.wrist = damp(L.wrist, wrist, 14, dt);
     m.legL.rotation.x = L.legs;
     m.legR.rotation.x = body.onGround || this.pound ? (this.pound ? L.legs : -L.legs) : -0.3;
-    m.armL.rotation.x = L.arms;
-    m.armR.rotation.x = -L.arms;
-    m.armL.rotation.z = lerp(m.armRestZ.L, m.armRaisedZ.L, L.raise);
-    m.armR.rotation.z = lerp(m.armRestZ.R, m.armRaisedZ.R, L.raise);
+    const out = Math.abs(swing) * 0.08 * run;
+    for (const [side, arm, elbowJoint, hand] of [[1, m.armL, m.elbowL, m.handL], [-1, m.armR, m.elbowR, m.handR]]) {
+      const angle = side * L.arms;
+      arm.rotation.x = angle;
+      arm.rotation.z = lerp(side > 0 ? m.armRestZ.L : m.armRestZ.R, side > 0 ? m.armRaisedZ.L : m.armRaisedZ.R, L.raise) - side * out;
+      // The elbow bends more on the forward swing; the hand trails the swing.
+      elbowJoint.rotation.x = -L.elbow * (1 + 0.4 * Math.max(0, angle));
+      hand.rotation.x = -L.wrist + angle * 0.35 * run;
+    }
 
     this.squash *= Math.exp(-9 * dt);
     const breathe = walking || !body.onGround ? 0 : Math.sin(performance.now() * 0.003) * 0.012;
@@ -429,7 +458,9 @@ export class Player {
     m.body.rotation.x = somersault;
     m.body.position.y += MIDDLE * (1 - Math.cos(somersault));
     m.body.position.z = -MIDDLE * Math.sin(somersault);
-    m.head.rotation.z = Math.sin(this.walkPhase * 0.5) * 0.06 * run;
+    // A little sway from side to side at speed; the head stays level.
+    m.body.rotation.z = swing * 0.05 * run;
+    m.head.rotation.z = -m.body.rotation.z * 0.8 + Math.sin(this.walkPhase * 0.5) * 0.03 * run;
     if (this.state === 'win') m.body.position.y = Math.abs(Math.sin(this.winT * 5)) * 0.8;
     if (this.state === 'splash') m.body.position.y = -2.2 * Math.min(1, this.splashT / 0.6);
 

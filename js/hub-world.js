@@ -1,22 +1,26 @@
-// Sternenhof reuses adventure movement. Only its destinations and safe boundary are new.
+// Sternenhof: a little home planet under a starry sky. Six pads, each with a
+// beam of light up to its journey's planet; step onto one and Mirio is flung
+// up the beam. Mirio moves exactly as in the Planetenreise (player.js, round
+// gravity); the rules live in hub-rules.js.
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {canvasTexture} from './art.js';
 import {CameraRig} from './camera.js';
 import {Player} from './player.js';
 import {buildRocket} from './props.js';
-import {surfacePoint} from './world.js';
-import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBoundary, hubChorusReady, hubSouvenir, hubSpawn, stepHubVisit} from './hub-rules.js';
+import {mulberry32, tangentDir} from './world.js';
+import {HUB, HUB_PADS, HUB_SPAWN, createHubVisit, hubDistance, hubReturn, stepHubVisit} from './hub-rules.js';
 
-const UP = new THREE.Vector3(0, 1, 0), FORWARD = new THREE.Vector3(0, 0, -1);
-const CREAM = 0xfff0ce, LEAF = 0x8bc8a2, GOLD = 0xf5c864, INK = 0x435a65;
+const FORWARD = new THREE.Vector3(0, 0, -1), Y = new THREE.Vector3(0, 1, 0);
+const CREAM = 0xfff0ce, GOLD = 0xf5c864, INK = 0x3b4a66, LEAF = 0x6fb472, TRUNK = 0x9a6a45;
+const SKY = 0x16204a;
 const PHYSICS_STEP = 1 / 120, MAX_FRAME = .05;
-// Inside the ring of gates (hub-rules.js), whatever the screen's shape.
-const CAMERA_DISTANCE = 8;
-const NOTE_COLORS = [0xef9ead, 0x9ccfa5, 0x91cbdc];
-const groundY = (x, z) => Math.sqrt(Math.max(0, HUB.radius ** 2 - x * x - z * z)) - HUB.radius;
-const point = (x, z, height = 0) => new THREE.Vector3(x, groundY(x, z) + height, z);
-const upAt = (x, z) => new THREE.Vector3(x, groundY(x, z) + HUB.radius, z).normalize();
+// Flat enough to see the journeys' planets in the sky.
+const CAMERA = {distance: 10, pitch: .3};
+// Up the beam: fast enough to reach the planet as the journey starts, while
+// the home planet's pull barely slows Mirio.
+const LAUNCH = {speed: 16, gravityScale: .18};
+const v3 = (dir, length = 1) => new THREE.Vector3(...dir).multiplyScalar(length);
 
 function paint(geometry, color) {
   const c = new THREE.Color(color), values = new Float32Array(geometry.attributes.position.count * 3);
@@ -25,248 +29,268 @@ function paint(geometry, color) {
   geometry.deleteAttribute('uv');
   return geometry;
 }
-function ball(x, y, z, sx, sy, sz, color) {
-  return paint(new THREE.SphereGeometry(1, 12, 8).scale(sx, sy, sz).translate(x, y, z), color);
-}
-function box(x, y, z, sx, sy, sz, color) {
-  return paint(new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z), color);
-}
-function rod(x, y, z, radius, height, color) {
-  return paint(new THREE.CylinderGeometry(radius, radius, height, 10).translate(x, y, z), color);
-}
+const ball = (x, y, z, r, color, sy = r) => paint(new THREE.SphereGeometry(1, 14, 10).scale(r, sy, r).translate(x, y, z), color);
+const box = (x, y, z, sx, sy, sz, color) => paint(new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z), color);
+const rod = (x, y, z, radius, height, color) => paint(new THREE.CylinderGeometry(radius, radius, height, 10).translate(x, y, z), color);
 function merge(parts, material) {
-  const flat = parts.map(g => g.index ? g.toNonIndexed() : g);
+  const flat = parts.map(g => (g.index ? g.toNonIndexed() : g));
   const mesh = new THREE.Mesh(mergeGeometries(flat), material);
   for (const g of new Set([...parts, ...flat])) g.dispose();
   return mesh;
 }
-function starGeometry() {
+function starGeometry(outer = .54, inner = .24) {
   const shape = new THREE.Shape();
   for (let i = 0; i < 10; i++) {
-    const angle = Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? .24 : .54;
-    const x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
-    if (i) shape.lineTo(x, y); else shape.moveTo(x, y);
+    const angle = Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? inner : outer;
+    if (i) shape.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    else shape.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
   }
   shape.closePath();
-  return new THREE.ExtrudeGeometry(shape, {depth: .13, bevelEnabled: false});
+  return new THREE.ExtrudeGeometry(shape, {depth: .13, bevelEnabled: false}).center();
 }
-function label(text, color = '#2f4650', width = 1024) {
-  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = 200;
+/** A name sign: dark letters on a cream plate, readable from across the planet. */
+function label(text) {
+  const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 200;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff5dd'; ctx.strokeStyle = '#2f4650'; ctx.lineWidth = 10;
-  ctx.beginPath(); ctx.roundRect(8, 14, width - 16, 172, 60); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '800 112px sans-serif';
-  ctx.fillText(text, width / 2, 104, width - 80);
+  ctx.beginPath(); ctx.roundRect(8, 14, 1008, 172, 60); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#2f4650'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '800 112px sans-serif';
+  ctx.fillText(text, 512, 104, 944);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({map: canvasTexture(canvas), depthWrite: false}));
-  sprite.scale.set(7, 1.37, 1);
+  sprite.scale.set(6.4, 1.25, 1);
   return sprite;
+}
+/** Stands `object` on the home planet at `dir` (outward is its +Y). */
+function standAt(object, dir, height = 0) {
+  object.position.copy(v3(dir, HUB.radius + height));
+  object.quaternion.setFromUnitVectors(Y, v3(dir));
+  return object;
 }
 
 export class HubWorld {
-  scene; #player; #rig = null;
-  #planet; #colliders = []; #visit; #portals = []; #flower; #petals = []; #birds = [];
-  #souvenirs = [];
-  #rotor; #elapsed = 0; #snapCamera = true; #facing = FORWARD.clone(); #completed = [];
+  scene; #player; #rig = null; #planet; #colliders = []; #visit; #launch = null;
+  #pads = []; #elapsed = 0; #snapCamera = true; #facing = FORWARD.clone(); #completed = [];
 
   constructor(art) {
     this.scene = new THREE.Scene();
     this.scene.name = 'sternenhof';
-    this.scene.background = new THREE.Color(0xc9e6e8);
-    this.scene.fog = new THREE.Fog(0xc9e6e8, 65, 130);
-    this.scene.add(new THREE.HemisphereLight(0xfff5dc, 0x719eae, 2.3));
-    const sun = new THREE.DirectionalLight(0xfff0d2, 2.5); sun.position.set(-15, 25, 18); this.scene.add(sun);
-    this.#planet = {id: 'sternenhof', center: new THREE.Vector3(0, -HUB.radius, 0), radius: HUB.radius, gravityRadius: 220, gravity: 38};
+    this.scene.background = new THREE.Color(SKY);
+    this.scene.fog = new THREE.Fog(SKY, 70, 150);
+    this.scene.add(new THREE.HemisphereLight(0xfff5dc, 0x47507a, 2.2));
+    const sun = new THREE.DirectionalLight(0xfff0d2, 2.4); sun.position.set(-15, 30, 18); this.scene.add(sun);
+    this.#planet = {id: 'sternenhof', center: new THREE.Vector3(), radius: HUB.radius, gravityRadius: 60};
     const material = new THREE.MeshLambertMaterial({vertexColors: true});
-    this.#buildIsland(material);
-    for (const portal of HUB_PORTALS) {
-      this.#buildPortal(portal, material, art);
-      this.#buildSouvenir(portal, material);
-    }
-    this.#buildFlower(material);
+    this.#buildSky();
+    this.#buildHome(material);
+    for (const spec of HUB_PADS) this.#buildPad(spec, material, art);
     this.#player = new Player(this.scene, art, [this.#planet], () => this.#colliders);
     this.reset();
   }
 
-  #anchor(group, x, z) {
-    group.position.copy(point(x, z));
-    const up = upAt(x, z), outward = new THREE.Vector3(x, 0, z - HUB.spawn.z).normalize();
-    const forward = outward.addScaledVector(up, -outward.dot(up)).normalize().negate();
-    const right = new THREE.Vector3().crossVectors(up, forward).normalize();
-    group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, forward));
-    this.scene.add(group);
-    return group;
+  #buildSky() {
+    const rnd = mulberry32(7), count = 600, positions = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const dir = new THREE.Vector3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize();
+      dir.multiplyScalar(95 + rnd() * 30).toArray(positions, i * 3);
+    }
+    const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.scene.add(new THREE.Points(geometry, new THREE.PointsMaterial({color: 0xfff6d8, size: .7, fog: false})));
   }
 
-  #buildIsland(material) {
-    const ground = new THREE.Mesh(new THREE.SphereGeometry(HUB.radius, 80, 12, 0, Math.PI * 2, 0, Math.asin(22 / HUB.radius)),
-      new THREE.MeshLambertMaterial({color: 0xadd3a8}));
-    ground.position.copy(this.#planet.center); this.scene.add(ground);
-    const parts = [];
-    // Dotted paths keep every destination visible from spawn.
-    for (const portal of HUB_PORTALS) {
-      for (let i = 0; i < 11; i++) {
-        const t = i / 11, x = portal.x * t, z = HUB.spawn.z + (portal.z - HUB.spawn.z) * t;
-        parts.push(ball(x, groundY(x, z) + .02, z, .64, .065, .48, i % 3 ? CREAM : portal.color));
+  #buildHome(material) {
+    const ground = new THREE.SphereGeometry(HUB.radius, 72, 48);
+    // Two greens in soft patches, so the round planet reads as a meadow.
+    const colors = new Float32Array(ground.attributes.position.count * 3), p = new THREE.Vector3();
+    const light = new THREE.Color(0xb7dc9c), dark = new THREE.Color(0x93c683), c = new THREE.Color();
+    for (let i = 0; i < ground.attributes.position.count; i++) {
+      p.fromBufferAttribute(ground.attributes.position, i);
+      const k = .5 + .5 * Math.sin(p.x * .9) * Math.sin(p.y * .7 + 1) * Math.sin(p.z * .8 + 2);
+      c.copy(dark).lerp(light, k).toArray(colors, i * 3);
+    }
+    ground.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    this.scene.add(new THREE.Mesh(ground, material));
+
+    // A few trees and flowers to steer by, never on a pad, a landing spot or the spawn.
+    const keepClear = [HUB_SPAWN, ...HUB_PADS.map(s => s.dir), ...HUB_PADS.map(s => hubReturn(s.level))];
+    const free = (dir, gap) => keepClear.every(d => hubDistance(dir, d) > gap);
+    const rnd = mulberry32(11), parts = [];
+    const place = (count, gap, build) => {
+      for (let tries = 0, placed = 0; placed < count && tries < 400; tries++) {
+        const dir = new THREE.Vector3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize().toArray();
+        if (!free(dir, gap)) continue;
+        build(dir, rnd);
+        keepClear.push(dir);
+        placed++;
       }
-    }
-    for (let i = 0; i < 72; i++) {
-      const a = i * Math.PI / 36, x = Math.cos(a) * 20.1, z = Math.sin(a) * 20.1;
-      const y = groundY(x, z);
-      parts.push(ball(x, y + .25, z, .65, .42, .65, i % 2 ? LEAF : 0x93bd94));
-      if (i % 3 === 0) parts.push(ball(x, y + .7, z, .21, .18, .21, i % 2 ? CREAM : 0xe8acc6));
-    }
-    for (let i = 0; i < 15; i++) {
-      const a = i * 2.4, r = 23 + i % 3 * 2, x = Math.cos(a) * r, z = Math.sin(a) * r;
-      parts.push(ball(x, -7 - i % 3, z, 3.4, 1.5, 3.6, i % 2 ? 0xeaf3eb : 0xe0eeeb));
-    }
-    // The optional jump chain sits behind spawn, clear of every portal path.
-    for (const {x, z, height} of HUB_STONES) {
-      const up = upAt(x, z), base = point(x, z), top = base.clone().addScaledVector(up, height);
-      const stone = paint(new THREE.CylinderGeometry(HUB_STONE_RADIUS, 1.2, height, 12).translate(0, height / 2, 0), CREAM);
-      stone.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, up)).translate(...base);
-      parts.push(stone);
-      this.#colliders.push({kind: 'cyl', base, axis: up, height, radius: HUB_STONE_RADIUS});
-      parts.push(ball(top.x, top.y + .05, top.z, .72, .08, .72, 0xa4ced0));
-    }
+    };
+    const onGround = (geometry, dir) => geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, v3(dir))).translate(...v3(dir, HUB.radius).toArray());
+    place(7, 3.4, (dir, r) => {
+      const height = 1.6 + r() * .8;
+      parts.push(onGround(rod(0, height / 2, 0, .22, height, TRUNK), dir), onGround(ball(0, height + .6, 0, 1.05 + r() * .3, LEAF), dir));
+      this.#colliders.push({kind: 'cyl', base: v3(dir, HUB.radius), axis: v3(dir), height: height + 1, radius: .5});
+    });
+    const petals = [0xffffff, 0xf7b5c8, 0xfff1a1, 0xc9b6ef];
+    place(46, 1.9, (dir, r) => {
+      parts.push(onGround(ball(0, .18, 0, .17, petals[Math.floor(r() * petals.length)], .12), dir), onGround(rod(0, .08, 0, .03, .16, LEAF), dir));
+    });
     this.scene.add(merge(parts, material));
   }
 
-  #buildPortal(spec, material, art) {
-    const group = this.#anchor(new THREE.Group(), spec.x, spec.z), parts = [];
-    parts.push(rod(-1.9, 1.65, 0, .27, 3.3, CREAM), rod(1.9, 1.65, 0, .27, 3.3, CREAM));
-    parts.push(paint(new THREE.TorusGeometry(1.9, .27, 8, 32, Math.PI).translate(0, 3.3, 0), spec.color));
-    parts.push(ball(-1.9, .12, 0, .65, .2, .65, spec.color), ball(1.9, .12, 0, .65, .2, .65, spec.color));
-    if (spec.level === 'kart') {
-      for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) parts.push(box(-1.75 + i * .5, 4.2 + j * .5, .1, .5, .5, .2, (i + j) % 2 ? INK : CREAM));
-      for (const side of [-1, 1]) {
-        parts.push(box(side * 2.6, .7, .15, .85, .3, 1.35, spec.color));
-        for (const z of [-.36, .56]) parts.push(ball(side * 2.6, .4, z, .5, .4, .18, INK));
-      }
-    }
-    if (spec.level === 'sky') {
-      parts.push(box(0, 4.5, .18, 2.5, 1.5, .35, CREAM));
-      const flap = paint(new THREE.ConeGeometry(1.2, .9, 3).rotateZ(Math.PI).scale(1, 1, .1).translate(0, 4.35, .42), spec.color);
-      parts.push(flap, box(-2.75, .6, .2, 1.05, .9, .8, 0xd4ad83), box(2.7, .7, 0, 1.2, 1.3, 1, CREAM));
-    }
-    if (spec.level === 'ribbon') {
-      for (let i = 0; i < 7; i++) {const a = i * Math.PI * 2 / 7; parts.push(ball(Math.cos(a), 4.4 + Math.sin(a), .15, .54, .5, .18, spec.color));}
-      parts.push(ball(0, 4.4, .35, .58, .58, .16, GOLD));
-      for (const side of [-1, 1]) parts.push(rod(side * 2.65, .7, .1, .1, 1.4, LEAF), ball(side * 2.65, 1.5, .1, .7, .5, .6, spec.color));
-    }
-    if (spec.level === 'marble') {
-      parts.push(ball(0, 4.5, .18, 1.05, 1.05, .75, GOLD));
-      for (const [i, color] of NOTE_COLORS.entries()) {
-        const x = (i - 1) * .57;
-        parts.push(ball(x, 4.15 + i * .23, 1, .19, .15, .09, color), rod(x + .14, 4.52 + i * .23, 1, .05, .7, color));
-      }
-      parts.push(box(-2.65, .45, .2, 1.1, .35, .9, NOTE_COLORS[0]), box(2.65, .45, .2, 1.1, .35, .9, NOTE_COLORS[2]));
-    }
+  #buildPad(spec, material, art) {
+    const pad = standAt(new THREE.Group(), spec.dir);
+    pad.add(merge([
+      paint(new THREE.CylinderGeometry(1.35, 1.45, .14, 36).translate(0, .05, 0), spec.color),
+      paint(new THREE.TorusGeometry(1.5, .13, 8, 36).rotateX(Math.PI / 2).translate(0, .12, 0), CREAM),
+    ], material));
+    // The name floats just above the pad, in view from across the planet.
+    const sign = label(spec.label); sign.position.set(0, 3.4, 0); pad.add(sign);
+    const medal = new THREE.Mesh(starGeometry(), new THREE.MeshLambertMaterial({color: GOLD, emissive: 0x6a4a00}));
+    medal.position.set(3.75, 3.4, 0); pad.add(medal);
+    this.scene.add(pad);
+
+    // The beam: pale light from the pad to the underside of the planet.
+    const length = HUB.planetHeight - HUB.planetRadius;
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(.75, 1.3, length, 28, 1, true).translate(0, length / 2, 0),
+      new THREE.MeshBasicMaterial({color: spec.color, transparent: true, opacity: .2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide}),
+    );
+    standAt(beam, spec.dir);
+    this.scene.add(beam);
+
+    const planet = standAt(new THREE.Group(), spec.dir, HUB.planetHeight);
+    planet.add(this.#journeyPlanet(spec, material, art));
+    this.scene.add(planet);
+    this.#pads.push({spec, beam, planet, medal});
+  }
+
+  /** Each journey's planet, with its landmark on top (+Y). */
+  #journeyPlanet(spec, material, art) {
+    const R = HUB.planetRadius, group = new THREE.Group(), parts = [];
+    const add = (geometry) => parts.push(geometry);
     if (spec.level === 'tilt') {
-      // An open bubble rim keeps the seesaw readable through the landmark.
-      parts.push(paint(new THREE.TorusGeometry(.92, .12, 7, 28).translate(.15, 4.7, .25), spec.color));
-      parts.push(paint(new THREE.TorusGeometry(.78, .065, 6, 18, Math.PI * .65).rotateZ(.4).translate(.15, 4.7, .33), CREAM));
-      parts.push(paint(new THREE.BoxGeometry(2.5, .17, .35).rotateZ(.16).translate(0, 3.8, .25), 0xe9a7c3));
-      parts.push(paint(new THREE.ConeGeometry(.3, .5, 3).translate(0, 3.5, .25), GOLD));
-      parts.push(ball(-.3, 5.1, .38, .13, .2, .07, CREAM), ball(2.5, 1.25, .1, .42, .42, .42, spec.color));
+      // A soap bubble with a star floating inside.
+      group.add(new THREE.Mesh(new THREE.SphereGeometry(R, 32, 20),
+        new THREE.MeshLambertMaterial({color: 0xcff6f2, transparent: true, opacity: .38, depthWrite: false})));
+      const star = new THREE.Mesh(starGeometry(1.3, .6), new THREE.MeshLambertMaterial({color: GOLD, emissive: 0x5a3c00}));
+      group.add(star);
+      add(ball(0, -R - .2, 0, .9, spec.color, .25));
+    } else {
+      // The Planetenreise planet is green like its meadow; the others wear their pad's colour.
+      const body = spec.level === 'adventure' ? 0x8fcf7a : spec.color;
+      add(paint(new THREE.SphereGeometry(R, 40, 28), body));
+      add(paint(new THREE.SphereGeometry(1, 28, 18).scale(R * .9, R * .5, R * .9).translate(.6, .9, .4), new THREE.Color(body).lerp(new THREE.Color(0xffffff), .25)));
     }
     if (spec.level === 'adventure') {
-      const rocket = buildRocket(art); rocket.group.scale.setScalar(.28); rocket.group.position.set(-2.8, .05, .3); rocket.flame.visible = false;
+      const rocket = buildRocket(art); rocket.group.scale.setScalar(.34); rocket.group.position.set(-.7, R - .15, .2); rocket.flame.visible = false;
       group.add(rocket.group);
-      parts.push(rod(2.65, 1.1, 0, .12, 2.2, INK));
-      this.#rotor = new THREE.Group(); this.#rotor.position.set(2.65, 2.55, .2);
-      const blades = [];
-      for (let i = 0; i < 5; i++) blades.push(paint(new THREE.SphereGeometry(1, 10, 6).scale(.22, .7, .09).translate(0, .6, 0).rotateZ(i * Math.PI * 2 / 5), i % 2 ? CREAM : spec.color));
-      this.#rotor.add(merge(blades, material)); group.add(this.#rotor);
-      parts.push(ball(0, 4.5, .2, 1.05, 1.05, .23, 0x98c69e));
-      parts.push(paint(new THREE.TorusGeometry(1.3, .12, 6, 28).scale(1, .32, 1).rotateZ(-.3).translate(0, 4.5, .35), CREAM));
+      for (const [x, z] of [[1.1, .3], [.3, -1.2]]) add(rod(x, R + .3, z, .1, .8, TRUNK), ball(x, R + .9, z, .45, LEAF));
+    }
+    if (spec.level === 'sky') {
+      add(box(0, R + .75, 0, 1.9, 1.2, .25, CREAM));
+      add(paint(new THREE.ConeGeometry(.95, .7, 3).rotateZ(Math.PI).scale(1, 1, .12).translate(0, R + .95, .15), spec.color));
+      for (const [x, y, z] of [[-2.9, .6, .4], [2.8, -.3, -.6], [.4, -1.4, 2.6]]) {
+        add(ball(x, y, z, .75, 0xffffff), ball(x + .7, y + .1, z, .55, 0xffffff), ball(x - .6, y - .1, z + .1, .5, 0xffffff));
+      }
+    }
+    if (spec.level === 'kart') {
+      // A checkered race ring round the planet.
+      for (let i = 0; i < 24; i++) {
+        const a = i * Math.PI / 12;
+        add(paint(new THREE.BoxGeometry(.8, .16, .6), i % 2 ? INK : CREAM)
+          .rotateY(-a).translate(Math.cos(a) * (R + .9), 0, Math.sin(a) * (R + .9)).rotateZ(.25));
+      }
+      add(box(0, R + .5, 0, .12, 1.1, .12, INK), box(.45, R + .85, 0, .8, .45, .06, CREAM));
+    }
+    if (spec.level === 'marble') {
+      add(paint(new THREE.TorusGeometry(R + .8, .18, 8, 48).rotateX(Math.PI / 2 - .35), CREAM));
+      for (const [i, color] of [0xef9ead, 0x9ccfa5, 0x91cbdc].entries()) {
+        const x = (i - 1) * 1.1;
+        add(ball(x, R + .45 + i * .3, 0, .28, color, .22), rod(x + .22, R + 1 + i * .3, 0, .06, 1, color));
+      }
+    }
+    if (spec.level === 'ribbon') {
+      for (let i = 0; i < 7; i++) {
+        const a = i * Math.PI * 2 / 7;
+        add(ball(Math.cos(a) * .75, R + .6, Math.sin(a) * .75, .5, 0xfff2f6, .2));
+      }
+      add(ball(0, R + .7, 0, .45, GOLD, .3), rod(0, R + .25, 0, .07, .6, LEAF));
+      const rnd = mulberry32(5);
+      for (let i = 0; i < 14; i++) {
+        const d = new THREE.Vector3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize().multiplyScalar(R);
+        add(ball(d.x, d.y, d.z, .18, [0xffffff, 0xfff1a1, 0xc9b6ef][i % 3]));
+      }
     }
     group.add(merge(parts, material));
-    const glow = new THREE.Mesh(new THREE.CircleGeometry(1.65, 32), new THREE.MeshBasicMaterial({color: spec.color, transparent: true, opacity: .24, side: THREE.DoubleSide, depthWrite: false}));
-    glow.scale.y = 1.34; glow.position.set(0, 2.15, -.15); group.add(glow);
-    const sign = label(spec.label); sign.position.set(0, 6.1, 0); group.add(sign);
-    const medal = new THREE.Mesh(starGeometry(), new THREE.MeshLambertMaterial({color: GOLD}));
-    medal.position.set(2.2, 5.25, .2); group.add(medal);
-    this.#portals.push({spec, group, glow, medal});
-  }
-
-  #buildSouvenir(spec, material) {
-    const {x, z} = hubSouvenir(spec.level), group = this.#anchor(new THREE.Group(), x, z), parts = [];
-    parts.push(rod(0, .1, 0, .72, .16, CREAM));
-    if (spec.level === 'adventure') {
-      parts.push(paint(new THREE.OctahedronGeometry(.7).scale(.8, 1.25, .15).translate(0, 1.8, 0), spec.color));
-      parts.push(rod(0, .9, 0, .025, 1.2, INK));
-      for (let i = 0; i < 3; i++) parts.push(ball(i % 2 ? -.18 : .18, .4 + i * .25, 0, .2, .09, .05, i % 2 ? GOLD : LEAF));
-    }
-    if (spec.level === 'sky') {
-      parts.push(box(0, 1.9, 0, 1.35, .15, .2, CREAM));
-      for (let i = 0; i < 3; i++) parts.push(rod((i - 1) * .45, 1.15 + i * .12, 0, .085, 1.2 - i * .24, i % 2 ? GOLD : spec.color));
-    }
-    if (spec.level === 'ribbon') {
-      for (let i = 0; i < 3; i++) {
-        const x = (i - 1) * .45, y = 1.05 + (i % 2) * .4;
-        parts.push(rod(x, y / 2, 0, .045, y, LEAF), ball(x, y, 0, .3, .36, .3, spec.color), ball(x, y, .23, .15, .2, .13, GOLD));
-      }
-    }
-    if (spec.level === 'kart') {
-      parts.push(rod(0, .85, 0, .055, 1.5, CREAM));
-      for (let i = 0; i < 4; i++) parts.push(paint(new THREE.SphereGeometry(1, 10, 6).scale(.2, .53, .08).translate(0, .4, 0).rotateZ(i * Math.PI / 2).translate(0, 1.7, 0), i % 2 ? CREAM : spec.color));
-      parts.push(ball(0, 1.7, .13, .16, .16, .1, GOLD));
-    }
-    if (spec.level === 'marble') {
-      for (const [i, color] of NOTE_COLORS.entries()) {
-        const x = (i - 1) * .53, y = .55 + i * .22;
-        parts.push(ball(x, y, 0, .24, .17, .14, color), rod(x + .18, y + .45, 0, .045, .9, color));
-      }
-    }
-    if (spec.level === 'tilt') {
-      parts.push(paint(new THREE.TorusGeometry(.58, .075, 6, 24).translate(.18, 1.55, 0), spec.color));
-      parts.push(paint(new THREE.TorusGeometry(.46, .045, 5, 12, Math.PI * .7).rotateZ(.4).translate(.18, 1.55, .05), CREAM));
-      parts.push(paint(new THREE.BoxGeometry(1.6, .12, .25).rotateZ(.16).translate(0, .8, 0), 0xe9a7c3));
-      parts.push(paint(new THREE.ConeGeometry(.22, .4, 3).translate(0, .55, 0), GOLD));
-    }
-    const toy = merge(parts, material); group.add(toy);
-    const sign = label('↻ ♪', '#967c45', 256); sign.position.set(0, 2.65, 0); sign.scale.set(1.6, .65, 1); group.add(sign);
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(.85, .055, 5, 28), new THREE.MeshBasicMaterial({color: GOLD}));
-    halo.rotation.x = Math.PI / 2; halo.position.y = .18; group.add(halo);
-
-    // Heard souvenirs light a route back to the flower, without adding barriers.
-    const lights = [];
-    for (let i = 0; i < 8; i++) {
-      const t = (i + 1) / 9, lx = x + (HUB.toy.x - x) * t, lz = z + (HUB.toy.z - z) * t;
-      lights.push(ball(lx, groundY(lx, lz) + .13, lz, .16, .1, .16, spec.color));
-    }
-    const path = merge(lights, new THREE.MeshBasicMaterial({vertexColors: true})); this.scene.add(path);
-    this.#souvenirs.push({level: spec.level, group, toy, halo, path});
-  }
-
-  #buildFlower(material) {
-    this.#flower = this.#anchor(new THREE.Group(), HUB.toy.x, HUB.toy.z);
-    this.#flower.add(merge([ball(0, .18, 0, .85, .26, .85, GOLD), ball(-.24, .38, .35, .075, .05, .1, INK), ball(.24, .38, .35, .075, .05, .1, INK)], material));
-    for (let i = 0; i < 8; i++) {
-      const a = i * Math.PI / 4, petal = merge([ball(0, 0, 0, .85, .12, .42, i % 2 ? CREAM : 0xf0afc6)], material);
-      petal.position.set(Math.cos(a) * 1.1, .1, Math.sin(a) * 1.1); petal.rotation.y = -a;
-      this.#flower.add(petal); this.#petals.push(petal);
-    }
-    const sign = label('↻ ↓ ♪', '#967c45', 384); sign.position.set(0, .85, 0); sign.scale.set(2, .65, 1); this.#flower.add(sign);
-    for (let i = 0; i < HUB_PORTALS.length; i++) {
-      const bird = merge([ball(0, 0, 0, .28, .22, .34, HUB_PORTALS[i].color), ball(-.37, .06, 0, .36, .07, .16, CREAM), ball(.37, .06, 0, .36, .07, .16, CREAM), ball(0, .02, .3, .09, .07, .16, GOLD)], material);
-      this.scene.add(bird); this.#birds.push(bird);
-    }
+    return group;
   }
 
   reset({completed = [], lastLevel = null} = {}) {
-    this.#visit = createHubVisit({completed, lastLevel}); this.#completed = [...this.#visit.completed]; this.#elapsed = 0;
-    const spawn = hubSpawn(lastLevel), dir = upAt(spawn.x, spawn.z);
-    this.#facing.copy(lastLevel ? point(HUB.spawn.x, HUB.spawn.z).sub(point(spawn.x, spawn.z)) : FORWARD);
+    this.#visit = createHubVisit({completed, lastLevel});
+    this.#completed = [...this.#visit.completed];
+    this.#elapsed = 0;
+    this.#launch = null;
+    const dir = v3(hubReturn(lastLevel));
+    // Back from a journey, Mirio faces the pole, away from the pad he left.
+    this.#facing.copy(this.#visit.blocked ? tangentDir(v3(HUB_SPAWN).sub(dir), dir) ?? FORWARD : FORWARD);
     this.#player.reset({planet: this.#planet, dir}, this.#facing);
     this.#player.events.length = 0;
     this.#snapCamera = true;
-    for (const portal of this.#portals) portal.medal.visible = this.#visit.completed.has(portal.spec.level);
-    for (const souvenir of this.#souvenirs) {
-      souvenir.group.visible = this.#visit.completed.has(souvenir.level);
-      souvenir.halo.visible = souvenir.path.visible = false;
-    }
+    for (const pad of this.#pads) pad.medal.visible = this.#visit.completed.has(pad.spec.level);
     return this.snapshot();
+  }
+
+  #prepareCamera(camera) {
+    if (!this.#rig) this.#rig = new CameraRig(camera, [this.#planet]);
+    this.#rig.distance = CAMERA.distance;
+    if (!this.#snapCamera) return;
+    this.#rig.pitch = CAMERA.pitch;
+    this.#rig.snap(this.#player, this.#facing);
+    this.#snapCamera = false;
+  }
+
+  update(dt, input, camera, {reducedMotion = false} = {}) {
+    dt = Math.min(MAX_FRAME, Math.max(0, dt));
+    this.#prepareCamera(camera);
+    if (this.#launch) this.clearIntent();
+    else this.#player.readInput(input, this.#rig);
+    input.consumeRide?.();
+    const steps = Math.max(1, Math.ceil(dt / PHYSICS_STEP)), h = dt / steps;
+    for (let i = 0; i < steps; i++) this.#player.step(h);
+    this.#elapsed += dt;
+    const events = this.#player.events.splice(0), body = this.#player.body;
+    if (this.#launch) {
+      this.#launch.time += dt;
+      if (this.#launch.time >= HUB.launchTime && !this.#launch.done) {
+        this.#launch.done = true;
+        events.push({type: 'enter', level: this.#launch.level});
+      }
+    } else {
+      const dir = body.pos.clone().sub(this.#planet.center).normalize().toArray();
+      for (const action of stepHubVisit(this.#visit, dt, {dir, grounded: body.onGround})) {
+        this.#launch = {level: action.level, time: 0, done: false};
+        this.#player.bounce(LAUNCH);
+        this.#player.invulnerable = 0;
+        events.push({type: 'liftoff'});
+      }
+    }
+    // Quiet mode keeps camera turns under the player's control.
+    if (reducedMotion) this.#rig.idle = 0;
+    this.#rig.update(dt, this.#player, input);
+    return events;
+  }
+
+  render(camera, dt, {reducedMotion = false} = {}) {
+    this.#prepareCamera(camera);
+    this.#player.render(dt);
+    const time = this.#elapsed;
+    for (const pad of this.#pads) {
+      const level = pad.spec.level;
+      const near = this.#visit.near?.level === level || this.#launch?.level === level;
+      const pulse = reducedMotion ? 0 : Math.sin(time * 2.4 + pad.spec.lon) * .05;
+      pad.beam.material.opacity = level === this.#visit.blocked ? .06 : near ? .45 : .18 + pulse;
+      if (!reducedMotion) pad.planet.rotateOnAxis(Y, dt * .25);
+      pad.medal.rotation.y = reducedMotion ? 0 : time * 1.5;
+    }
   }
 
   clearIntent() {
@@ -275,87 +299,22 @@ export class HubWorld {
     this.#player.wishSpeed = 0;
   }
 
-  #prepareCamera(camera) {
-    if (!this.#rig) this.#rig = new CameraRig(camera, [this.#planet]);
-    this.#rig.distance = CAMERA_DISTANCE;
-    if (!this.#snapCamera) return;
-    this.#rig.pitch = .42; this.#rig.snap(this.#player, this.#facing); this.#snapCamera = false;
-  }
-
-  #containPlayer() {
-    const b = this.#player.body, height = b.pos.distanceTo(this.#planet.center) - HUB.radius;
-    const edge = hubBoundary(b.pos.x, b.pos.z);
-    if (!edge) return;
-    const dir = upAt(edge.x, edge.z);
-    surfacePoint(this.#planet, dir, Math.max(0, height), b.pos); b.up.copy(dir);
-    const outward = new THREE.Vector3(edge.nx, 0, edge.nz);
-    outward.addScaledVector(dir, -outward.dot(dir)).normalize();
-    const speed = b.vel.dot(outward);
-    if (speed > 0) b.vel.addScaledVector(outward, -speed);
-  }
-
-  update(dt, input, camera, {reducedMotion = false} = {}) {
-    dt = Math.min(MAX_FRAME, Math.max(0, dt));
-    this.#prepareCamera(camera);
-    this.#player.readInput(input, this.#rig); input.consumeRide();
-    const steps = Math.max(1, Math.ceil(dt / PHYSICS_STEP)), h = dt / steps;
-    for (let i = 0; i < steps; i++) {this.#player.step(h); this.#containPlayer();}
-    this.#elapsed += dt;
-    const events = this.#player.events.splice(0), body = this.#player.body;
-    const height = body.pos.distanceTo(this.#planet.center) - HUB.radius;
-    const actions = stepHubVisit(this.#visit, dt, {x: body.pos.x, z: body.pos.z, height, grounded: body.onGround,
-      pound: events.some(e => e.type === 'pound'), spin: events.some(e => e.type === 'spin')});
-    for (const action of actions) {
-      if (action.type !== 'spring') continue;
-      this.#player.bounce({speed: HUB.springSpeed, gravityScale: .8});
-      // Friendly hub toys have no damage blink.
-      this.#player.invulnerable = 0;
-    }
-    // Quiet mode keeps camera turns under the player’s control.
-    if (reducedMotion) this.#rig.idle = 0;
-    this.#rig.update(dt, this.#player, input);
-    return [...events, ...actions];
-  }
-
-  render(camera, dt, {reducedMotion = false} = {}) {
-    this.#prepareCamera(camera); this.#player.render(dt);
-    const time = this.#elapsed, bloom = this.#visit.bloom;
-    for (const portal of this.#portals) {
-      portal.glow.material.opacity = portal.spec.level === this.#visit.blocked ? .08 : this.#visit.near?.level === portal.spec.level ? .43 : .24;
-      portal.medal.rotation.y = reducedMotion ? 0 : Math.sin(time * 1.5) * .18;
-    }
-    this.#rotor.rotation.z = reducedMotion ? .2 : time * .8;
-    for (const souvenir of this.#souvenirs) {
-      const heard = this.#visit.echoes.has(souvenir.level);
-      souvenir.path.visible = souvenir.halo.visible = heard;
-      souvenir.toy.rotation.z = heard && !reducedMotion ? Math.sin(time * 3) * .12 : 0;
-      souvenir.toy.position.y = heard && !reducedMotion ? .08 + Math.sin(time * 4) * .08 : 0;
-    }
-    for (const [i, petal] of this.#petals.entries()) petal.position.y = .1 + (bloom > 0 && !reducedMotion ? Math.sin(time * 8 + i * .4) * .22 : 0);
-    for (const [i, bird] of this.#birds.entries()) {
-      bird.visible = this.#visit.discoveries > 0;
-      const chorus = this.#visit.chorus > 0, radius = chorus ? 4.2 : 3;
-      const a = i * Math.PI * 2 / this.#birds.length + (reducedMotion ? 0 : time * (chorus ? 1.2 : .5));
-      bird.position.set(Math.cos(a) * radius, (chorus ? 4.3 : 3.5) + (reducedMotion ? 0 : Math.sin(time * 3 + i) * .15), HUB.toy.z + Math.sin(a) * radius);
-      bird.rotation.y = -a;
-    }
-  }
-
   snapshot() {
     const b = this.#player.body, forward = this.#rig?.forward ?? this.#facing;
-    const chorusReady = hubChorusReady(this.#visit), echoNear = this.#visit.echoNear;
-    const actionHint = echoNear && !this.#visit.echoes.has(echoNear) ? '↻ ♪ Echo wecken'
-      : chorusReady ? this.#visit.flowerNear ? '↻ ♪ Alle singen!' : '♪ Zur Blume' : null;
-    return {name: 'Sternenhof', time: this.#elapsed, near: this.#visit.near ? {level: this.#visit.near.level, label: this.#visit.near.label} : null,
+    return {
+      name: 'Sternenhof', time: this.#elapsed,
+      near: this.#visit.near ? {level: this.#visit.near.level, label: this.#visit.near.label} : null,
       pos: b.pos.toArray(), velocity: b.vel.toArray(), grounded: b.onGround, forward: forward.toArray(),
       right: new THREE.Vector3().crossVectors(forward, b.up).normalize().toArray(), up: b.up.toArray(),
-      completed: [...this.#completed], discovery: this.#visit.discoveries, blocked: this.#visit.blocked,
-      echoes: [...this.#visit.echoes], echoTotal: this.#visit.completed.size, chorus: this.#visit.chorus > 0, chorusReady, actionHint};
+      completed: [...this.#completed], blocked: this.#visit.blocked, launching: this.#launch?.level ?? null,
+    };
   }
 
   layout() {
-    return {spawn: point(HUB.spawn.x, HUB.spawn.z).toArray(), toy: point(HUB.toy.x, HUB.toy.z).toArray(), boundary: HUB.boundary,
-      souvenirs: HUB_PORTALS.map(p => {const s = hubSouvenir(p.level); return {level: p.level, pos: point(s.x, s.z).toArray()};}),
-      portals: HUB_PORTALS.map(p => {const r = hubSpawn(p.level); return {level: p.level, label: p.label, pos: point(p.x, p.z).toArray(), returnPos: point(r.x, r.z).toArray()};})};
+    const pads = HUB_PADS.map(p => ({
+      level: p.level, label: p.label, pos: v3(p.dir, HUB.radius).toArray(),
+      returnPos: v3(hubReturn(p.level), HUB.radius).toArray(), planetPos: v3(p.dir, HUB.radius + HUB.planetHeight).toArray(),
+    }));
+    return {spawn: v3(HUB_SPAWN, HUB.radius).toArray(), radius: HUB.radius, pads, portals: pads};
   }
 }

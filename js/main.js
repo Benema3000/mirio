@@ -854,7 +854,7 @@ async function main() {
   // Browsing another outing's help or board must not change the active run.
   function showHelp(id) {
     const chapter = id === 'hub' ? {
-      short: 'Sternenhof', description: 'Laufe in ein Tor. Deine Reisen lassen den Sternenhof wachsen.',
+      short: 'Sternenhof', description: 'Lauf auf eine Startfläche: Ihr Lichtstrahl bringt dich zu ihrem Planeten.',
       keys: 'WASD / Pfeile laufen · Leertaste springen · Shift drehen · C stampfen',
       touch: 'Links laufen · ↑ springen · ⟳ drehen · ⤓ stampfen',
       controller: 'Linker Stick laufen · A springen · X drehen · B stampfen',
@@ -1175,9 +1175,9 @@ async function main() {
     $('btn-jump').setAttribute('aria-label', 'Springen');
     $('btn-spin').textContent = '⟳';
     $('btn-spin').setAttribute('aria-label', 'Drehen');
-    const hubHint = input.gamepadConnected ? 'Linker Stick laufen · A springen · Laufe in ein Tor'
-      : document.body.classList.contains('touch') ? 'Links laufen · ↑ springen · Laufe in ein Tor'
-      : 'WASD / Pfeile laufen · Leertaste springen · Laufe in ein Tor';
+    const hubHint = input.gamepadConnected ? 'Linker Stick laufen · A springen · Lauf auf eine Startfläche'
+      : document.body.classList.contains('touch') ? 'Links laufen · ↑ springen · Lauf auf eine Startfläche'
+      : 'WASD / Pfeile laufen · Leertaste springen · Lauf auf eine Startfläche';
     hint(hubHint, 9);
     hub.render(camera, 0, {reducedMotion});
     input.enabled = true;
@@ -1344,8 +1344,8 @@ async function main() {
   showTitleTop();
   if (!TEST_MENU) {
     $('chapter-description').textContent = 'Vom Sternenhof beginnt deine Reise.';
-    $('chapter-keys').textContent = 'WASD / Pfeile laufen · Leertaste springen · Laufe in ein Tor';
-    $('chapter-touch').textContent = 'Links laufen · ↑ springen · Laufe in ein Tor';
+    $('chapter-keys').textContent = 'WASD / Pfeile laufen · Leertaste springen · Lauf auf eine Startfläche';
+    $('chapter-touch').textContent = 'Links laufen · ↑ springen · Lauf auf eine Startfläche';
   }
 
   // ---- Loop ------------------------------------------------------------------
@@ -1383,8 +1383,6 @@ async function main() {
         startLevel();
         return;
       }
-      if (event.type === 'hubEcho') { sound.play('ring'); continue; }
-      if (event.type === 'hubChorus') { sound.play('trailWin'); hint('♪ Der Sternenhof singt!', 5); continue; }
       sound.play(event.type === 'jump' ? ['jump', 'jump2', 'triple'][(event.level ?? 1) - 1] : event.type);
     }
     const visit = hub.snapshot();
