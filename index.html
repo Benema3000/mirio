@@ -47,6 +47,13 @@
   </div>
 
   <div id="gate-name" hidden><strong id="gate-name-text"></strong><small>Lauf drauf</small></div>
+  <button id="discovery-action" hidden></button>
+  <div id="bonus-hud" hidden><strong id="bonus-title">Wunderwiese</strong><span id="bonus-task"></span><small id="bonus-status"></small></div>
+  <div id="pinball-controls" aria-label="Flipper-Steuerung">
+    <button id="flipper-left" aria-label="Linker Flipper halten">↗</button>
+    <button id="pinball-plunger" aria-label="Feder spannen und loslassen">↥</button>
+    <button id="flipper-right" aria-label="Rechter Flipper halten">↖</button>
+  </div>
   <div id="chapter-hud" hidden><span id="chapter-timer">00:00.00</span><span id="chapter-best"></span><progress id="chapter-progress" max="1" value="0" aria-label="Weg zum Ziel"></progress><small id="chapter-ability"></small></div>
 
   <div id="boss-bar" hidden>
@@ -56,7 +63,7 @@
 
   <div id="race-hud" hidden>
     <span id="race-place">1.</span>
-    <span id="race-time">0:00</span><span><span id="race-speed">0</span> <small>km/h</small></span><progress id="race-progress" max="1" value="0" aria-label="Rennfortschritt"></progress><span id="race-technique" hidden></span>
+    <span id="race-time">0:00</span><span><span id="race-speed">0</span> <small>km/h</small></span><progress id="race-progress" max="1" value="0" aria-label="Rennfortschritt"></progress><span id="race-technique" hidden></span><small id="race-route" hidden></small>
   </div>
 
   <div id="toast" role="status"></div>
@@ -144,6 +151,7 @@
       <div class="menu-links pause-links"><button id="pause-times" class="text-button">Bestzeiten</button><button id="pause-help" class="text-button">Hilfe &amp; Credits</button></div>
       <button id="rescue" class="text-button">Zurück zum Checkpoint</button>
       <button id="pause-menu" class="text-button">Zum Sternenhof</button>
+      <button id="bonus-return" class="text-button" hidden>Zur Wunderwiese</button>
       <button id="pause-quick" class="text-button">Reise wählen</button>
     </div>
   </section>
@@ -166,6 +174,7 @@
       <ol id="win-board" class="board"></ol>
       <button id="again" class="big" data-menu-default>Nochmal spielen</button>
       <button id="win-menu" class="text-button">Zum Sternenhof</button>
+      <button id="win-bonus-return" class="text-button" hidden>Zur Wunderwiese</button>
     </div>
   </section>
 

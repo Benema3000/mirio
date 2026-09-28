@@ -10,6 +10,8 @@ const EAST = new THREE.Vector3(1, 0, 0);
 const Z = new THREE.Vector3(0, 0, 1);
 // A few birds, not a crowd: the meadow is Miro's, the animals only liven it up.
 const LIMITS = [{ bird: 3, squirrel: 0 }, { bird: 4, squirrel: 0 }, { bird: 5, squirrel: 0 }];
+const PLAYGROUND_LIMITS = [{bird: 5, squirrel: 2}, {bird: 8, squirrel: 4}, {bird: 10, squirrel: 5}];
+export const WILDLIFE_POPULATION = Object.freeze({SPARSE: 'sparse', PLAYGROUND: 'playground'});
 const scratch = new THREE.Vector3();
 const forward = new THREE.Vector3();
 const side = new THREE.Vector3();
@@ -35,11 +37,15 @@ function nearestTree(trees, dir) {
 }
 
 export class Wildlife {
-  constructor(scene, level, art = null) {
+  #population; #limits;
+
+  constructor(scene, level, art = null, {planet = null, population = WILDLIFE_POPULATION.SPARSE} = {}) {
     this.level = level;
-    this.planet = level.planets.find(planet => planet.id === 'welt') ?? level.planets[0];
+    this.planet = planet ?? level.planets.find(planet => planet.id === 'welt') ?? level.planets[0];
+    this.#population = population;
+    this.#limits = population === WILDLIFE_POPULATION.PLAYGROUND ? PLAYGROUND_LIMITS : LIMITS;
     this.trees = level.trees.filter(tree => tree.planet === this.planet);
-    this.perches = this.measurePerches(scene);
+    this.perches = this.measurePerches(scene.parent ?? scene);
     this.random = mulberry32(270926);
     this.quality = Math.min(2, deviceTier());
     this.discovered = new Set();
@@ -140,6 +146,13 @@ export class Wildlife {
         visible: false, state, height: 0, age: 0, wait: 0, alert: 0,
       });
     };
+    // The optional orchard restores the lively population without crowding the main world.
+    if (this.#population === WILDLIFE_POPULATION.PLAYGROUND) {
+      for (const [lat, lon] of [[80, -100], [66, -150], [63, -85], [29, -132], [14, -110], [-12, -95]]) add('bird', dirFromLatLon(lat, lon));
+      for (const [lat, lon] of [[77, -142], [65, -94], [28, -124], [8, -113], [-20, -95]]) add('squirrel', dirFromLatLon(lat, lon));
+      for (const [index, tree] of this.trees.slice(0, 4).entries()) add('bird', tree.dir, index % 2 ? 'circle' : 'perch', tree);
+      return;
+    }
     // Two on the ground away from the start, two in trees, one circling.
     for (const [lat, lon] of [[66, 120], [30, -36]]) add('bird', dirFromLatLon(lat, lon));
     for (const i of [0, 12]) {
@@ -332,7 +345,7 @@ export class Wildlife {
   }
 
   visible(animal, camera, player) {
-    if (animal.index >= LIMITS[this.quality][animal.kind]) return false;
+    if (animal.index >= this.#limits[this.quality][animal.kind]) return false;
     const eye = camera?.position ?? player.body.pos;
     if (animal.pos.distanceToSquared(eye) > [38, 55, 72][this.quality] ** 2) return false;
     cameraDir.subVectors(eye, this.planet.center);
@@ -354,7 +367,7 @@ export class Wildlife {
     dt = Math.min(.08, dt);
     this.soundWait = Math.max(0, this.soundWait - dt);
     for (const animal of this.animals) {
-      const enabled = animal.index < LIMITS[this.quality][animal.kind];
+      const enabled = animal.index < this.#limits[this.quality][animal.kind];
       if (enabled && animal.pos.distanceToSquared(player.body.pos) < 60 ** 2) {
         animal.age += dt;
         animal.alert = Math.max(0, animal.alert - dt);

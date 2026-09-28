@@ -4,11 +4,13 @@
 // leaves the rim of the
 // arena, drops towards the Zielplanet and winds three times round it, lower
 // every lap and weaving from side to side, until it runs along the ground to
-// the finish arch. The road's "up" starts as the arena's and turns into the
+// the finish arch. The optional playground adds wind, orchard and cloud
+// forks; kart-routes.js owns their geometry and distance/progress mapping.
+// The road's "up" starts as the arena's and turns into the
 // Zielplanet's gravity during the first drop, so downhill means losing height
 // above the Zielplanet, and the karts speed up on the way down.
 //
-// A kart never flies freely: it is a distance s along the track, an offset x
+// A kart never flies freely: it has a route, shared progress s, an offset x
 // across it and a height h above it. Rails keep it on the road; the ramp's
 // gap is crossed on a fixed arc. Mirio's kart is driven with gas and brake
 // and steered like a car, slides and drifts included (kart-physics.js); Finster-Mirio's
@@ -27,6 +29,8 @@ import { buildMirio } from './mirio-model.js';
 import { bigCrystalGeometry, buildRocket, gemGeometry } from './props.js';
 import { approachSpeed, crossingTime, DRIVE, driftLevel, driveKart, slideOf } from './kart-physics.js';
 import { mulberry32 } from './world.js';
+import { RouteNetwork, ROUTE, RACE_STYLE, CLASSIC_ROAD_HALF_WIDTH, MAIN_ROAD_HALF_WIDTH } from './kart-routes.js';
+export { RACE_STYLE } from './kart-routes.js';
 
 // ---- Track layout --------------------------------------------------------------
 // Round the Zielplanet: psi (degrees) turns from the finish over its "north"
@@ -59,7 +63,6 @@ const BANK_MAX = 0.6;
 const BANK_SMOOTH = 6;
 
 // ---- Road ------------------------------------------------------------------
-const HALF_WIDTH = 5;
 const ROAD_THICKNESS = 0.7;
 const ROAD_TAPER = 0.5;
 // The road's top sits this far above the track line: no z-fighting with the arena.
@@ -102,7 +105,6 @@ const RAMP = { psi: 148, length: 7, height: 1.4, gap: 16, flight: 30, apex: 4.2,
 // Glitzersteine along the race: the trails plus those over the ramp's gap.
 export const RACE_BITS = BIT_TRAILS.reduce((n, trail) => n + trail[4], 0) + RAMP.bits;
 const CRYSTAL = { ahead: 10, height: 4.6, scale: 1.5 };
-const ARCH_RADIUS = HALF_WIDTH + 0.8;
 
 // ---- Driving -------------------------------------------------------------------
 // Speeds, and how Mirio steers, are in kart-physics.js (DRIVE). These are for
@@ -115,13 +117,28 @@ const STEER_RESPONSE = 10;
 const LATERAL_ACCEL = 40;
 const KART_HALF_WIDTH = 1.05;
 const KART_HALF_LENGTH = 1.35;
-const X_LIMIT = HALF_WIDTH - KART_HALF_WIDTH - RAIL_RADIUS * 0.5;
 // Hitting a rail faster than this sideways bumps; slower just scrapes.
 const WALL_HIT = 3.5;
 const WALL_KEEP = 0.8;
 const WALL_BOUNCE = 0.45;
 const SCRAPE = 3;
 const BUMP_COOLDOWN = 0.45;
+const WIND_MEMORY = 4.5;
+const ROUTE_JOIN = 12;
+const TOY = { reach: 2.5, height: 0.8, boost: 0.6, radius: 0.85, period: 3.5 };
+const WIND_PUSH = 0.2;
+const CLOUD_SPEED = 25;
+const SPLIT_PSI = [360, 720];
+const ROUTE_HINTS = {
+  [ROUTE.WIND]: '↗ Drift-Turbo → Windrad · ↑ Sprungweg',
+  [ROUTE.ORCHARD]: '↖ Enger Obstweg · ↑ Breiter Weg',
+  [ROUTE.CLOUD]: '↗ Sprungwolken · ↑ Ruhiger Weg',
+};
+const ROUTE_ACTIVE_HINTS = {
+  [ROUTE.WIND]: 'Windrad · Rückenwind!',
+  [ROUTE.ORCHARD]: 'Obstgarten · Ruhig lenken',
+  [ROUTE.CLOUD]: 'Wolkenweg · Federn treffen',
+};
 const HOP_SPEED = 9;
 const HOP_GRAVITY = 30;
 const BOOST_TIME = 0.9;
@@ -613,7 +630,10 @@ function finishTexture() {
  * forward, banked up and right, the slope and the sideways curvature.
  */
 export class Track {
-  constructor(course) {
+  #halfWidth;
+
+  constructor(course, { halfWidth = CLASSIC_ROAD_HALF_WIDTH } = {}) {
+    this.#halfWidth = halfWidth;
     const { start, finish } = course;
     const planet = finish.planet;
     const F = start.forward.clone().normalize();
@@ -704,6 +724,8 @@ export class Track {
     const b = this.keyLengths[Math.min((i + 1) * this.perKey, this.keyLengths.length - 1)];
     return lerp(a, b, k - i);
   }
+
+  halfWidth() { return this.#halfWidth; }
 
   /** Position and frame at `s` into `out` (see frameVectors()). */
   frame(s, out) {
@@ -855,31 +877,39 @@ function cap(mesher, track, s, points, facing) {
 }
 
 function roadSlab(mesher, track, s0, s1) {
-  const W = HALF_WIDTH;
-  const w = HALF_WIDTH - ROAD_TAPER;
   const top = ROAD_LIFT;
   const bottom = ROAD_LIFT - ROAD_THICKNESS;
-  const section = () => [
-    [-W, top, TOP_U0, 0, 1], [W, top, 1, 0, 1],
-    [W, top, UNDER_U, 1, 0], [w, bottom, UNDER_U, 1, 0],
-    [w, bottom, UNDER_U, 0, -1], [-w, bottom, UNDER_U, 0, -1],
-    [-w, bottom, UNDER_U, -1, 0], [-W, top, UNDER_U, -1, 0],
-  ];
+  const section = (s) => {
+    const W = track.halfWidth(s);
+    const w = W - ROAD_TAPER;
+    return [
+      [-W, top, TOP_U0, 0, 1], [W, top, 1, 0, 1],
+      [W, top, UNDER_U, 1, 0], [w, bottom, UNDER_U, 1, 0],
+      [w, bottom, UNDER_U, 0, -1], [-w, bottom, UNDER_U, 0, -1],
+      [-w, bottom, UNDER_U, -1, 0], [-W, top, UNDER_U, -1, 0],
+    ];
+  };
   const at = stations(s0, s1, ROAD_STEP);
   sweep(mesher, track, at, section, [[0, 1], [2, 3], [4, 5], [6, 7]], { vLength: ROAD_TEX_LENGTH });
   const P = PEN;
-  const hull = () => [[-W - P, top + P, 0, -1, 1], [W + P, top + P, 0, 1, 1], [w + P, bottom - P, 0, 1, -1], [-w - P, bottom - P, 0, -1, -1]];
+  const hull = (s) => {
+    const W = track.halfWidth(s);
+    const w = W - ROAD_TAPER;
+    return [[-W - P, top + P, 0, -1, 1], [W + P, top + P, 0, 1, 1], [w + P, bottom - P, 0, 1, -1], [-w - P, bottom - P, 0, -1, -1]];
+  };
   sweep(mesher, track, at, hull, [[0, 1], [1, 2], [2, 3], [3, 0]], { hull: true });
-  const end = [[-W, top], [W, top], [w, bottom], [-w, bottom]];
-  cap(mesher, track, s0, end, -1);
-  cap(mesher, track, s1, end, 1);
+  for (const [s, direction] of [[s0, -1], [s1, 1]]) {
+    const W = track.halfWidth(s);
+    const w = W - ROAD_TAPER;
+    cap(mesher, track, s, [[-W, top], [W, top], [w, bottom], [-w, bottom]], direction);
+  }
 }
 
 /** A round rail tube along one edge, closed to a point at both ends. */
 function rail(mesher, track, s0, s1, side) {
-  const cx = side * (HALF_WIDTH + RAIL_OUT);
   const at = [s0, s0 + RAIL_TIP / 2, ...stations(s0 + RAIL_TIP, s1 - RAIL_TIP, RAIL_STEP), s1 - RAIL_TIP / 2, s1];
   const ring = (grow) => (s) => {
+    const cx = side * ((track.halfWidth(s)) + RAIL_OUT);
     const r = RAIL_RADIUS * Math.sqrt(clamp(Math.min(s - s0, s1 - s) / RAIL_TIP, 0, 1));
     const out = r > 0 ? grow : 0;
     return Array.from({ length: RAIL_SIDES + 1 }, (_, i) => {
@@ -1024,15 +1054,32 @@ function buildDriver(art, dark) {
 // ---- The race ------------------------------------------------------------------------------
 
 export class KartRace {
-  constructor(scene, art, course) {
+  #routeStyle;
+  #routes;
+  #splitStations;
+  #toys;
+  #splits;
+  #bestDrift;
+  #routeVisits;
+  #routeCatches;
+  #toyBounces;
+  #routeRotors;
+  #rivalSparks;
+
+  constructor(scene, art, course, { routeStyle = RACE_STYLE.CLASSIC } = {}) {
+    this.#routeStyle = routeStyle;
     this.planets = course.planets;
-    this.track = new Track(course);
+    const halfWidth = routeStyle === RACE_STYLE.PLAYGROUND ? MAIN_ROAD_HALF_WIDTH : CLASSIC_ROAD_HALF_WIDTH;
+    this.track = new Track(course, { halfWidth });
+    this.#routes = new RouteNetwork(this.track, { routeStyle });
     this.group = new THREE.Group();
     this.group.visible = false;
     scene.add(this.group);
 
     this.placeFeatures();
     this.buildTrack(art);
+    this.#routeRotors = [];
+    if (routeStyle === RACE_STYLE.PLAYGROUND) this.#buildRouteToys();
     // The rest of each racer's state is set by resetRacer().
     this.player = { kart: buildKart(art, false), driver: buildDriver(art, false) };
     this.rival = { kart: buildKart(art, true), driver: buildDriver(art, true) };
@@ -1052,6 +1099,12 @@ export class KartRace {
       s.visible = false;
       this.player.kart.body.add(s);
       return s;
+    });
+    this.#rivalSparks = (routeStyle === RACE_STYLE.PLAYGROUND ? [-1, 1] : []).map(side => {
+      const spark = glowSprite(art.sparkle, 0xffffff, 0.8);
+      spark.position.set(side * KART.rear.x, 0.2, KART.rear.z - 0.3);
+      this.rival.kart.body.add(spark);
+      return spark;
     });
     // Tyre dust while sliding: a few puffs, reused in turn.
     const puffMap = puffTexture();
@@ -1103,16 +1156,6 @@ export class KartRace {
   }
 
   /** Degrees to widen the camera by for the sense of speed. */
-  /** Mirio's kart and the road under it, for the HUD and the test hooks. */
-  snapshot() {
-    const p = this.player, tr = this.track;
-    return {
-      s: p.s, x: p.x, height: p.h, yaw: p.yaw, course: p.course, turbo: p.turbo, charge: p.charge,
-      road: { curvature: tr.value(tr.curv, p.s), slope: tr.value(tr.slope, p.s), limit: X_LIMIT },
-      bestDrift: this.bestDrift, rival: { s: this.rival.s, x: this.rival.x },
-    };
-  }
-
   get fovKick() {
     return this.phase === 'idle' ? 0 : this.cam.kick;
   }
@@ -1123,6 +1166,9 @@ export class KartRace {
     const tr = this.track;
     this.sFinish = tr.sAtPsi(360 * LAPS);
     this.sStop = this.sFinish + STOP_AFTER;
+    const playground = this.#routeStyle === RACE_STYLE.PLAYGROUND;
+    this.#splitStations = playground ? SPLIT_PSI.map(psi => tr.sAtPsi(psi)) : [];
+    this.#toys = playground ? [560, 620, 815].map((psi, i) => ({ s: tr.sAtPsi(psi), x: 0, phase: i * 1.8, mesh: null })) : [];
 
     const lip = tr.sAtPsi(RAMP.psi);
     this.ramp = { s0: lip - RAMP.length, lip, gapEnd: lip + RAMP.gap };
@@ -1130,7 +1176,11 @@ export class KartRace {
       const s = tr.sAtPsi(psi);
       return { s0: s - PAD.length / 2, s1: s + PAD.length / 2, x, half: PAD.width / 2 };
     });
-    this.pads.push({ s0: this.ramp.s0, s1: lip, x: 0, half: HALF_WIDTH - 0.3, isRamp: true });
+    this.pads.push({ s0: this.ramp.s0, s1: lip, x: 0, half: tr.halfWidth() - 0.3, isRamp: true });
+    for (const fork of this.#routes.forks) {
+      const s = fork.s0 + (fork.s1 - fork.s0) * 0.58;
+      this.pads.push({ s0: s - 3, s1: s + 3, x: fork.id === ROUTE.ORCHARD ? -2 : 0, half: 1.8, route: fork.id });
+    }
     this.blocks = BLOCKS.map(([psi, x]) => ({ s: tr.sAtPsi(psi), x }));
 
     this.bits = [];
@@ -1146,8 +1196,11 @@ export class KartRace {
     }
     this.bits.sort((a, b) => a.s - b.s);
     for (const [i, b] of this.bits.entries()) {
-      const f = tr.frame(b.s, frameVectors());
-      b.pos = tr.point(b.s, b.x, b.h, new THREE.Vector3(), f);
+      const fork = this.#routes.forks.find(f => b.s > f.s0 + ROUTE_JOIN && b.s < f.s1 - ROUTE_JOIN);
+      b.route = fork && b.h === BIT_HEIGHT ? fork.id : ROUTE.MAIN;
+      const path = this.#routes.path(b.route);
+      const f = path.frame(b.s, frameVectors());
+      b.pos = path.point(b.s, b.x, b.h, new THREE.Vector3(), f);
       b.up = f.up.clone();
       b.color = COLORS.bits[i % COLORS.bits.length];
       b.phase = i * 0.7;
@@ -1160,7 +1213,8 @@ export class KartRace {
   }
 
   /** The road surface's height: the ramp kicker, else 0. */
-  groundAt(s) {
+  groundAt(s, route = ROUTE.MAIN) {
+    if (route !== ROUTE.MAIN) return 0;
     const r = this.ramp;
     if (s < r.s0 || s > r.lip) return 0;
     const k = (s - r.s0) / RAMP.length;
@@ -1176,7 +1230,26 @@ export class KartRace {
     const rails = new Mesher();
     for (const [a, b] of [[0, r.lip], [r.gapEnd, end]]) {
       roadSlab(road, tr, a, b);
-      for (const side of [-1, 1]) rail(rails, tr, a, b, side);
+      for (const side of [-1, 1]) {
+        let cursor = a;
+        const gates = this.#routes.forks.filter(f => f.side === side).flatMap(f => {
+          const opening = (f.s1 - f.s0) * 0.28;
+          return [[f.s0, f.s0 + opening], [f.s1 - opening, f.s1]];
+        });
+        for (const [start, end] of gates) {
+          if (end <= a || start >= b) continue;
+          if (start > cursor) rail(rails, tr, cursor, Math.min(start, b), side);
+          cursor = Math.max(cursor, end);
+        }
+        if (cursor < b) rail(rails, tr, cursor, b, side);
+      }
+    }
+    for (const fork of this.#routes.forks) {
+      roadSlab(road, fork.path, fork.s0 + 0.2, fork.s1 - 0.2);
+      for (const side of [-1, 1]) {
+        const opening = side === fork.side ? 1 : (fork.s1 - fork.s0) * 0.28;
+        rail(rails, fork.path, fork.s0 + opening, fork.s1 - opening, side);
+      }
     }
     this.group.add(new THREE.Mesh(road.geometry(), toon(0xffffff, { map: roadTexture(), vertexColors: true })));
     this.group.add(new THREE.Mesh(rails.geometry(), toon(0xffffff, { map: railTexture(), vertexColors: true })));
@@ -1186,7 +1259,7 @@ export class KartRace {
     for (const p of this.pads) {
       if (p.isRamp) continue;
       const section = () => [[p.x - p.half, PAD.lift, 0.02, 0, 1], [p.x + p.half, PAD.lift, 0.78, 0, 1]];
-      sweep(dash, tr, stations(p.s0, p.s1, 1.25), section, [[0, 1]], { vLength: PAD.length });
+      sweep(dash, this.#routes.path(p.route), stations(p.s0, p.s1, 1.25), section, [[0, 1]], { vLength: PAD.length });
     }
     this.buildRamp(dash);
     this.arrows = arrowTexture();
@@ -1206,7 +1279,7 @@ export class KartRace {
   buildRamp(dash) {
     const tr = this.track;
     const r = this.ramp;
-    const W = HALF_WIDTH - 0.3;
+    const W = this.track.halfWidth() - 0.3;
     const top = (s) => ROAD_LIFT + this.groundAt(s);
     const section = (s) => [
       [-W, top(s), 0.02, 0, 1], [W, top(s), 0.78, 0, 1],
@@ -1241,13 +1314,14 @@ export class KartRace {
     const lift = ROAD_LIFT + 0.03;
     // The lines are the checker rows (top half of the texture).
     for (const s of [START_LINE, this.sFinish]) {
-      const section = () => [[-HALF_WIDTH, lift, 0, 0, 1], [HALF_WIDTH, lift, 1, 0, 1]];
+      const section = () => [[-tr.halfWidth(), lift, 0, 0, 1], [tr.halfWidth(), lift, 1, 0, 1]];
       const at = mesher.count;
       sweep(mesher, tr, stations(s - 1.2, s + 1.2, 0.6), section, [[0, 1]], { vLength: 1 });
       for (let i = at; i < mesher.count; i++) mesher.uv[i * 2 + 1] = 0.5 + ((i - at) >> 1) / 4 * 0.5;
     }
 
-    const arch = new THREE.TorusGeometry(ARCH_RADIUS, 0.42, 10, 32, Math.PI);
+    const archRadius = tr.halfWidth() + 0.8;
+    const arch = new THREE.TorusGeometry(archRadius, 0.42, 10, 32, Math.PI);
     const uv = arch.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i), 0.5 + uv.getY(i) * 0.5);
     mesher.add(outlined(arch, PEN), trackMatrix(tr, this.sFinish, 0, ROAD_LIFT));
@@ -1260,7 +1334,7 @@ export class KartRace {
       if (face >= 4) buv.setXY(i, buv.getX(i), buv.getY(i) * 0.5);
       else buv.setXY(i, 0.005, 0.01);
     }
-    mesher.add(outlined(board, PEN, cornerNormals(board)), trackMatrix(tr, this.sFinish, 0, ARCH_RADIUS + 0.2));
+    mesher.add(outlined(board, PEN, cornerNormals(board)), trackMatrix(tr, this.sFinish, 0, archRadius + 0.2));
     this.group.add(new THREE.Mesh(mesher.geometry(), toon(0xffffff, { map: finishTexture(), vertexColors: true })));
 
     // The big crystal, waiting past the line.
@@ -1278,6 +1352,127 @@ export class KartRace {
     this.group.add(this.crystal);
   }
 
+  // Small course toys share route frames with collisions, so pictures never lie.
+  #buildRouteToys() {
+    const furniture = new Mesher();
+    const branchColors = new Mesher();
+    const painted = toon(0xffffff, { vertexColors: true });
+    this.#routeRotors = [];
+    for (const fork of this.#routes.forks) {
+      const sign = makeCanvas(384, 176);
+      const ctx = sign.getContext('2d');
+      ctx.fillStyle = '#203042'; ctx.fillRect(0, 0, 384, 176);
+      ctx.strokeStyle = `#${fork.color.toString(16)}`; ctx.lineWidth = 12; ctx.strokeRect(8, 8, 368, 160);
+      ctx.textAlign = 'center'; ctx.fillStyle = '#fff7df';
+      ctx.font = 'bold 64px sans-serif'; ctx.fillText(fork.turbo ? 'Turbo ↗' : fork.icon, 192, 78);
+      ctx.font = 'bold 36px sans-serif'; ctx.fillText(fork.name, 192, 138);
+      const billboard = new THREE.Sprite(new THREE.SpriteMaterial({map:canvasTexture(sign),depthTest:true}));
+      billboard.scale.set(5.7, 2.6, 1);
+      this.track.point(fork.s0 + 6, fork.side * (this.track.halfWidth() + 0.6), 3.9, billboard.position);
+      this.group.add(billboard);
+
+      // Colour continues onto the chosen road and back through its reconnection.
+      const strip = () => [[-0.18, ROAD_LIFT + 0.025, 0, 0, 1], [0.18, ROAD_LIFT + 0.025, 1, 0, 1]];
+      const start = branchColors.count;
+      sweep(branchColors, fork.path, stations(fork.s0 + 1, fork.s1 - 1, 2), strip, [[0, 1]]);
+      const color = new THREE.Color(fork.color);
+      for (let i = start; i < branchColors.count; i++) color.toArray(branchColors.color, i * 3);
+      for (const fraction of [0.3, 0.65]) {
+        const station = fork.s0 + (fork.s1 - fork.s0) * fraction;
+        if (fork.id === ROUTE.ORCHARD) {
+          const arch = paint(new THREE.TorusGeometry(6.4, 0.4, 6, 20, Math.PI), 0x77b778);
+          furniture.add(arch, trackMatrix(fork.path, station, 0, 0));
+          for (const side of [-1, 1]) {
+            const fruit = paint(new THREE.SphereGeometry(1.5, 10, 8), side < 0 ? 0xffb05c : 0xf57483);
+            furniture.add(fruit, trackMatrix(fork.path, station, side * 5.8, 3.6));
+          }
+        } else if (fork.id === ROUTE.WIND) {
+          const rotor = new THREE.Group();
+          const hub = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 6), toon(0xffca55));
+          rotor.add(hub);
+          const petals = [];
+          for (let i = 0; i < 4; i++) petals.push(paint(new THREE.BoxGeometry(1.2, 3.4, 0.2).translate(0, 1.8, 0).rotateZ(i * Math.PI / 2), i % 2 ? 0xffe68c : 0x85dbff));
+          rotor.add(new THREE.Mesh(merge(petals), painted));
+          const mount = new THREE.Group();
+          mount.applyMatrix4(trackMatrix(fork.path, station, fork.side * 7.2, 5.2));
+          mount.add(rotor); this.group.add(mount); this.#routeRotors.push(rotor);
+          const pole = paint(new THREE.CylinderGeometry(0.22, 0.35, 6, 6), 0xa5b4bf);
+          furniture.add(pole, trackMatrix(fork.path, station, fork.side * 7.2, 2.5));
+        } else {
+          const cloud = paint(new THREE.SphereGeometry(1, 10, 6).scale(3.5, 0.7, 1.7), 0xf4f5ff);
+          furniture.add(cloud, trackMatrix(fork.path, station, 0, -0.18));
+          for (const side of [-1, 1]) {
+            const puff = paint(new THREE.SphereGeometry(1, 8, 6).scale(3, 1.4, 2), 0xe3ecff);
+            furniture.add(puff, trackMatrix(fork.path, station, side * 6.8, -1.8));
+          }
+          this.#toys.push({s:station,x:0,route:fork.id,spring:true,phase:0,mesh:null});
+          const spring = paint(new THREE.CylinderGeometry(2.3, 2.3, 0.18, 14), 0x9dcdff);
+          furniture.add(spring, trackMatrix(fork.path, station, 0, 0.12));
+        }
+      }
+    }
+    this.group.add(new THREE.Mesh(furniture.geometry(), painted));
+    this.group.add(new THREE.Mesh(branchColors.geometry(), new THREE.MeshBasicMaterial({ vertexColors: true })));
+    for (const toy of this.#toys) {
+      if (toy.spring) continue;
+      const fruit = new THREE.Group();
+      fruit.add(new THREE.Mesh(new THREE.SphereGeometry(TOY.radius, 12, 8), toon(0xffbc63)));
+      const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.3, 7, 5), toon(0x7be89f));
+      leaf.position.set(0.2, TOY.radius, 0); leaf.scale.set(1.5, 0.4, 1); fruit.add(leaf);
+      this.group.add(fruit); toy.mesh = fruit;
+      // Bunting ahead of each rolling fruit teaches its lateral rhythm.
+      const arch = new THREE.Mesh(new THREE.TorusGeometry(6, 0.12, 5, 18, Math.PI), toon(0xffcb6e));
+      arch.applyMatrix4(trackMatrix(this.track, toy.s - 8, 0, 0)); this.group.add(arch);
+    }
+  }
+
+  #toyX(toy) {
+    return Math.sin(this.raceTime / TOY.period * Math.PI * 2 + toy.phase) * (this.#laneLimit({ route: ROUTE.MAIN }) - 0.4);
+  }
+
+  #animateRouteToys(now) {
+    for (const rotor of this.#routeRotors) rotor.rotation.z = now * (this.player?.turboMemory > 0 ? 4 : 0.6);
+    for (const toy of this.#toys) {
+      if (!toy.mesh) continue;
+      toy.x = this.#toyX(toy);
+      toy.mesh.matrix.copy(trackMatrix(this.track, toy.s, toy.x, TOY.radius));
+      toy.mesh.matrix.decompose(toy.mesh.position, toy.mesh.quaternion, toy.mesh.scale);
+      toy.mesh.children[0].rotation.z = -toy.x / TOY.radius;
+    }
+  }
+
+  #touchToys(r, events) {
+    const mine = r === this.player;
+    if (r.toyCooldown > 0 || r.flight) return;
+    for (const toy of this.#toys) {
+      const x = toy.spring ? toy.x : this.#toyX(toy);
+      if ((toy.route ?? ROUTE.MAIN) !== r.route || Math.abs(r.s - toy.s) > TOY.reach || Math.abs(r.x - x) > TOY.reach) continue;
+      if (r.h > TOY.height + 0.7 || r.air && r.vh > 0) continue;
+      // Fruit and cloud cushions bounce the kart forward; mistakes become toys.
+      r.air = true; r.vh = HOP_SPEED * (toy.spring ? 1.3 : 0.85);
+      r.boost = TOY.boost;
+      if (toy.spring) r.v = Math.max(r.v, CLOUD_SPEED);
+      r.toyCooldown = 1.2; r.squash = 0.8;
+      if (mine) { this.#toyBounces++; events.push({type:'race-bounce'}); }
+      break;
+    }
+  }
+
+  snapshot() {
+    const p = this.player, q = this.rival;
+    const fork = this.#routes.forks.find(f => p.s < f.s0 && p.s > f.s0 - 45);
+    return {
+      routeStyle:this.#routeStyle, s:p.s, x:p.x, route:p.route, height:p.h, yaw:p.yaw, course:p.course,
+      turbo:p.turbo, charge:p.charge, turboMemory:p.turboMemory,
+      road:{...this.#routes.road(p.route,p.s),limit:this.#laneLimit(p)}, splits:[...this.#splits], bestDrift:this.#bestDrift,
+      routes:[...this.#routeVisits], catches:this.#routeCatches, bounces:this.#toyBounces,
+      rival:{s:q.s,x:q.x,route:q.route},
+      routeHint: fork ? ROUTE_HINTS[fork.id] : ROUTE_ACTIVE_HINTS[p.route] ?? '',
+      nextFork:fork ? {id:fork.id,s:fork.s0,side:fork.side,turbo:Boolean(fork.turbo)} : null,
+      forks:this.#routes.forks.map(f=>({id:f.id,s0:f.s0,s1:f.s1,side:f.side})),
+    };
+  }
+
   /** The rival's line: the inside of curves, onto dash panels, round blocks. */
   planAiLine() {
     const tr = this.track;
@@ -1285,7 +1480,7 @@ export class KartRace {
     const line = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       let x = clamp(tr.value(tr.curv, i) * AI.inside, -AI.maxInside, AI.maxInside);
-      for (const p of this.pads) if (!p.isRamp && i > p.s0 - 12 && i < p.s1) x = p.x;
+      for (const p of this.pads) if (!p.isRamp && !p.route && i > p.s0 - 12 && i < p.s1) x = p.x;
       for (const b of this.blocks) {
         if (Math.abs(i - b.s) < 10 && Math.abs(x - b.x) < 2.8) x = b.x + (b.x > 0.3 || (b.x > -0.3 && x < 0) ? -3 : 3);
       }
@@ -1303,7 +1498,11 @@ export class KartRace {
     this.raceTime = 0;
     this.countShown = 0;
     this.result = null;
-    this.bestDrift = 0;
+    this.#splits = [];
+    this.#bestDrift = 0;
+    this.#routeVisits = new Set();
+    this.#routeCatches = 0;
+    this.#toyBounces = 0;
     this.lane = -1;
     for (const b of this.bits) b.taken = false;
     this.resetRacer(this.player, -GRID.x);
@@ -1322,8 +1521,9 @@ export class KartRace {
   resetRacer(r, x) {
     Object.assign(r, {
       s: GRID.s, x, vx: 0, h: 0, vh: 0, v: 0, steer: 0, pace: 1,
-      yaw: 0, course: 0, drift: 0, charge: 0, turbo: 0, scraping: false, sliding: false, throttle: 0, chargeStage: 0,
+      yaw: 0, course: 0, drift: 0, charge: 0, turbo: 0, scraping: false, sliding: false, throttle: 0,
       air: false, flight: null, trick: 0, tricked: false, boost: 0, lastPad: null, bumpCool: 0,
+      route: ROUTE.MAIN, turboMemory: 0, chargeStage: 0, toyCooldown: 0,
       squash: 1, finished: false, finishTime: 0, cheer: 0,
     });
     r.kart.root.scale.setScalar(1);
@@ -1426,13 +1626,13 @@ export class KartRace {
     Object.assign(p, {
       s: GRID.s + clamp(fraction, 0, 1) * (this.sFinish - GRID.s),
       h: 0, vh: 0, air: false, flight: null, trick: 0, tricked: false, lastPad: null, finished: false,
-      yaw: 0, course: 0, drift: 0, charge: 0,
+      yaw: 0, course: 0, drift: 0, charge: 0, route: ROUTE.MAIN, turboMemory: 0,
     });
     this.result = null;
     p.v = Math.max(p.v, DRIVE.cruise);
     const q = this.rival;
     if (!q.finished && Math.abs(q.s - p.s) > 12) {
-      Object.assign(q, { s: p.s - 6, h: 0, vh: 0, air: false, flight: null, lastPad: null, v: p.v });
+      Object.assign(q, { route: ROUTE.MAIN, s: p.s - 6, h: 0, vh: 0, air: false, flight: null, lastPad: null, v: p.v });
     }
     this.animate(0);
   }
@@ -1509,6 +1709,11 @@ export class KartRace {
       this.stepRacer(p, h, mine, events, true);
       this.stepRacer(q, h, theirs, events, false);
       this.collideKarts(events);
+      if (this.#splits.length < this.#splitStations.length && p.s >= this.#splitStations[this.#splits.length]) {
+        const time = crossingTime(this.raceTime, h, previousPlayer, p.s, this.#splitStations[this.#splits.length]);
+        this.#splits.push(time);
+        events.push({ type: 'race-split', n: this.#splits.length, time });
+      }
 
       if (!q.finished && q.s >= this.sFinish) {
         q.finished = true;
@@ -1540,16 +1745,25 @@ export class KartRace {
 
   aiControl(r) {
     const i = clamp(Math.round(r.s + r.v * AI.lookAhead), 0, this.aiLine.length - 1);
-    let target = this.aiLine[i];
+    let target = r.route === ROUTE.MAIN ? this.aiLine[i] : Math.sin(r.s * 0.045) * 1.6;
+    const fork = this.#routes.forks.find(f => r.s > f.s0 - 20 && r.s < f.s0 + 2);
+    if (fork) target = fork.side * 2.4;
+
     const p = this.player;
+    const limit = this.#laneLimit(r);
     const blocked = this.blocks.some((b) => b.s > r.s && b.s < r.s + 12);
-    if (Math.abs(r.s - p.s) < AI.near && !blocked) {
+    if (!fork && this.#routes.sameRoad(r, p) && Math.abs(r.s - p.s) < AI.near && !blocked) {
       const away = p.x > r.x ? -1 : 1;
-      target = clamp(p.x + away * AI.apart, -X_LIMIT, X_LIMIT);
-      if (Math.abs(target - p.x) < AI.apart - 0.5) target = clamp(p.x - away * AI.apart, -X_LIMIT, X_LIMIT);
+      target = clamp(p.x + away * AI.apart, -limit, limit);
+      if (Math.abs(target - p.x) < AI.apart - 0.5) target = clamp(p.x - away * AI.apart, -limit, limit);
     }
     const steer = clamp((target - r.x) * 0.5 - r.vx * 0.06, -1, 1);
-    return { steer, brake: false, jump: false, spin: Boolean(r.flight) && !r.tricked };
+    const curve = this.#routes.road(r.route, r.s).curvature;
+    let drift = 0;
+    if (this.#routeStyle === RACE_STYLE.PLAYGROUND) {
+      drift = fork?.turbo ? (r.s < fork.s0 - 4 ? fork.side : 0) : Math.abs(curve) > 0.035 ? Math.sign(curve) : 0;
+    }
+    return { steer, drift, brake: false, jump: false, spin: Boolean(r.flight) && !r.tricked };
   }
 
   /** After the line: roll into a lane and stop. */
@@ -1560,22 +1774,40 @@ export class KartRace {
   stepRacer(r, dt, ctl, events, mine) {
     const s0 = r.s;
     r.bumpCool = Math.max(0, r.bumpCool - dt);
+    r.turboMemory = Math.max(0, r.turboMemory - dt);
+    r.toyCooldown = Math.max(0, r.toyCooldown - dt);
     r.boost = Math.max(0, r.boost - dt);
+    if (r.route === ROUTE.WIND) r.boost = Math.max(r.boost, WIND_PUSH);
     r.squash = damp(r.squash, 1, 10, dt);
     if (r.trick > 0) r.trick = Math.max(0, r.trick - dt);
 
     if (mine && !ctl.stop) this.drive(r, dt, ctl, events);
     else this.slide(r, dt, ctl, events, mine);
+    const entry = this.#routes.enter(r, s0);
+    if (entry && mine) {
+      if (entry.type === 'route') this.#routeVisits.add(entry.fork.id);
+      else this.#routeCatches++;
+      events.push({ type: entry.type, name: entry.fork.name });
+    }
+    this.#routes.reconcile(r);
+    if (r.s < 0) { r.s = 0; r.v = Math.max(0, r.v); }
     this.stepHeight(r, s0, ctl, events, mine, dt);
     this.touchPads(r, events, mine);
     this.touchBlocks(r, s0, events, mine);
+    this.#touchToys(r, events);
     if (mine) this.collectBits(r, events);
+  }
+
+  #laneLimit(r) {
+    const width = this.#routes.fork(r.route)?.path.halfWidth(r.s) ?? this.track.halfWidth();
+    return width - KART_HALF_WIDTH - RAIL_RADIUS * 0.5;
   }
 
   /** Mirio's kart, steered by its heading. */
   drive(r, dt, ctl, events) {
-    const track = this.track;
-    const road = { curvature: track.value(track.curv, r.s), slope: track.value(track.slope, r.s), limit: X_LIMIT };
+    const road = { ...this.#routes.road(r.route, r.s), limit: this.#laneLimit(r) };
+    const start = r.s;
+    const metric = this.#routes.metric(r.route, r.s);
     const airborne = r.air || Boolean(r.flight);
     r.throttle = ctl.throttle;
     const slide = slideOf(r);
@@ -1587,6 +1819,7 @@ export class KartRace {
     }
     for (const type of driveKart(r, ctl, road, dt, { boosting: r.boost > 0, airborne })) {
       if (type !== 'bump') {
+        if (type === 'turbo') r.turboMemory = WIND_MEMORY;
         events.push({ type });
         continue;
       }
@@ -1594,15 +1827,16 @@ export class KartRace {
       r.bumpCool = BUMP_COOLDOWN;
       r.squash = 0.9;
     }
+    r.s = start + (r.s - start) / metric;
     const stage = driftLevel(r);
     if (stage > r.chargeStage) events.push({ type: 'drift-charge', n: stage });
     r.chargeStage = stage;
-    this.bestDrift = Math.max(this.bestDrift, stage);
+    this.#bestDrift = Math.max(this.#bestDrift, stage);
   }
 
   /** Finster-Mirio's kart, and Mirio's after the line: slides across the road. */
   slide(r, dt, ctl, events, mine) {
-    const track = this.track;
+    const limit = this.#laneLimit(r);
     // Speed: cruise, faster downhill, brake with the stick pulled back.
     if (ctl.stop) {
       const room = Math.max(0.5, this.sStop - (mine ? 0 : 4) - r.s);
@@ -1614,7 +1848,7 @@ export class KartRace {
       r.yaw = damp(r.yaw, 0, 4, dt);
       r.course = damp(r.course, 0, 4, dt);
     } else if (!r.flight) {
-      r.v = approachSpeed(r.v, track.value(track.slope, r.s), dt, { pace: r.pace, boosting: r.boost > 0 });
+      r.v = approachSpeed(r.v, this.#routes.road(r.route, r.s).slope, dt, { pace: r.pace, boosting: r.boost > 0 });
     }
 
     // Steering slides the kart across the road; rails at both edges.
@@ -1622,9 +1856,9 @@ export class KartRace {
     const grip = 0.55 + 0.45 * Math.min(1, r.v / DRIVE.cruise);
     r.vx += clamp(r.steer * STEER_SPEED * grip - r.vx, -LATERAL_ACCEL * dt, LATERAL_ACCEL * dt);
     r.x += r.vx * dt;
-    if (Math.abs(r.x) > X_LIMIT) {
+    if (Math.abs(r.x) > limit) {
       const side = Math.sign(r.x);
-      r.x = side * X_LIMIT;
+      r.x = side * limit;
       const into = r.vx * side;
       if (into > WALL_HIT && r.bumpCool <= 0) {
         r.v *= WALL_KEEP;
@@ -1637,12 +1871,26 @@ export class KartRace {
         r.v = Math.max(0, r.v - SCRAPE * dt);
       }
     }
-    r.s += r.v * dt;
+    r.s += r.v * dt / this.#routes.metric(r.route, r.s);
+    if (!mine && !ctl.stop) {
+      if (ctl.drift && r.v > DRIVE.driftSpeed) {
+        r.drift = ctl.drift;
+        if (!r.air && !r.flight) r.charge += dt;
+      } else {
+        if (r.charge >= DRIVE.charge[0]) {
+          r.boost = DRIVE.turbo[0];
+          r.turboMemory = WIND_MEMORY;
+        }
+        r.drift = 0;
+        r.charge = 0;
+      }
+      r.yaw = damp(r.yaw, r.drift * DRIVE.driftAngle, 5, dt);
+    }
   }
 
   stepHeight(r, s0, ctl, events, mine, dt) {
     const ramp = this.ramp;
-    if (!r.flight && s0 < ramp.lip && r.s >= ramp.lip) {
+    if (r.route === ROUTE.MAIN && !r.flight && s0 < ramp.lip && r.s >= ramp.lip) {
       r.flight = { from: Math.max(r.h, RAMP.height) };
       r.air = false;
       r.v = Math.max(r.v, RAMP.speed);
@@ -1670,7 +1918,7 @@ export class KartRace {
       }
       return;
     }
-    const ground = this.groundAt(r.s);
+    const ground = this.groundAt(r.s, r.route);
     if (r.air) {
       r.vh -= HOP_GRAVITY * dt;
       r.h += r.vh * dt;
@@ -1692,8 +1940,9 @@ export class KartRace {
 
   touchPads(r, events, mine) {
     for (const pad of this.pads) {
+      if ((pad.route ?? ROUTE.MAIN) !== r.route) continue;
       if (r.s < pad.s0 || r.s > pad.s1 || r.lastPad === pad) continue;
-      if (Math.abs(r.x - pad.x) > pad.half + KART_HALF_WIDTH * 0.5 || r.h > this.groundAt(r.s) + 0.4) continue;
+      if (Math.abs(r.x - pad.x) > pad.half + KART_HALF_WIDTH * 0.5 || r.h > this.groundAt(r.s, r.route) + 0.4) continue;
       r.lastPad = pad;
       r.boost = BOOST_TIME;
       r.v = Math.max(r.v, DRIVE.boost * r.pace);
@@ -1702,20 +1951,22 @@ export class KartRace {
   }
 
   touchBlocks(r, s0, events, mine) {
+    if (r.route !== ROUTE.MAIN) return;
     const reachS = BLOCK.size / 2 + KART_HALF_LENGTH;
     const reachX = BLOCK.size / 2 + KART_HALF_WIDTH;
+    const limit = this.#laneLimit(r);
     for (const b of this.blocks) {
       const dx = r.x - b.x;
       if (Math.abs(r.s - b.s) >= reachS || Math.abs(dx) >= reachX || r.h > BLOCK.height - 0.15 || r.flight) continue;
       // Glance off to the side with more room; head-on also costs speed.
       let side = Math.sign(dx) || (b.x > 0 ? -1 : 1);
-      if (Math.abs(b.x + side * reachX) > X_LIMIT) side = -side;
+      if (Math.abs(b.x + side * reachX) > limit) side = -side;
       if (s0 <= b.s - reachS + 0.05) {
         r.v *= BLOCK_KEEP;
         r.air = true;
         r.vh = 3;
       }
-      r.x = clamp(b.x + side * reachX, -X_LIMIT, X_LIMIT);
+      r.x = clamp(b.x + side * reachX, -limit, limit);
       r.vx = side * BLOCK_NUDGE;
       r.squash = 0.8;
       if (mine && r.bumpCool <= 0) events.push({ type: 'bump' });
@@ -1725,7 +1976,7 @@ export class KartRace {
 
   collectBits(r, events) {
     for (const [i, b] of this.bits.entries()) {
-      if (b.taken || Math.abs(b.s - r.s) > BIT_RADIUS) continue;
+      if (b.route !== r.route || b.taken || Math.abs(b.s - r.s) > BIT_RADIUS) continue;
       const d = Math.hypot(b.s - r.s, b.x - r.x, b.h - (r.h + BIT_HEIGHT));
       if (d > BIT_RADIUS) continue;
       b.taken = true;
@@ -1736,13 +1987,18 @@ export class KartRace {
   collideKarts(events) {
     const p = this.player;
     const q = this.rival;
-    const ds = q.s - p.s;
-    const dx = q.x - p.x;
-    if (Math.abs(ds) > KART_HALF_LENGTH * 2 || Math.abs(dx) > KART_HALF_WIDTH * 2 || Math.abs(p.h - q.h) > 1) return;
+    if (!this.#routes.sameRoad(p, q)) return;
+    if (Math.abs(q.s - p.s) > KART_HALF_LENGTH * 3) return;
+    const playerPath = this.#routes.path(p.route), rivalPath = this.#routes.path(q.route);
+    const pf = playerPath.frame(p.s, this.frameA), qf = rivalPath.frame(q.s, this.frameB);
+    playerPath.point(p.s, p.x, p.h, tmp, pf);
+    rivalPath.point(q.s, q.x, q.h, tmp2, qf).sub(tmp);
+    const ds = tmp2.dot(pf.tan), dx = tmp2.dot(pf.right);
+    if (Math.abs(ds) > KART_HALF_LENGTH * 2 || Math.abs(dx) > KART_HALF_WIDTH * 2 || Math.abs(tmp2.dot(pf.up)) > 1) return;
     const side = Math.sign(dx) || 1;
     const push = (KART_HALF_WIDTH * 2 - Math.abs(dx)) / 2;
-    p.x = clamp(p.x - side * push, -X_LIMIT, X_LIMIT);
-    q.x = clamp(q.x + side * push, -X_LIMIT, X_LIMIT);
+    p.x = clamp(p.x - side * push, -this.#laneLimit(p), this.#laneLimit(p));
+    q.x = clamp(q.x + side * push, -this.#laneLimit(q), this.#laneLimit(q));
     p.vx = -side * 4;
     q.vx = side * 4;
     if (p.bumpCool > 0) return;
@@ -1756,6 +2012,7 @@ export class KartRace {
 
   animate(dt) {
     const now = (this.clock = (this.clock ?? 0) + dt);
+    this.#animateRouteToys(now);
     for (const r of [this.player, this.rival]) {
       this.placeKart(r, dt, now);
       this.poseDriver(r, dt, now);
@@ -1782,15 +2039,16 @@ export class KartRace {
 
   placeKart(r, dt, now) {
     const k = r.kart;
-    const f = this.track.frame(r.s, r === this.player ? this.frameA : this.frameB);
-    this.track.point(r.s, r.x, r.h, k.root.position, f);
+    const path = this.#routes.path(r.route);
+    const f = path.frame(r.s, r === this.player ? this.frameA : this.frameB);
+    path.point(r.s, r.x, r.h, k.root.position, f);
     basis.makeBasis(tmp.copy(f.right).negate(), f.up, f.tan);
     k.root.quaternion.setFromRotationMatrix(basis);
 
     // On the road below; there is none over the ramp's gap.
-    const ground = this.groundAt(r.s);
-    r.shadow.visible = k.root.scale.x > 0.5 && !(r.s > this.ramp.lip && r.s < this.ramp.gapEnd);
-    this.track.point(r.s, r.x, ground + ROAD_LIFT + 0.02, r.shadow.position, f);
+    const ground = this.groundAt(r.s, r.route);
+    r.shadow.visible = k.root.scale.x > 0.5 && !(r.route === ROUTE.MAIN && r.s > this.ramp.lip && r.s < this.ramp.gapEnd);
+    path.point(r.s, r.x, ground + ROAD_LIFT + 0.02, r.shadow.position, f);
     r.shadow.quaternion.copy(k.root.quaternion);
     r.shadow.scale.setScalar(SHADOW_SIZE / (1 + Math.max(0, r.h - ground) * 0.25));
 
@@ -1817,13 +2075,13 @@ export class KartRace {
     const flicker = 0.85 + Math.sin(now * 53 + (r === this.player ? 0 : 2)) * 0.1 + Math.sin(now * 31) * 0.08;
     k.flame.scale.set(width, length * flicker, width);
 
-    if (r !== this.player) return;
-    this.dust(r, dt);
+    if (r === this.player) this.dust(r, dt);
     const level = driftLevel(r);
-    for (const [i, spark] of this.sparks.entries()) {
-      spark.visible = r.drift !== 0 && !r.air;
+    const sparks = r === this.player ? this.sparks : this.#rivalSparks;
+    for (const [i, spark] of sparks.entries()) {
+      spark.visible = (r.drift !== 0 || r.turbo > 0) && !r.air;
       if (!spark.visible) continue;
-      spark.material.color.set(SPARKS[level]);
+      spark.material.color.set(r.turbo > 0 ? 0xfff1a3 : SPARKS[level]);
       spark.scale.setScalar((0.35 + level * 0.25) * (0.75 + 0.25 * Math.sin(now * 40 + i * 2)));
     }
   }
@@ -1876,14 +2134,15 @@ export class KartRace {
 
   // ---- Camera ---------------------------------------------------------------------------
 
-  updateCamera(camera, dt) {
+  updateCamera(camera, dt, { reducedMotion = false } = {}) {
     if (this.phase === 'idle') return;
     dt = Math.min(dt, MAX_DT);
     const c = this.cam;
     const p = this.player;
     const kart = p.kart.root.position;
-    const f = this.track.frame(p.s, this.frameB);
-    const up = this.track.levelUp(p.s, new THREE.Vector3()).lerp(f.up, CAMERA_BANK).normalize();
+    const path = this.#routes.path(p.route);
+    const f = path.frame(p.s, this.frameB);
+    const up = path.levelUp(p.s, new THREE.Vector3()).lerp(f.up, reducedMotion ? 0 : CAMERA_BANK).normalize();
     const side = new THREE.Vector3().crossVectors(f.tan, up).normalize();
 
     // Chase: behind and above in the kart's own track frame (a frame taken
@@ -1892,18 +2151,18 @@ export class KartRace {
     const k = this.phase === 'finished' ? smoothstep(0.3, FINISH_VIEW.time, this.t) : 0;
     const angle = lerp(Math.PI, FINISH_VIEW.angle, k);
     const boosting = p.boost > 0 || p.turbo > 0;
-    const distance = lerp(CHASE.distance + (boosting ? CHASE.boostPull : 0), FINISH_VIEW.distance, k);
+    const distance = lerp(CHASE.distance + (boosting && !reducedMotion ? CHASE.boostPull : 0), FINISH_VIEW.distance, k);
     // Behind Mirio's direction of travel (in a drift or a slide his body
     // turns away from it, and that is what should show).
-    const turn = p.course * CHASE.heading * (1 - k);
+    const turn = p.course * (reducedMotion ? 0 : CHASE.heading) * (1 - k);
     const ahead = f.tan.clone().multiplyScalar(Math.cos(turn)).addScaledVector(side, Math.sin(turn));
     const offset = new THREE.Vector3()
       .addScaledVector(ahead, Math.cos(angle) * distance)
       .addScaledVector(side, Math.sin(angle) * distance * -this.lane)
       .addScaledVector(up, lerp(CHASE.height, FINISH_VIEW.height, k));
     const look = kart.clone().addScaledVector(up, lerp(CHASE.lookUp, 1.9, k)).addScaledVector(ahead, CHASE.lookAhead * (1 - k));
-    const kick = this.phase === 'race' ? (boosting ? CHASE.boostFov : 0) + CHASE.speedFov * Math.max(0, p.v - DRIVE.cruise) : 0;
-    c.kick = damp(c.kick, kick, 4, dt);
+    const kick = this.phase === 'race' && !reducedMotion ? (boosting ? CHASE.boostFov : 0) + CHASE.speedFov * Math.max(0, p.v - DRIVE.cruise) : 0;
+    c.kick = reducedMotion ? 0 : damp(c.kick, kick, 4, dt);
     let camUp = up;
 
     if (this.phase === 'intro' || this.phase === 'countdown') {

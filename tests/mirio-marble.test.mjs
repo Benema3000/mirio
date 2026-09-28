@@ -1,86 +1,118 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MARBLE, MARBLE_BELLS, MARBLE_PATHS, MARBLE_BUMPERS, MarbleRules, marbleFloor, bumperBeat} from '../js/marble-rules.js';
+import {MARBLE,MARBLE_BELLS,MARBLE_FLIPPERS,MarbleRules,PINBALL_PHASE,flipperSegment} from '../js/marble-rules.js';
 
-const stepFor=(run,time,input)=>{const events=[];for(let t=0;t<time;t+=1/120)events.push(...run.step(1/120,input));return events;};
-function note(run,id){
-  run.seek(id);
-  return run.step(1/120,{action:true,jumpHeld:true});
+const HZ=120,FRAME=1/HZ;
+function stepFor(run,seconds,input={}){
+  const events=[];for(let i=0;i<Math.ceil(seconds*HZ);i++)events.push(...run.step(FRAME,input));return events;
 }
-function drive(run,target,seconds=20){
-  for(let t=0;t<seconds;t+=1/120){
-    const state=run.snapshot();
-    const d={x:target.x-state.x,y:target.y-state.y},span=Math.hypot(d.x,d.y),speed=state.speed;
-    if(span<.5&&speed<1)return;
-    const wanted=Math.min(4.6,span*2),scale=wanted/Math.max(.1,span);
-    run.step(1/120,{x:(d.x*scale-state.vx)*.55,y:(d.y*scale-state.vy)*.55,jumpHeld:span<1.2&&speed>1.5});
+function launch(run,charge=.85){stepFor(run,charge,{jumpHeld:true});return run.step(FRAME,{});}
+function light(run,id){run.seek(id);return run.step(FRAME,{});}
+function play(run,limit=200,hold='timed'){
+  const events=[];
+  for(let i=0;i<limit*HZ&&run.snapshot().status==='playing';i++){
+    const s=run.snapshot(),flip=hold==='held'||s.y<11&&s.vy<0;
+    events.push(...run.step(FRAME,{jumpHeld:s.served&&s.plungerCharge<.85,
+      flipperLeft:!s.served&&flip,flipperRight:!s.served&&flip}));
   }
-  assert.fail(`did not reach ${JSON.stringify(target)} from ${JSON.stringify(run.snapshot())}`);
+  return events;
 }
 
-test('rolling carries inertia; brake settles it without a jump',()=>{
-  const rolling=new MarbleRules();stepFor(rolling,.7,{y:1});const before=rolling.snapshot();
-  stepFor(rolling,.35,{});assert.ok(rolling.snapshot().speed>before.speed*.65);
-  stepFor(rolling,.35,{jumpHeld:true});assert.ok(rolling.snapshot().speed<.3);
-  assert.equal(rolling.snapshot().height,0);
+test('a side plunger charges while held and launches only on release',()=>{
+  const run=new MarbleRules();stepFor(run,1,{x:1,y:1});assert.equal(run.snapshot().phase,PINBALL_PHASE.SERVE);
+  const events=stepFor(run,.6,{jumpHeld:true}),charged=run.snapshot();
+  assert.equal(charged.speed,0);assert.ok(charged.plungerCharge>.6);assert.equal(events.length,0);
+  const released=run.step(FRAME,{});assert.ok(released.some(e=>e.type==='spring'));
+  assert.equal(run.snapshot().launches,1);assert.ok(run.snapshot().vy>MARBLE.launchMin);
 });
 
-test('bells teach braking, a generous pulse collects once and carries the note',()=>{
-  const run=new MarbleRules();run.seek('rose');stepFor(run,.7,{x:1});
-  run.step(.01,{action:true});assert.equal(run.snapshot().notes,0);
-  stepFor(run,1.3,{jumpHeld:true});
-  const events=run.step(.01,{action:true,jumpHeld:true});assert.equal(events.filter(e=>e.type==='note').length,1);
-  assert.equal(run.snapshot().notes,1);run.step(.01,{action:true});assert.equal(run.snapshot().notes,1);
-  assert.ok(run.snapshot().cooldown>0);
+test('a short plunger tap reaches the table; full charge gives a stronger launch',()=>{
+  const short=new MarbleRules(),long=new MarbleRules();launch(short,FRAME);launch(long,1);
+  assert.ok(long.snapshot().vy>short.snapshot().vy+5);
+  stepFor(short,4);assert.equal(short.snapshot().served,false);assert.notEqual(short.snapshot().x,13);
 });
 
-test('all three bells can be visited in any order; only the starting drum finishes',()=>{
-  for(const order of [['rose','blue','gold'],['gold','rose','blue'],['blue','gold','rose']]){
-    const run=new MarbleRules();for(const id of order)note(run,id);
-    assert.equal(run.snapshot().status,'playing');assert.equal(run.snapshot().finishReady,true);
-    run.seek('drum');stepFor(run,.6,{jumpHeld:true});
-    assert.equal(run.snapshot().status,'finished');const time=run.snapshot().time;stepFor(run,1,{y:1});assert.equal(run.snapshot().time,time);
+test('the ball obeys gravity, with no directional steering acceleration',()=>{
+  const still=new MarbleRules(),steered=new MarbleRules();launch(still);launch(steered);
+  stepFor(still,1);stepFor(steered,1,{x:1,y:1});
+  assert.equal(still.snapshot().vx,steered.snapshot().vx);assert.equal(still.snapshot().vy,steered.snapshot().vy);
+  assert.ok(still.snapshot().vy<MARBLE.launchMax-8);
+});
+
+test('left and right bats move independently and can be pressed together',()=>{
+  const run=new MarbleRules();stepFor(run,.1,{flipperLeft:true});let s=run.snapshot();
+  assert.equal(s.flipperLeft,true);assert.equal(s.flipperRight,false);
+  assert.ok(s.flipperAngles.left>0);assert.equal(s.flipperAngles.right,MARBLE.flipperRest);
+  stepFor(run,.1,{flipperLeft:true,flipperRight:true});s=run.snapshot();
+  assert.equal(s.flipperLeft,true);assert.equal(s.flipperRight,true);
+  stepFor(run,.1);assert.equal(run.snapshot().flipperAngles.left,MARBLE.flipperRest);
+});
+
+test('a timed flipper contact sends the ball up-table and across from the correct side',()=>{
+  for(const side of ['left','right']){
+    const run=new MarbleRules();run.seek(side);
+    const events=stepFor(run,.18,{[side==='left'?'flipperLeft':'flipperRight']:true}),s=run.snapshot();
+    assert.ok(events.some(e=>e.type==='flipper-hit'&&e.side===side));assert.ok(s.vy>20);
+    assert.equal(Math.sign(s.vx),side==='left'?1:-1);
   }
 });
 
-test('gutter and manual recovery keep notes, add one penalty, and return to a safe room',()=>{
-  const run=new MarbleRules();note(run,'rose');const events=[];
-  for(let t=0;t<8&&run.snapshot().recoveries===0;t+=1/120)events.push(...run.step(1/120,{x:-1}));
-  assert.equal(events.filter(e=>e.type==='rescue').length,1);
-  assert.equal(run.snapshot().notes,1);assert.equal(run.snapshot().penalty,MARBLE.recoveryPenalty);
-  assert.ok(marbleFloor(run.snapshot().x,run.snapshot().y).distance<0);
-  run.rescue();assert.equal(run.snapshot().penalty,MARBLE.recoveryPenalty*2);assert.equal(run.snapshot().notes,1);
+test('released bats leave a real central drain while held bats offer a broad catch',()=>{
+  const left=MARBLE_FLIPPERS[0],rest=flipperSegment(left,MARBLE.flipperRest),raised=flipperSegment(left,MARBLE.flipperRaised);
+  assert.ok(Math.abs(rest.bx)>MARBLE.radius+MARBLE.flipperRadius);
+  assert.ok(Math.abs(raised.bx)<MARBLE.radius+MARBLE.flipperRadius);
+  const run=new MarbleRules();run.seek('drain');const events=stepFor(run,.2);
+  assert.equal(events.filter(e=>e.type==='rescue').length,1);assert.equal(run.snapshot().served,true);
 });
 
-test('bank and broad bends are separate continuous roads between the same rooms',()=>{
-  for(const path of MARBLE_PATHS)for(let i=1;i<path.points.length;i++){
-    const a=path.points[i-1],b=path.points[i];
-    for(let t=0;t<=1;t+=.1)assert.ok(marbleFloor(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t).distance<0);
+test('targets light on impact once, then unfold a persistent flower',()=>{
+  const run=new MarbleRules(),id=MARBLE_BELLS[0].id;
+  assert.equal(light(run,id).filter(e=>e.type==='note').length,1);assert.equal(run.snapshot().notes,1);
+  assert.equal(light(run,id).filter(e=>e.type==='note').length,0);assert.equal(run.snapshot().notes,1);
+});
+
+test('drains and manual recovery keep room progress and cost exactly two seconds',()=>{
+  const run=new MarbleRules();run.seek(.5);const before=run.snapshot();run.seek('drain');stepFor(run,.2);
+  const after=run.snapshot();assert.equal(after.table,before.table);assert.deepEqual(after.noteIds,before.noteIds);
+  assert.equal(after.penalty,MARBLE.recoveryPenalty);assert.equal(after.recoveries,1);assert.equal(after.served,true);
+  run.rescue();assert.equal(run.snapshot().penalty,2*MARBLE.recoveryPenalty);assert.deepEqual(run.snapshot().noteIds,before.noteIds);
+});
+
+test('a nudge has a cooldown and never replaces gravity or flippers',()=>{
+  const run=new MarbleRules();launch(run);stepFor(run,3);const events=run.step(FRAME,{action:true});
+  assert.equal(events.filter(e=>e.type==='ring').length,1);assert.ok(run.snapshot().cooldown>2.9);
+  assert.equal(stepFor(run,1,{action:true}).filter(e=>e.type==='ring').length,0);
+});
+
+test('zero or invalid dt cannot advance physics, charge a plunger or consume input',()=>{
+  const run=new MarbleRules(),before=run.snapshot();for(const dt of [0,-1,Infinity,NaN])run.step(dt,{jumpHeld:true,action:true});
+  assert.deepEqual(run.snapshot(),before);
+});
+
+test('three complete tables finish through ordinary plunger and flipper controls',()=>{
+  for(const strategy of ['timed','held']){
+    const run=new MarbleRules(),events=play(run,200,strategy),s=run.snapshot();
+    assert.equal(s.status,'finished',`${strategy}: ${JSON.stringify(s)}`);assert.equal(s.notes,9);assert.equal(s.table,2);
+    assert.equal(events.filter(e=>e.type==='checkpoint').length,2);assert.equal(events.filter(e=>e.type==='finish').length,1);
+    assert.ok(s.flips>3);assert.ok(s.bumps>8);assert.equal(s.recoveries,0);assert.ok(s.time>45&&s.time<180);
+    const finished=run.snapshot();stepFor(run,1,{jumpHeld:true});assert.deepEqual(run.snapshot(),finished);
   }
-  assert.equal(marbleFloor(0,36).bank,true);assert.equal(marbleFloor(-18,36).bank,false);
-  assert.ok(marbleFloor(-9,36).distance>0,'forks must have real space between them');
 });
 
-test('cushions warn before each stronger pulse and push away without trapping',()=>{
-  const bumper=MARBLE_BUMPERS[0];assert.ok(bumperBeat(3.4,bumper).anticipation>.5);assert.equal(bumperBeat(3.7,bumper).active,true);
-  const run=new MarbleRules();run.seek('lesson');
-  const events=run.step(.01,{}),state=run.snapshot();assert.ok(events.some(e=>e.type==='marble-bumper'));assert.ok(state.vx>0);
-  assert.ok(Math.hypot(state.x-bumper.x,state.y-bumper.y)>=bumper.radius+MARBLE.radius-.001);
+
+test('held flippers avoid repeating dead-end bounces at common frame rates',()=>{
+  for(const hz of [30,60,90,120,144]){
+    const run=new MarbleRules();
+    for(let i=0;i<hz*150&&run.snapshot().status==='playing';i++){
+      const s=run.snapshot();run.step(1/hz,{jumpHeld:s.served&&s.plungerCharge<.9,flipperLeft:true,flipperRight:true});
+    }
+    assert.equal(run.snapshot().status,'finished',`${hz}Hz ${JSON.stringify(run.snapshot())}`);
+    assert.equal(run.snapshot().recoveries,0);
+  }
 });
 
-test('a complete connected board route plays in the intended time without rescue',()=>{
-  const run=new MarbleRules();
-  const route=[[0,18],[-10,18],[-18,29],[-20,30,'rose'],[-18,38],[-18,43],[0,54],[0,57,'gold'],
-    [0,54],[18,43],[18,35],[18,29],[20,30,'blue'],[18,29],[10,18],[0,18],[0,4]];
-  for(const [x,y,bell]of route){drive(run,{x,y});if(bell){stepFor(run,1.3,{jumpHeld:true});run.step(.01,{action:true,jumpHeld:true});}}
-  stepFor(run,.6,{jumpHeld:true});const state=run.snapshot();
-  assert.equal(state.status,'finished');assert.equal(state.notes,3);assert.equal(state.recoveries,0);
-  assert.ok(state.time>35&&state.time<100,`complete route took ${state.time}s`);
-});
-
-test('bank crossing preserves a useful momentum advantage and remains recoverable',()=>{
-  const run=new MarbleRules();run.seek('crossing');
-  for(const target of [{x:-2,y:30},{x:2,y:42},{x:0,y:54}])drive(run,target);
-  assert.ok(run.snapshot().bankTrips>0);assert.equal(run.snapshot().recoveries,0);
-  run.rescue();assert.ok(marbleFloor(run.snapshot().x,run.snapshot().y).distance<0);
+test('reset clears completed rooms, lit targets, penalties and held bats',()=>{
+  const run=new MarbleRules();run.seek(.99);stepFor(run,.3);assert.equal(run.snapshot().status,'finished');
+  run.reset();const s=run.snapshot();assert.equal(s.notes,0);assert.equal(s.table,0);assert.equal(s.time,0);
+  assert.equal(s.flipperLeft,false);assert.equal(s.status,'playing');assert.equal(s.served,true);
 });

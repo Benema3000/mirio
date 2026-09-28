@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {createServer} from 'node:net';
-import {COURSE_VERSION} from '../js/course-version.js';
+import {COURSE_VERSION, COURSE} from '../js/course-version.js';
 
 const HTTP_OK = 200, HTTP_BAD_REQUEST = 400;
 const directory = await mkdtemp(join(tmpdir(), 'mirio-course-test-'));
@@ -44,7 +44,26 @@ try {
   assert.equal(result.top[0].timeMs, 20000);
   assert.equal(await readFile(join(directory, 'times.json'), 'utf8'), legacyText);
   assert.ok(JSON.parse(await readFile(join(directory, 'courses', COURSE_VERSION, 'times.json'), 'utf8')).times.sky.length);
-  console.log('PASS course records, legacy preservation, token isolation, submission');
+  const archivePath = join(directory, 'courses', COURSE_VERSION, 'times.json');
+  const archive = await readFile(archivePath, 'utf8');
+  for (const [course, level] of [[COURSE.DISCOVERY, 'adventure'], [COURSE.CLASSIC, 'kart'], [COURSE.BRANCHES, 'kart'], [COURSE.PINBALL, 'marble']]) {
+    const url = `${base}?course=${course}`;
+    const fresh = await (await fetch(`${url}&level=${level}`)).json();
+    const old = await (await fetch(`${current}&level=${level}`)).json();
+    assert.equal(fresh.course, course);
+    assert.deepEqual(fresh.top, []);
+    const submit = token => fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({level, token, name: 'Sternenkind', timeMs: 10000})});
+    assert.equal((await submit(old.token)).status, HTTP_BAD_REQUEST, `${course} must reject old course tokens`);
+    if (level !== 'adventure') {
+      const result = await submit(fresh.token);
+      assert.equal(result.status, HTTP_OK);
+      assert.equal((await result.json()).top[0].timeMs, 10000);
+    }
+  }
+  assert.equal(await readFile(archivePath, 'utf8'), archive, 'v2 rows and used tokens stay byte-for-byte intact');
+  assert.equal(await readFile(join(directory, 'times.json'), 'utf8'), legacyText);
+  console.log('PASS course records, v2 archive, four revision scopes, token isolation, submission');
 } finally {
   server.kill();
   await new Promise(resolve => server.once('exit', resolve));

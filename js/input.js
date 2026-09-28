@@ -14,6 +14,10 @@ const TOUCH_TURN = 0.009;
 const KEY_TURN = 2.2;
 const PAD_DEADZONE = 0.18;
 const PAD_TURN = 2.4;
+const FLIPPER_STICK_THRESHOLD = .25;
+const PAD_BUTTON_THRESHOLD = .5;
+const PAD_BUTTON = Object.freeze({A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7,
+  START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15});
 
 /** A circular dead zone avoids drift without losing gentle analog movement. */
 export function analogStick(x = 0, y = 0, deadzone = PAD_DEADZONE) {
@@ -31,6 +35,7 @@ const KEYS = {
   jump: ['Space', 'KeyK'],
   spin: ['ShiftLeft', 'ShiftRight', 'KeyJ', 'KeyX'],
   pound: ['KeyC', 'ControlLeft', 'ControlRight', 'KeyL'],
+  ride: ['KeyF'],
   camLeft: ['KeyQ'],
   camRight: ['KeyE'],
 };
@@ -39,10 +44,12 @@ const GAME_KEYS = new Set(Object.values(KEYS).flat());
 export class Input {
   #gameplayKeys = new Set();
 
-  constructor({ surface, stick, knob, jumpButton, spinButton, poundButton, gasButton, brakeButton }) {
+  constructor({ surface, stick, knob, jumpButton, spinButton, poundButton, gasButton, brakeButton, leftFlipperButton, rightFlipperButton, plungerButton }) {
     this.move = { x: 0, y: 0 };
     this.menu = { x: 0, y: 0, confirm: false, back: false };
     this.drive = { steer: 0, gas: 0, brake: 0 };
+    this.pinball = {left: false, right: false};
+    this.flipperTouches = {left: false, right: false};
     this.buttonGas = false;
     this.buttonBrake = false;
     this.jumpHeld = false;
@@ -51,6 +58,7 @@ export class Input {
     this.jumpQueued = false;
     this.spinQueued = false;
     this.poundQueued = false;
+    this.rideQueued = false;
     this.poundHeld = false;
     this.buttonPoundHeld = false;
     this.turn = { x: 0, y: 0 };
@@ -62,7 +70,7 @@ export class Input {
     this.knob = knob;
     this.onTouch = () => {};
     this.onPause = () => {};
-    this.buttons = [jumpButton, spinButton, poundButton, gasButton, brakeButton].filter(Boolean);
+    this.buttons = [jumpButton, spinButton, poundButton, gasButton, brakeButton, leftFlipperButton, rightFlipperButton, plungerButton].filter(Boolean);
     this.padButtons = [];
     this.gamepadConnected = false;
 
@@ -105,6 +113,11 @@ export class Input {
     }, () => {
       this.buttonBrake = false;
     });
+    // Separate intents preserve two simultaneous flippers; a steering axis cannot.
+    for (const [side, button] of [['left', leftFlipperButton], ['right', rightFlipperButton]]) {
+      this.bindButton(button, () => { this.flipperTouches[side] = true; }, () => { this.flipperTouches[side] = false; });
+    }
+    this.bindButton(plungerButton, () => { this.jumpQueued = true; this.buttonJumpHeld = true; }, () => { this.buttonJumpHeld = false; });
   }
 
   get enabled() {
@@ -123,6 +136,8 @@ export class Input {
     this.dragPointer = null;
     this.buttonJumpHeld = this.buttonPoundHeld = this.buttonGas = this.buttonBrake = this.jumpHeld = this.poundHeld = false;
     this.jumpQueued = this.spinQueued = this.poundQueued = false;
+    this.rideQueued = false;
+    this.pinball.left = this.pinball.right = this.flipperTouches.left = this.flipperTouches.right = false;
     this.turn.x = this.turn.y = this.move.x = this.move.y = 0;
     this.drive.steer = this.drive.gas = this.drive.brake = 0;
     Object.assign(this.menu, {x: 0, y: 0, confirm: false, back: false});
@@ -166,6 +181,7 @@ export class Input {
       if (KEYS.jump.includes(e.code)) this.jumpQueued = true;
       if (KEYS.spin.includes(e.code)) this.spinQueued = true;
       if (KEYS.pound.includes(e.code)) this.poundQueued = true;
+      if (KEYS.ride.includes(e.code)) this.rideQueued = true;
     }
     if (isDown) this.down.add(e.code);
     else this.down.delete(e.code);
@@ -242,11 +258,12 @@ export class Input {
     } catch { /* Keyboard and touch remain available. */ }
     this.gamepadConnected = Boolean(pad);
     const value = (i) => pad?.buttons[i]?.value ?? 0;
-    const buttons = [0, 2, 1, 9].map((i) => Boolean(pad?.buttons[i]?.pressed));
+    const buttons = [PAD_BUTTON.A, PAD_BUTTON.X, PAD_BUTTON.B, PAD_BUTTON.START, PAD_BUTTON.Y].map((i) => Boolean(pad?.buttons[i]?.pressed));
     if (this.enabled) {
       if (buttons[0] && !this.padButtons[0]) this.jumpQueued = true;
       if (buttons[1] && !this.padButtons[1]) this.spinQueued = true;
       if (buttons[2] && !this.padButtons[2]) this.poundQueued = true;
+      if (buttons[4] && !this.padButtons[4]) this.rideQueued = true;
     }
     const pause = buttons[3] && !this.padButtons[3];
     this.padButtons = buttons;
@@ -254,9 +271,11 @@ export class Input {
     const left = analogStick(pad?.axes[0], pad?.axes[1]);
     const right = analogStick(pad?.axes[2], pad?.axes[3]);
     return {
-      x: left.x + value(15) - value(14), y: -left.y + value(12) - value(13),
+      x: left.x + value(PAD_BUTTON.RIGHT) - value(PAD_BUTTON.LEFT), y: -left.y + value(PAD_BUTTON.UP) - value(PAD_BUTTON.DOWN),
       cameraX: right.x, cameraY: -right.y, jump: buttons[0], pound: buttons[2],
-      gas: Math.max(value(7), value(12)), brake: Math.max(value(6), value(13)),
+      gas: Math.max(value(PAD_BUTTON.RT), value(PAD_BUTTON.UP)), brake: Math.max(value(PAD_BUTTON.LT), value(PAD_BUTTON.DOWN)),
+      leftFlipper: value(PAD_BUTTON.LB) > PAD_BUTTON_THRESHOLD || value(PAD_BUTTON.LEFT) > PAD_BUTTON_THRESHOLD || left.x < -FLIPPER_STICK_THRESHOLD,
+      rightFlipper: value(PAD_BUTTON.RB) > PAD_BUTTON_THRESHOLD || value(PAD_BUTTON.RIGHT) > PAD_BUTTON_THRESHOLD || left.x > FLIPPER_STICK_THRESHOLD,
     };
   }
 
@@ -283,6 +302,8 @@ export class Input {
     this.move.y = this.enabled ? y : 0;
     this.jumpHeld = this.enabled && (this.held('jump') || this.buttonJumpHeld || pad.jump);
     this.poundHeld = this.enabled && (this.held('pound') || this.buttonPoundHeld || pad.pound);
+    this.pinball.left = this.held('left') || this.flipperTouches.left || pad.leftFlipper;
+    this.pinball.right = this.held('right') || this.flipperTouches.right || pad.rightFlipper;
     const steer = this.stickVec.x + pad.x + (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     this.drive.steer = this.enabled ? Math.max(-1, Math.min(1, steer)) : 0;
     this.drive.gas = Math.max(pad.gas, this.held('up') || this.buttonGas ? 1 : 0);
@@ -303,6 +324,12 @@ export class Input {
     const v = this.spinQueued;
     this.spinQueued = false;
     return v;
+  }
+
+  consumeRide() {
+    const value = this.rideQueued;
+    this.rideQueued = false;
+    return value;
   }
 
   consumePound() {

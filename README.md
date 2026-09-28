@@ -86,7 +86,7 @@ Pause provides help and separate time boards without leaving the current run.
 | **Sternenrennen** | Three laps round the Zielplanet against Finster-Mirio: ramp, dash panels, blocks, drifts and mini-turbos | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
 | **Wolkenpost** | Three parcel deliveries, upper currents, windmills, cloud arches and a singing cloud whale | WASD/arrows/stick steer; Space/A roll; Shift/X toss near baskets, turbo elsewhere |
 | **Blütenpfad** | Connected courtyard, orchard, musical conservatory and cellar; three lantern seeds open the final ascent | A/D or ←/→/stick move; Space/A jump; Shift/X air spin, song or door |
-| **Klangkugel** | A rolling musical bubble, pudding floors, bumpers and a raised shortcut; carry three bell notes home to the drum | WASD/arrows/stick roll; hold Space/A/◎ to brake; Shift/X/♪ rings nearby bells |
+| **Klangkugel** | Three connected pinball tables: pudding garden, cuckoo clock and moon concert; light note targets and shoot the bell lift | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
 | **Seifenstern** | Tilt floating paths beneath a soap bubble; balance over rainbow ribbons, inflate a foam bridge and reach the towel | WASD/arrows/stick tilt; hold Space/A/◎ to level and brake, or inflate the marked soap basin |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
@@ -109,11 +109,13 @@ are documented in `assets/README.md`.
   ascent. Discoveries survive checkpoint recovery; replay resets them.
   A delayed pictogram points through the nearest useful door when you pause
   to find your bearings.
-- **Klangkugel:** a broad first bowl teaches steering and braking before a bell
-  answers your pulse. Three rooms reconnect around a raised, narrow bank;
-  bumpers announce their bounce and gutters return you to a safe checkpoint.
-  Collected notes orbit Mirio and survive falls. Follow the gold return arrows
-  and settle on the starting drum to play your tune.
+- **Klangkugel:** gravity drives the ball; movement keys operate the flippers,
+  never steer it. A charged side plunger launches into three themed tables.
+  Hit three note targets to open each bell lift. Bumpers, slingshots, a moving
+  clock hand and a low-gravity finale vary the shots. A cuckoo catches drains;
+  lit targets and cleared tables survive recovery (+2 seconds). Early misses
+  use a free ball saver. Separate touch flippers support simultaneous presses.
+  The whole table stays in view, including with reduced motion.
 - **Seifenstern:** tilt drives gravity and momentum. Broad bends reconnect with
   narrow banked ribbons at safe checkpoint islands. Stop on the soap basin and
   hold the brake to inflate a lasting foam bridge; the broad route stays open.
@@ -121,8 +123,31 @@ are documented in `assets/README.md`.
   camera stays upright; reduced motion calms the board's visible tilt.
 
 All scenery is procedural. Original drawings, derived models and floor textures
-are unchanged. Public and device records use **playground-v2**; older records
-remain intact and are excluded from the new courses.
+are unchanged by these additions. Changed courses have separate records:
+`discovery-v3` (Planetenreise), `classic-v3` (single-track Sternenrennen),
+`branches-v3` (Sternenwege), and `pinball-v3` (Klangkugel). Wolkenpost,
+Blütenpfad and Seifenstern keep `playground-v2`. Earlier records and tokens
+remain stored under their original keys and directories.
+
+## The hidden Wunderwiese
+
+Blue feathers behind the meadow's far orchard lead to a star gate. Approach
+on foot and use Shift / X / the context button. It takes Mirio to a separate
+low-gravity planet; the normal rocket, moon, boss and single-track finale remain.
+
+The planet restores the Wiesensummer plane (F / Y / context button), wind-powered
+flower bridge, boat rescue, kite towing, squirrel-guided picnic and treehouse,
+ring trails with a gem magnet, gentle creatures, birds and squirrels. Southern
+cloud platforms and a guardian provide an optional airborne route. Ground paths
+and checkpoints remain available. Earned souvenirs, a spring flower and bird
+chorus have moved here from the former garden hub.
+
+A chequered gate beyond the clouds starts **Sternenwege**, the branching kart
+race: three separate roads, windmills, rolling fruit, cloud springs, rival
+routing, drift-turbo shortcut and split times. Pause or results can return to
+Wunderwiese with its activities, checkpoint and adventure record token intact.
+Replay stays in Sternenwege; result browsing never advances the adventure clock.
+The return gate rejoins the meadow and restores its earlier checkpoint.
 
 ## Polished adventure edition
 
@@ -187,9 +212,10 @@ three.js and loads `js/main.js`.
 | `js/wildlife.js`, `js/wildlife-models.js` | Reactive birds, shared articulated geometry, discovery and culling |
 | `js/garden.js`, `js/scenery.js` | Spring blossoms; batched plants, petals and cloud wisps |
 | `js/chapters.js`, `js/time-records.js` | Level metadata, medals and storage-safe personal best times |
+| `js/discovery-level.js`, `js/discovery-gates.js`, `js/bonus-playground.js` | Hidden planet data, deliberate travel gates and restored optional toys |
 | `js/sky-flight.js`, `js/sky-flight-rules.js` | Wolkenpost scene and deterministic flight course rules |
 | `js/ribbon-run.js`, `js/ribbon-rules.js` | Blütenpfad diorama and deterministic side-scroll physics |
-| `js/marble-run.js`, `js/marble-rules.js` | Klangkugel scene, rolling physics and musical circuit |
+| `js/marble-run.js`, `js/marble-rules.js` | Pinball tables, flipper/ball physics and musical targets |
 | `js/tilt-run.js`, `js/tilt-rules.js`, `js/tilt-course.js` | Seifenstern scene, tilt physics and shared branching course |
 | `js/menu-navigation.js` | Controller focus, dialogs and settings navigation |
 | `api/times.php`, `api/times.inc` | Separate public time boards for every level |
@@ -239,11 +265,11 @@ optional and only happens when the player submits a nickname.
   location; `MIRIO_SCORES_DIR` remains a compatible test override.
 - The legacy `api/scores.php`, its point rules and `scores.json` are preserved
   for existing data/clients, but the current game uses only the new time boards.
-- Current records live under `courses/playground-v2/` inside the time data
-  directory, with an independent token secret. Requests without `course` retain
-  the original boards. Unknown versions are rejected.
-- `localStorage` stores current personal bests under `mirio-time-best-v2:`.
-  The original `mirio-time-best-v1:` entries are preserved.
+- Each supported revision lives under `courses/<revision>/` inside the time
+  data directory, with an independent token secret. `playground-v2` and requests
+  without `course` retain their original boards. Unknown versions are rejected.
+- `localStorage` keeps unchanged courses under `mirio-time-best-v2:` and revised
+  courses under `mirio-time-best:<revision>:`. Earlier entries are preserved.
   A failed public submission does not erase the personal best. Slow/stale
   network responses cannot replace another level's active run or result.
 
@@ -319,13 +345,23 @@ chapterSeek). It is absent without the parameter. Focused level suites use
 
 The playground update adds:
 
+- `tests/mirio-bonus-native-e2e.mjs`: ordinary discovery walk, plane tasks,
+  walking picnic loop and preserved recovery state.
+- `tests/mirio-bonus-devices-e2e.mjs`: touch/controller flight, cloud route,
+  guardian landing, gates and recovery.
+- `tests/mirio-bonus-regressions-e2e.mjs`: revisited flag recovery and flying
+  gem collection.
+- `tests/mirio-discovery-race-e2e.mjs`: race warp, replay, return, original
+  finale, separate records and preserved adventure token.
+- `tests/mirio-kart-camera-e2e.mjs`: reduced-motion camera for both tracks.
+- `tests/mirio-kart-routes-native-e2e.mjs`: complete keyboard branching race.
 - `tests/mirio-hub-e2e.mjs`: normal start, pad launches, returns, replay,
   completion markers and keyboard/controller/touch hub controls.
 - `tests/mirio-hub.test.mjs` (unit): six pads kept apart, a short run from the
   spawn, the right name shown, a launch only from standing on a pad, and the
   return spot beside the pad that waits.
-- `tests/mirio-marble-e2e.mjs`: full keyboard bell circuit, raised bank,
-  recovery, controller, touch and held-brake replay regression.
+- `tests/mirio-marble-e2e.mjs`: complete keyboard pinball adventure,
+  drain recovery, controller/touch flippers, plunger, replay and isolated records.
 - `tests/mirio-tilt-e2e.mjs`: balance-course routes, foam bridge, recovery,
   controller, touch, pause, replay and reduced motion.
 - `tests/mirio-menu-e2e.mjs`: controller settings, independent help/time tabs

@@ -63,7 +63,8 @@ test('Klangkugel saves separately without replacing existing course records', as
   const records = await fixture(t, storage);
   assert.equal(records.savePersonalBest('marble', 61000).isNew, true);
   assert.equal(records.readPersonalBest('marble'), 61000);
-  assert.equal(records.readPersonalBest('kart'), 42000);
+  assert.equal(records.readPersonalBest('kart'), null);
+  assert.equal(storage.entries.get('mirio-time-best-v2:kart'), '42000');
   assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
   const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
   assert.equal(reloaded.readPersonalBest('marble'), 61000);
@@ -74,7 +75,8 @@ test('Seifenstern persists its own best while keeping musical and legacy times',
   const records = await fixture(t, storage);
   assert.equal(records.savePersonalBest('tilt', 66000).isNew, true);
   assert.equal(records.readPersonalBest('tilt'), 66000);
-  assert.equal(records.readPersonalBest('marble'), 52380);
+  assert.equal(records.readPersonalBest('marble'), null);
+  assert.equal(storage.entries.get('mirio-time-best-v2:marble'), '52380');
   assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
   const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
   assert.equal(reloaded.readPersonalBest('tilt'), 66000);
@@ -143,4 +145,25 @@ test('changed courses preserve old records without ranking them', async t => {
   assert.equal(records.savePersonalBest('sky', 74000).previous, null);
   assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
   assert.equal(storage.entries.get('mirio-time-best-v2:sky'), '74000');
+});
+
+test('changed discovery, classic race and pinball courses exclude earlier times without deleting them', async t => {
+  const old = {'mirio-time-best-v2:adventure': '160000', 'mirio-time-best-v2:kart': '31000', 'mirio-time-best-v2:marble': '52000', 'mirio-time-best-v2:sky': '65000'};
+  const storage = store(old), records = await fixture(t, storage);
+  for (const id of ['adventure', 'kart', 'marble']) assert.equal(records.readPersonalBest(id), null);
+  assert.equal(records.readPersonalBest('sky'), 65000);
+  records.savePersonalBest('kart', 39000);
+  for (const [key, value] of Object.entries(old)) assert.equal(storage.entries.get(key), value);
+});
+
+test('the optional branching race never competes with the classic race', async t => {
+  const records = await fixture(t, store());
+  const {COURSE} = await import('../js/course-version.js');
+  records.savePersonalBest('kart', 35000);
+  records.savePersonalBest('kart', 40000, {course: COURSE.BRANCHES});
+  assert.equal(records.readPersonalBest('kart'), 35000);
+  assert.equal(records.readPersonalBest('kart', {course: COURSE.BRANCHES}), 40000);
+  const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
+  assert.equal(reloaded.readPersonalBest('kart'), 35000);
+  assert.equal(reloaded.readPersonalBest('kart', {course: COURSE.BRANCHES}), 40000);
 });

@@ -1,12 +1,12 @@
-// A connected musical toy board. The bubble carries Miro's unchanged character.
+// Mirio rides a pinball through three rooms of a musical toy cabinet.
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {buildMirio} from './mirio-model.js';
-import {MARBLE, MARBLE_ROOMS, MARBLE_PATHS, MARBLE_BELLS, MARBLE_BUMPERS,
-  MarbleRules, bumperBeat, marbleHeight} from './marble-rules.js';
+import {MARBLE,MARBLE_ROOMS,MARBLE_BELLS,MARBLE_BUMPERS,MARBLE_FLIPPERS,
+  MARBLE_WALLS,MARBLE_SLINGS,MARBLE_CLOCK,PINBALL_TABLE,MarbleRules,bumperBeat,clockAngle} from './marble-rules.js';
 
-const CREAM=0xffefcb,INK=0x405267,GOLD=0xefc669;
-const UP=new THREE.Vector3(0,1,0);
+const CREAM=0xfff0cc,INK=0x405267,GOLD=0xf5c454,UP=new THREE.Vector3(0,1,0);
+const FIELD=Object.freeze({width:30,length:46,center:22,near:64,fov:44});
 const paint=(geometry,color)=>{
   const value=new THREE.Color(color),colors=new Float32Array(geometry.attributes.position.count*3);
   for(let i=0;i<colors.length;i+=3)value.toArray(colors,i);
@@ -14,205 +14,203 @@ const paint=(geometry,color)=>{
 };
 const orb=(x,y,z,sx,sy,sz,color)=>paint(new THREE.SphereGeometry(1,12,8).scale(sx,sy,sz).translate(x,y,z),color);
 const cylinder=(x,y,z,r,h,color)=>paint(new THREE.CylinderGeometry(r,r,h,24).translate(x,y,z),color);
+const box=(x,y,z,w,h,d,color)=>paint(new THREE.BoxGeometry(w,h,d).translate(x,y,z),color);
+function beam(ax,ay,bx,by,r,color,height=.6){
+  const dx=bx-ax,dy=by-ay,length=Math.hypot(dx,dy);
+  const geometry=new THREE.CylinderGeometry(r,r,length,10);
+  geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP,new THREE.Vector3(dx,0,-dy).normalize()));
+  return paint(geometry.translate((ax+bx)/2,height,-(ay+by)/2),color);
+}
 function batch(parts,material){
   const flat=parts.map(g=>g.index?g.toNonIndexed():g),geometry=mergeGeometries(flat);
   for(const g of new Set([...parts,...flat]))g.dispose();return new THREE.Mesh(geometry,material);
 }
-function sign(text,width=5){
-  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
-  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff3d9';ctx.beginPath();ctx.roundRect(4,4,504,120,26);ctx.fill();
-  ctx.fillStyle='#405267';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 58px sans-serif';ctx.fillText(text,256,66);
+function glyph(text,width=4,color='#405267',background='#fff0cc'){
+  const compact=text.length<=3,canvas=document.createElement('canvas');canvas.width=compact?256:512;canvas.height=compact?256:160;
+  const ctx=canvas.getContext('2d');
+  if(background){ctx.fillStyle=background;ctx.beginPath();ctx.roundRect(4,4,canvas.width-8,canvas.height-8,30);ctx.fill();}
+  ctx.fillStyle=color;ctx.textAlign='center';ctx.textBaseline='middle';
+  const fontSize=compact?(text.length===1?180:120):70;ctx.font=`bold ${fontSize}px sans-serif`;
+  const fit=Math.min(1,(canvas.width-30)/ctx.measureText(text).width);ctx.font=`bold ${Math.floor(fontSize*fit)}px sans-serif`;
+  ctx.fillText(text,canvas.width/2,canvas.height/2+3);
   const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map,depthWrite:false}));sprite.scale.set(width,width/4,1);return sprite;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map,depthWrite:false}));sprite.scale.set(width,width*canvas.height/canvas.width,1);return sprite;
 }
-function noteGlyph(text,color){
-  const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
-  const ctx=canvas.getContext('2d');ctx.fillStyle=`#${color.toString(16)}`;ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.font='bold 100px sans-serif';ctx.strokeStyle='#fff4d9';ctx.lineWidth=7;ctx.strokeText(text,64,65);ctx.fillText(text,64,65);
-  const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map,depthWrite:false}));sprite.scale.set(1.25,1.25,1);return sprite;
-}
-function ribbon(points,width,color,lift=0){
-  const positions=[],indices=[];
-  for(let i=0;i<points.length;i++){
-    const p=points[i],a=points[Math.max(0,i-1)],b=points[Math.min(points.length-1,i+1)];
-    const length=Math.hypot(b[0]-a[0],b[1]-a[1]),nx=-(b[1]-a[1])/length,ny=(b[0]-a[0])/length;
-    for(const side of [-1,1]){
-      const x=p[0]+nx*width/2*side,y=p[1]+ny*width/2*side;
-      positions.push(x,marbleHeight(x,y)+lift,-y);
-    }
-    if(i){const n=i*2;indices.push(n-2,n-1,n,n-1,n+1,n);}
-  }
-  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setIndex(indices);geometry.computeVertexNormals();return paint(geometry,color);
-}
-function stations(points){
-  const result=[];
-  for(let i=1;i<points.length;i++){
-    const [ax,ay]=points[i-1],[bx,by]=points[i],steps=Math.ceil(Math.hypot(bx-ax,by-ay));
-    for(let j=0;j<steps;j++)result.push([ax+(bx-ax)*j/steps,ay+(by-ay)*j/steps]);
-  }
-  result.push(points.at(-1));return result;
+function floorGlyph(text,x,y,width,color){
+  const sprite=glyph(text,width,color);sprite.position.set(x,.5,-y);return sprite;
 }
 
 export class MarbleRun {
-  scene; #rules=new MarbleRules(); #hero; #bubble; #shell; #rim; #shadow; #roll=new THREE.Group();
-  #bells=[]; #bumpers=[]; #notes=[]; #pulse; #brake; #drum; #homeArrow; #wake=new Map();
-  #elapsed=0; #cameraReady=false; #focus=new THREE.Vector3(); #finishPetals=[];
+  scene; #rules=new MarbleRules(); #hero; #bubble; #shell; #rim; #roll=new THREE.Group(); #shadow;
+  #tables=[]; #bells=[]; #bumpers=[]; #flippers=[]; #gate; #gateDoor; #plunger; #spring; #charge;
+  #pulse; #bird; #progress=[]; #wake=new Map(); #elapsed=0; #clockHand; #clockFace;
 
   constructor(art){
-    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0xbedee5);
-    this.scene.fog=new THREE.Fog(0xbedee5,75,135);
-    this.scene.add(new THREE.HemisphereLight(0xfff7df,0x7898ae,2.25));
-    const light=new THREE.DirectionalLight(0xfff2d8,2.6);light.position.set(-20,35,12);this.scene.add(light);
+    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0xbcd1d8);
+    this.scene.add(new THREE.HemisphereLight(0xfff3db,0x7892a8,2));
+    const light=new THREE.DirectionalLight(0xfff0d6,2.4);light.position.set(-15,38,20);this.scene.add(light);
     const material=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide});
-    this.#buildBoard(material);this.#buildBells(material);this.#buildBumpers(material);this.#buildDrum(material);
+    this.#buildCabinet(material);this.#buildTables(material);this.#buildFlippers(material);this.#buildLauncher(material);this.#buildGate(material);
     this.#bubble=new THREE.Group();this.scene.add(this.#bubble);this.#bubble.add(this.#roll);
-    this.#shell=new THREE.Mesh(new THREE.SphereGeometry(MARBLE.radius,24,16),new THREE.MeshPhongMaterial({color:0xc5edf5,
-      transparent:true,opacity:.14,shininess:100,specular:0xffffff,depthWrite:false}));
-    this.#bubble.add(this.#shell);
-    this.#rim=new THREE.Mesh(new THREE.TorusGeometry(MARBLE.radius,.026,5,48),new THREE.MeshBasicMaterial({color:0x759eb5,transparent:true,opacity:.7,depthWrite:false}));
-    this.#bubble.add(this.#rim);
-    this.#shadow=new THREE.Mesh(new THREE.CircleGeometry(.95,24),new THREE.MeshBasicMaterial({color:0x596d85,transparent:true,opacity:.18,depthWrite:false}));
-    this.#shadow.rotation.x=-Math.PI/2;this.scene.add(this.#shadow);
-    const stripe=new THREE.MeshBasicMaterial({color:0xfff9de,transparent:true,opacity:.66,depthWrite:false});
-    for(const tilt of [0,Math.PI/2]){
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(MARBLE.radius,.025,5,40),stripe);ring.rotation.y=tilt;this.#roll.add(ring);
+    this.#shell=new THREE.Mesh(new THREE.SphereGeometry(MARBLE.radius,20,14),new THREE.MeshPhongMaterial({color:0xc9eff5,
+      transparent:true,opacity:.26,shininess:100,specular:0xffffff,depthWrite:false}));this.#bubble.add(this.#shell);
+    this.#rim=new THREE.Mesh(new THREE.TorusGeometry(MARBLE.radius,.04,5,40),new THREE.MeshBasicMaterial({color:0x54889c,transparent:true,opacity:.8,depthWrite:false}));this.#bubble.add(this.#rim);
+    for(const angle of [0,Math.PI/2]){
+      const stripe=new THREE.Mesh(new THREE.TorusGeometry(MARBLE.radius,.025,5,36),new THREE.MeshBasicMaterial({color:CREAM,transparent:true,opacity:.75}));
+      stripe.rotation.y=angle;this.#roll.add(stripe);
     }
-    this.#hero=buildMirio(art);this.#hero.group.scale.setScalar(.58);this.#hero.group.position.y=-.67;
+    this.#hero=buildMirio(art);this.#hero.group.scale.setScalar(.52);this.#hero.group.position.y=-.61;
     this.#hero.legL.rotation.x=this.#hero.legR.rotation.x=-.45;this.#hero.armL.rotation.x=this.#hero.armR.rotation.x=-.75;
     this.#bubble.add(this.#hero.group);
-    this.#pulse=new THREE.Mesh(new THREE.RingGeometry(.94,1,48),new THREE.MeshBasicMaterial({color:0xffef9c,side:THREE.DoubleSide,transparent:true,opacity:.6,depthWrite:false}));
-    this.#pulse.rotation.x=-Math.PI/2;this.scene.add(this.#pulse);
-    this.#brake=new THREE.Mesh(new THREE.TorusGeometry(1.1,.05,5,40),new THREE.MeshBasicMaterial({color:0xffdf7c}));
-    this.#brake.rotation.x=-Math.PI/2;this.scene.add(this.#brake);
-    this.#homeArrow=new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(),3,GOLD,.85,.6);
-    this.scene.add(this.#homeArrow);
-    for(const bell of MARBLE_BELLS){
-      const note=noteGlyph(bell.note,bell.color);this.scene.add(note);this.#notes.push({id:bell.id,object:note});
-    }
-    this.reset();
+    this.#shadow=new THREE.Mesh(new THREE.CircleGeometry(.95,20),new THREE.MeshBasicMaterial({color:0x485b72,transparent:true,opacity:.2,depthWrite:false}));
+    this.#shadow.rotation.x=-Math.PI/2;this.scene.add(this.#shadow);
+    this.#pulse=new THREE.Mesh(new THREE.RingGeometry(.92,1,40),new THREE.MeshBasicMaterial({color:GOLD,side:THREE.DoubleSide,transparent:true,opacity:.6,depthWrite:false}));
+    this.#pulse.rotation.x=-Math.PI/2;this.scene.add(this.#pulse);this.reset();
   }
 
-  #buildBoard(material){
-    const parts=[];
-    for(const path of MARBLE_PATHS){
-      const points=stations(path.points),color=path.bank?0xeec576:path.id.includes('rose')?0xe9b8c7:path.id.includes('blue')?0xa4cddb:0xbcd3b0;
-      parts.push(ribbon(points,path.width+.35,0xe5c795,-.22),ribbon(points,path.width,color,.015));
-      for(const [x,y]of path.points)parts.push(cylinder(x,marbleHeight(x,y),-y,path.width/2,.06,color));
-      parts.push(ribbon(points,.18,CREAM,.032));
-      for(const [x,y]of points.filter((_,i)=>i%3===0))parts.push(orb(x,marbleHeight(x,y)+.04,-y,.21,.03,.21,CREAM));
+  #buildCabinet(material){
+    const parts=[box(1,-1,-22,FIELD.width,1.8,FIELD.length,0xb38a69),box(1,-.05,-22,29,.18,45,CREAM),
+      box(-13,.35,-22,.7,1,45,0x806c67),box(15,.35,-22,.7,1,45,0x806c67),box(1,.35,-44,28,1,.7,0x806c67)];
+    for(const [a,b]of MARBLE_WALLS)parts.push(beam(...a,...b,.25,GOLD,.45));
+    parts.push(beam(11.8,2,11.8,35,.18,CREAM),beam(14.2,2,14.2,40,.2,GOLD),beam(13,36,10,40,.24,GOLD));
+    for(const sling of MARBLE_SLINGS)parts.push(beam(...sling.a,...sling.b,.42,0xde948d,.55));
+    // Broad arrow lanes show the return to the bats and the launcher's exit.
+    for(const side of [-1,1])for(const y of [13,17]){
+      parts.push(beam(side*9,y,side*8.4,y-1,.09,CREAM,.13),beam(side*7.8,y,side*8.4,y-1,.09,CREAM,.13));
     }
-    for(const room of MARBLE_ROOMS){
-      parts.push(cylinder(room.x,-.48,-room.y,room.radius,.9,0xe1ba91),cylinder(room.x,.025,-room.y,room.radius,.09,room.color));
-      const rim=paint(new THREE.TorusGeometry(room.radius-.25,.1,6,48).rotateX(Math.PI/2).translate(room.x,.08,-room.y),CREAM);parts.push(rim);
-      // Music-box feet make the separate rooms read as one connected table.
-      for(const side of [-1,1])parts.push(cylinder(room.x+side*room.radius*.6,-2.2,-room.y,.48,3.6,0xbc9b80));
-    }
-    for(const side of [-1,1])for(let y=12;y<58;y+=8){
-      const x=side*(29+Math.sin(y)*2);
-      parts.push(orb(x,-2,-y,3,1.3,2.6,0xe6efdf));
-      parts.push(cylinder(x,-.1,-y,.18,3.1,0xb59a85),orb(x,1.5,-y,1.4,1.7,1.1,side<0?0xd9b7cd:0xadc8de));
-    }
+    for(let y=7;y<=33;y+=4)parts.push(beam(12.7,y,13,y+1,.07,0x82725f,.2),beam(13.3,y,13,y+1,.07,0x82725f,.2));
     this.scene.add(batch(parts,material));
-    for(const [text,x,y,width]of [['♪  +  ⏸',0,10,4],['← ♪    ♬ ↑    ♫ →',0,21,7],['↗  ♬',-18,38,3.6],['♬  ↖',18,38,3.6],['3 ♪ → 🥁',0,5,4.2]]){
-      const board=sign(text,width);board.position.set(x,1.1,-y);this.scene.add(board);
+    for(const [text,x,y,width]of [['←',-6.5,3.3,3],['→',6.5,3.3,3],['↓ ↑',13,1,3],['♪  ♪  ♪  →  ↑',0,17,7]])this.scene.add(floorGlyph(text,x,y,width));
+    // A cuckoo's cushion turns every drain into a quick return to the launcher.
+    this.#bird=new THREE.Group();this.#bird.position.set(0,.1,-1.5);
+    this.#bird.add(batch([orb(0,.35,0,2.7,.38,1.1,0x8cbabe),orb(-1.3,.9,0,.7,.7,.7,0x8cbabe),
+      orb(-1.52,1.42,.35,.13,.14,.13,INK),orb(-1.03,1.42,.35,.13,.14,.13,INK),orb(-1.3,1.05,.72,.3,.15,.33,GOLD),
+      orb(1,.7,0,1.4,.15,.8,CREAM)],material));this.scene.add(this.#bird);
+    for(let i=0;i<9;i++){
+      const bulb=new THREE.Mesh(new THREE.SphereGeometry(.27,10,8),new THREE.MeshBasicMaterial({color:0x857978}));
+      bulb.position.set(-4+i,1,-44);this.scene.add(bulb);this.#progress.push(bulb);
     }
-    const bank=sign('↕ ♫',3);bank.position.set(-3,2.4,-34);this.scene.add(bank);
   }
 
-  #buildBells(material){
-    for(const bell of MARBLE_BELLS){
-      const group=new THREE.Group();group.position.set(bell.x,0,-bell.y);this.scene.add(group);
-      const parts=[cylinder(-1.5,1.75,0,.15,3.5,CREAM),cylinder(1.5,1.75,0,.15,3.5,CREAM),
-        paint(new THREE.TorusGeometry(1.5,.16,7,32,Math.PI).translate(0,3.5,0),bell.color)];
+  #buildTables(material){
+    for(const [table,room]of MARBLE_ROOMS.entries()){
+      const group=new THREE.Group();this.scene.add(group);this.#tables.push(group);
+      const parts=[box(0,.06,-23,22,.08,37,room.color)];
+      // Inlaid flowers, clock spokes and lunar craters distinguish the three rooms.
+      for(const side of [-1,1])for(let i=0;i<5;i++){
+        const x=side*(8.6-i*.16),y=10+i*5.7;
+        parts.push(orb(x,.13,-y,.65,.025,.65,CREAM));
+        if(table===PINBALL_TABLE.GARDEN)for(let p=0;p<5;p++)parts.push(orb(x+Math.sin(p*1.256)*.85,.13,-y+Math.cos(p*1.256)*.85,.47,.025,.47,room.ink));
+        if(table===PINBALL_TABLE.CLOCK)parts.push(beam(x-.8,y-.8,x+.8,y+.8,.09,room.ink,.16),beam(x+.8,y-.8,x-.8,y+.8,.09,room.ink,.16));
+        if(table===PINBALL_TABLE.MOON)parts.push(orb(x+.25,.145,-y,.55,.025,.55,room.color));
+      }
       group.add(batch(parts,material));
-      const bellMesh=batch([paint(new THREE.CylinderGeometry(.36,.79,.95,16).translate(0,2.95,0),bell.color),
-        orb(0,2.4,0,.2,.24,.2,GOLD),paint(new THREE.TorusGeometry(.76,.06,5,24).rotateX(Math.PI/2).translate(0,2.48,0),CREAM)],material);
-      group.add(bellMesh);const glyph=noteGlyph(bell.note,bell.color);glyph.scale.set(2,2,1);glyph.position.set(0,4.8,0);group.add(glyph);
-      const target=new THREE.Mesh(new THREE.RingGeometry(2.8,3.25,40),new THREE.MeshBasicMaterial({color:bell.color,side:THREE.DoubleSide,transparent:true,opacity:.6}));
-      target.rotation.x=-Math.PI/2;target.position.y=.09;group.add(target);
-      this.#bells.push({spec:bell,group,bell:bellMesh,glyph,target});
+      const title=glyph(`${table+1} · ${room.name}`,8);title.position.set(0,.25,-12.5);group.add(title);
+      for(const bell of MARBLE_BELLS.filter(b=>b.table===table)){
+        const target=new THREE.Group();target.position.set(bell.x,0,-bell.y);group.add(target);
+        target.add(batch([cylinder(0,.35,0,bell.radius,.5,CREAM),orb(0,.7,0,bell.radius,.55,bell.radius,room.ink)],material));
+        const face=glyph(bell.note,3.2,'#fff5d0',null);face.position.y=2;target.add(face);
+        const lamp=new THREE.Mesh(new THREE.TorusGeometry(1.65,.14,6,32),new THREE.MeshBasicMaterial({color:CREAM}));
+        lamp.rotation.x=-Math.PI/2;lamp.position.y=.2;target.add(lamp);
+        const petals=new THREE.Group();target.add(petals);
+        for(let p=0;p<6;p++){
+          const a=p*Math.PI/3,petal=new THREE.Mesh(new THREE.SphereGeometry(1,10,6),new THREE.MeshLambertMaterial({color:GOLD}));
+          petal.scale.set(.75,.18,.38);petal.position.set(Math.cos(a)*1.9,.27,Math.sin(a)*1.9);petal.rotation.y=-a;petals.add(petal);
+        }
+        this.#bells.push({spec:bell,group:target,lamp,face,petals});
+      }
+      for(const bumper of MARBLE_BUMPERS.filter(b=>b.table===table)){
+        const toy=new THREE.Group();toy.position.set(bumper.x,0,-bumper.y);group.add(toy);
+        toy.add(batch([cylinder(0,.3,0,bumper.radius,.5,CREAM),orb(0,.8,0,bumper.radius,.68,bumper.radius,room.ink),
+          orb(-.35,1.4,.36,.13,.065,.16,INK),orb(.35,1.4,.36,.13,.065,.16,INK)],material));
+        const halo=new THREE.Mesh(new THREE.TorusGeometry(bumper.radius+.13,.11,6,32),new THREE.MeshBasicMaterial({color:CREAM}));
+        halo.rotation.x=-Math.PI/2;halo.position.y=.8;toy.add(halo);this.#bumpers.push({spec:bumper,group:toy,halo});
+      }
+    }
+    this.#clockFace=new THREE.Group();this.#clockFace.position.set(MARBLE_CLOCK.x,.18,-MARBLE_CLOCK.y);
+    this.#clockFace.add(batch([cylinder(0,0,0,3,.08,CREAM)],material));
+    this.#clockHand=new THREE.Group();this.#clockHand.add(batch([beam(-MARBLE_CLOCK.length/2,0,MARBLE_CLOCK.length/2,0,MARBLE_CLOCK.radius,0x6c91a6,.45),orb(0,.55,0,.4,.3,.4,GOLD)],material));
+    this.#clockFace.add(this.#clockHand);this.#tables[PINBALL_TABLE.CLOCK].add(this.#clockFace);
+  }
+
+  #buildFlippers(material){
+    for(const spec of MARBLE_FLIPPERS){
+      const group=new THREE.Group();group.position.set(spec.x,.65,-spec.y);this.scene.add(group);
+      group.add(batch([beam(0,0,MARBLE.flipperLength,0,MARBLE.flipperRadius,CREAM,0),
+        orb(0,0,0,.65,.35,.65,GOLD),orb(MARBLE.flipperLength,0,0,MARBLE.flipperRadius,.3,MARBLE.flipperRadius,0xd77770),
+        beam(.7,0,MARBLE.flipperLength-.4,0,.13,0xd77770,.34)],material));
+      this.#flippers.push({spec,group});
     }
   }
 
-  #buildBumpers(material){
-    for(const bumper of MARBLE_BUMPERS){
-      const group=new THREE.Group();group.position.set(bumper.x,0,-bumper.y);this.scene.add(group);
-      group.add(batch([cylinder(0,.3,0,bumper.radius,.6,CREAM),orb(0,.73,0,bumper.radius,.65,bumper.radius,bumper.color),
-        orb(-.27,1.23,.36,.1,.05,.11,INK),orb(.27,1.23,.36,.1,.05,.11,INK)],material));
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(bumper.radius+.14,.08,6,32),new THREE.MeshBasicMaterial({color:0xffefa3}));
-      ring.rotation.x=-Math.PI/2;ring.position.y=.75;group.add(ring);this.#bumpers.push({spec:bumper,group,ring});
+  #buildLauncher(material){
+    this.#plunger=new THREE.Group();this.#plunger.position.set(13,0,-2);this.scene.add(this.#plunger);
+    this.#plunger.add(batch([cylinder(0,.5,0,.78,.35,GOLD),orb(0,.82,0,.63,.24,.63,CREAM)],material));
+    this.#spring=new THREE.Group();this.scene.add(this.#spring);
+    for(let y=0;y<2;y+=.3){
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(.45,.065,5,18),new THREE.MeshLambertMaterial({color:INK}));
+      ring.rotation.x=Math.PI/2;ring.position.set(13,.25,-y);this.#spring.add(ring);
     }
+    this.#charge=new THREE.Mesh(new THREE.BoxGeometry(.28,.12,3),new THREE.MeshBasicMaterial({color:GOLD}));
+    this.#charge.position.set(14.5,.2,-3);this.scene.add(this.#charge);
   }
 
-  #buildDrum(material){
-    const group=new THREE.Group();group.position.set(0,0,-4);this.scene.add(group);this.#drum=group;
-    const face=new THREE.Mesh(new THREE.CircleGeometry(4.1,48),new THREE.MeshLambertMaterial({color:0xffefd0,side:THREE.DoubleSide}));
-    face.rotation.x=-Math.PI/2;face.position.y=.09;group.add(face);
-    group.add(batch([paint(new THREE.TorusGeometry(4.25,.12,6,48).rotateX(Math.PI/2).translate(0,.13,0),GOLD)],material));
-    for(let i=0;i<12;i++){
-      const angle=i*Math.PI/6,petal=new THREE.Mesh(new THREE.SphereGeometry(1,10,6),new THREE.MeshLambertMaterial({color:MARBLE_BELLS[i%3].color}));
-      petal.position.set(Math.cos(angle)*4.65,.1,Math.sin(angle)*4.65);petal.scale.set(.9,.16,.5);petal.rotation.y=-angle;
-      group.add(petal);this.#finishPetals.push(petal);
-    }
+  #buildGate(material){
+    this.#gate=new THREE.Group();this.#gate.position.set(0,0,-41);this.scene.add(this.#gate);
+    this.#gate.add(batch([cylinder(-2.8,1.5,0,.25,3,CREAM),cylinder(2.8,1.5,0,.25,3,CREAM),
+      paint(new THREE.TorusGeometry(2.8,.25,8,36,Math.PI).translate(0,3,0),GOLD),
+      cylinder(0,.18,0,2.6,.28,CREAM)],material));
+    this.#gateDoor=new THREE.Mesh(new THREE.BoxGeometry(4.8,.8,.38),new THREE.MeshLambertMaterial({color:0xa08c82}));
+    this.#gateDoor.position.set(0,.55,.4);this.#gate.add(this.#gateDoor);
+    const bell=glyph('♬ ↑',5);bell.position.set(0,4.5,0);this.#gate.add(bell);
   }
 
-  reset(){this.#elapsed=0;this.#cameraReady=false;this.#wake.clear();this.#roll.rotation.set(0,0,0);return this.#rules.reset();}
+  reset(){this.#elapsed=0;this.#wake.clear();this.#roll.rotation.set(0,0,0);return this.#rules.reset();}
   step(dt,input){
     const events=this.#rules.step(dt,input);
-    for(const event of events)if(event.type==='marble-bumper')this.#wake.set(event.id,.6);
+    for(const event of events)if(event.type==='marble-bumper'||event.type==='note')this.#wake.set(event.id,.6);
     return events;
   }
-  rescue(){this.#cameraReady=false;return this.#rules.rescue();}
-  seek(progress){this.#cameraReady=false;return this.#rules.seek(progress);}
+  rescue(){return this.#rules.rescue();}
+  seek(progress){return this.#rules.seek(progress);}
   snapshot(){return {...this.#rules.snapshot(),name:'Klangkugel'};}
   layout(){return this.#rules.layout();}
 
   render(camera,dt=0,{reducedMotion=false}={}){
     dt=Math.max(0,Math.min(dt,.1));this.#elapsed+=dt;const r=this.#rules.snapshot(),t=this.#elapsed;
-    const recover=r.recovering>0?Math.sin(r.recovering/MARBLE.recoveryTime*Math.PI)*1.2:0;
-    this.#bubble.position.set(r.x,r.height+MARBLE.radius+recover-r.gutter*2.1,-r.y);
-    this.#shadow.position.set(r.x,r.height+.11,-r.y);this.#shadow.visible=r.gutter===0;
+    const hop=reducedMotion?0:r.recovering>0?Math.sin(r.recovering/MARBLE.recoveryTime*Math.PI)*1.2:0;
+    const lift=r.phase==='lift'?(1-r.transition/MARBLE.transitionTime)*3:0;
+    this.#bubble.position.set(r.x,MARBLE.radius+hop+lift,-r.y);
+    this.#shadow.position.set(r.x,.2,-r.y);this.#shadow.visible=r.phase!=='lift';
     if(!reducedMotion){this.#roll.rotation.x-=r.vy*dt/MARBLE.radius;this.#roll.rotation.z-=r.vx*dt/MARBLE.radius;}
-    this.#hero.group.rotation.y=r.speed>.2?Math.atan2(r.vx,-r.vy):0;
-    this.#hero.body.rotation.z=reducedMotion?0:-r.vx*.035;
-    this.#hero.body.rotation.x=reducedMotion?0:-r.vy*.035;
-    this.#shell.material.opacity=r.braking?.24:.14;
-    this.#brake.visible=r.braking;this.#brake.position.set(r.x,r.height+.12,-r.y);
-    this.#homeArrow.visible=r.finishReady&&r.status!=='finished';
-    if(r.returnTarget){
-      this.#homeArrow.position.set(r.x,r.height+.22,-r.y);
-      const direction=new THREE.Vector3(r.returnTarget.x-r.x,0,r.y-r.returnTarget.y);
-      if(direction.lengthSq()>.01)this.#homeArrow.setDirection(direction.normalize());
-    }
-    this.#pulse.visible=r.pulse>0;this.#pulse.position.set(r.x,r.height+.14,-r.y);
-    this.#pulse.scale.setScalar(1+(1-r.pulse/MARBLE.pulseTime)*4);this.#pulse.material.opacity=r.pulse;
-    for(const {id,object}of this.#notes){
-      const index=r.noteIds.indexOf(id);object.visible=index>=0;
-      if(index<0)continue;
-      const angle=(reducedMotion?0:t)*.8+index*Math.PI*2/3;
-      object.position.set(r.x+Math.cos(angle)*1.55,r.height+1.65,-r.y+Math.sin(angle)*1.55);
-    }
+    this.#hero.group.rotation.y=r.speed>1?Math.atan2(r.vx,-r.vy):0;
+    this.#hero.body.rotation.z=reducedMotion?0:-r.vx*.015;this.#hero.body.rotation.x=reducedMotion?0:-r.vy*.015;
+    this.#shell.material.opacity=r.served?.35:.26;
+    this.#pulse.visible=r.pulse>0;this.#pulse.position.set(r.x,.2,-r.y);this.#pulse.scale.setScalar(1+(1-r.pulse/MARBLE.pulseTime)*4);
+    this.#pulse.material.opacity=r.pulse;
+    for(const [i,table]of this.#tables.entries())table.visible=i===r.table;
     for(const item of this.#bells){
-      const collected=r.noteIds.includes(item.spec.id);item.target.material.opacity=collected?.13:.58;
-      item.glyph.material.opacity=collected?.45:1;
-      item.bell.rotation.z=reducedMotion?0:Math.sin(t*(collected?3:1.5))*(collected?.17:.035);
+      const lit=r.noteIds.includes(item.spec.id);item.petals.visible=lit;item.lamp.material.color.setHex(lit?GOLD:CREAM);
+      item.face.position.y=lit&&!reducedMotion?2.1+Math.sin(t*3+item.spec.x)*.15:2;
     }
     for(const item of this.#bumpers){
       const wake=Math.max(0,(this.#wake.get(item.spec.id)||0)-dt);this.#wake.set(item.spec.id,wake);
-      const beat=bumperBeat(r.time,item.spec),stretch=reducedMotion?1:1+beat.anticipation*.16+(wake>0?Math.sin(wake*14)*.13:0);
-      item.group.scale.set(1,stretch,1);item.ring.material.color.setHex(beat.active||wake>0?0xffffff:0xffefa3);
-      item.ring.scale.setScalar(beat.active?1.12:1);
+      const beat=bumperBeat(r.time,item.spec);item.group.scale.y=reducedMotion?1:1+beat.anticipation*.15+(wake>0?Math.sin(wake*15)*.17:0);
+      item.halo.material.color.setHex(wake>0||beat.active?GOLD:CREAM);
     }
-    for(const [i,petal]of this.#finishPetals.entries()){
-      petal.visible=r.finishReady;petal.position.y=r.status==='finished'&&!reducedMotion?.35+Math.sin(t*4+i)*.2:.1;
+    for(const item of this.#flippers){
+      const angle=r.flipperAngles[item.spec.id];item.group.rotation.y=item.spec.side===1?angle:Math.PI-angle;
     }
-    const target=new THREE.Vector3(r.x,0,-r.y-3);
-    if(!this.#cameraReady){this.#focus.copy(target);this.#cameraReady=true;}
-    this.#focus.lerp(target,1-Math.exp(-dt*6));
-    const portrait=camera.aspect<1,height=portrait?34:22,behind=portrait?20:16;
-    if(camera.fov!==48){camera.fov=48;camera.updateProjectionMatrix();}
-    camera.position.set(this.#focus.x,this.#focus.y+height,this.#focus.z+behind);camera.up.copy(UP);camera.lookAt(this.#focus);
+    this.#clockHand.rotation.y=clockAngle(r.time);
+    this.#gateDoor.position.y=r.finishReady?3.5:.55;this.#gateDoor.material.color.setHex(r.finishReady?GOLD:0xa08c82);
+    this.#bird.scale.y=reducedMotion?1:r.recovering>0?1.2+Math.sin(t*9)*.15:1;
+    this.#plunger.position.z=-2+r.plungerCharge*.9;this.#spring.scale.z=1-r.plungerCharge*.45;
+    this.#charge.scale.z=.06+r.plungerCharge;this.#charge.visible=r.served;
+    for(const [i,bulb]of this.#progress.entries())bulb.material.color.setHex(i<r.notes?GOLD:0x857978);
+    const height=Math.max(FIELD.near,34/camera.aspect/(2*Math.tan(FIELD.fov*Math.PI/360)));
+    if(camera.fov!==FIELD.fov){camera.fov=FIELD.fov;camera.updateProjectionMatrix();}
+    // The entire table stays visible; a hit never shakes or chases the ball.
+    camera.position.set(1,height,-FIELD.center+height*.3);camera.up.copy(UP);camera.lookAt(1,0,-FIELD.center);
     this.#rim.quaternion.copy(camera.quaternion);
   }
 }

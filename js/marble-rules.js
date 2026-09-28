@@ -1,206 +1,261 @@
-// Rolling, braking and ringing share one board map with the renderer.
-export const MARBLE = Object.freeze({radius: .82, acceleration: 7.2, drag: .68, topSpeed: 5.2,
-  brakeDrag: 8.5, brakeControl: .3, bellReach: 3.3, bellSpeed: 2.2, pulseCooldown: 1.2,
-  pulseReach: 4.6, pulseTime: .5, gutterTime: .55, recoveryTime: .65, recoveryPenalty: 2,
-  finishReach: 4.1, finishHold: .5, physicsStep: 1 / 120});
+// One physics map drives the pinball tables, their toys and the renderer.
+export const MARBLE = Object.freeze({radius:.72,gravity:9.8,drag:.055,topSpeed:39,
+  physicsStep:1/180,recoveryTime:.7,recoveryPenalty:2,pulseCooldown:3,pulseTime:.45,
+  launchChargeTime:.85,launchMin:27,launchMax:35,flipperLength:5.7,flipperRadius:.48,
+  flipperRest:-.53,flipperRaised:.27,flipperSpeed:15,flipperShot:30,flipperHoldShot:24,
+  targetRadius:1.35,targetReach:2.3,gateY:40,gateReach:2.8,transitionTime:1.2});
+export const PINBALL_TABLE = Object.freeze({GARDEN:0,CLOCK:1,MOON:2});
+export const PINBALL_PHASE = Object.freeze({SERVE:'serve',BALL:'ball',LIFT:'lift',FINISHED:'finished'});
 export const MARBLE_ROOMS = Object.freeze([
-  {id:'drum',name:'Trommelhof',x:0,y:4,radius:7,color:0xf3d081},
-  {id:'crossing',name:'Klangkreuzung',x:0,y:18,radius:6.5,color:0xb3d6bb},
-  {id:'rose',name:'Puddingpavillon',x:-18,y:29,radius:7.5,color:0xedb0c5},
-  {id:'blue',name:'Kugelkarussell',x:18,y:29,radius:7.5,color:0x9fcfdf},
-  {id:'gold',name:'Sternenglocke',x:0,y:54,radius:8,color:0xf1d381},
+  {id:'rose',name:'Puddinggarten',color:0xe9afbc,ink:0x94506d,gravity:MARBLE.gravity,
+    bumpers:[[-4,20],[4,20],[0,34]],targets:[[-8,31],[0,25],[8,31]]},
+  {id:'blue',name:'Kuckuckswerk',color:0xa8cbd5,ink:0x497ca0,gravity:MARBLE.gravity,
+    bumpers:[[-5,26],[5,26],[0,35]],targets:[[-8,34],[0,22],[8,34]]},
+  {id:'gold',name:'Mondkonzert',color:0xeac982,ink:0xb78638,gravity:7.7,
+    bumpers:[[-5,23],[5,23],[0,35]],targets:[[-8,32],[0,26],[8,32]]},
 ]);
-export const MARBLE_PATHS = Object.freeze([
-  {id:'opening',width:7,points:[[0,4],[0,18]]},
-  {id:'rose-low',width:6,points:[[0,18],[-10,18],[-18,29]]},
-  {id:'blue-low',width:6,points:[[0,18],[10,18],[18,29]]},
-  {id:'rose-high',width:6,points:[[-18,29],[-18,43],[0,54]]},
-  {id:'blue-high',width:6,points:[[18,29],[18,43],[0,54]]},
-  {id:'bank',width:3.8,points:[[0,18],[-2,30],[2,42],[0,54]],bank:true},
+export const MARBLE_BELLS = Object.freeze(MARBLE_ROOMS.flatMap((room,table)=>room.targets.map(([x,y],index)=>({
+  id:`${room.id}-${index}`,table,x,y,radius:MARBLE.targetRadius,color:room.color,note:['♪','♫','♬'][index],
+}))));
+export const MARBLE_BUMPERS = Object.freeze(MARBLE_ROOMS.flatMap((room,table)=>room.bumpers.map(([x,y],index)=>({
+  id:`${room.id}-bumper-${index}`,table,x,y,radius:1.35,phase:index*.7,color:room.color,
+}))));
+export const MARBLE_FLIPPERS = Object.freeze([{id:'left',x:-6.4,y:7,side:1},{id:'right',x:6.4,y:7,side:-1}]);
+export const MARBLE_WALLS = Object.freeze([
+  [[-11,9],[-11,36]],[[-11,36],[-6,41]],[[-6,41],[-3,42]],
+  [[3,42],[6,41]],[[6,41],[11,36]],[[11,36],[11,9]],
+  [[-11,9],[-6.4,6.4]],[[11,9],[6.4,6.4]],
 ]);
-export const MARBLE_BELLS = Object.freeze([
-  {id:'rose',x:-20,y:30,color:0xe78ba9,note:'♪'},
-  {id:'blue',x:20,y:30,color:0x73b9d7,note:'♫'},
-  {id:'gold',x:0,y:57,color:0xeabb55,note:'♬'},
-]);
-export const MARBLE_BUMPERS = Object.freeze([
-  {id:'lesson',x:3.1,y:10,radius:1.05,phase:0,color:0xeac77d},
-  {id:'pudding-a',x:-14,y:31,radius:1.2,phase:.7,color:0xeaa5bd},
-  {id:'pudding-b',x:-21,y:25,radius:1.1,phase:2.2,color:0xeaa5bd},
-  {id:'carousel-a',x:14,y:32,radius:1.25,phase:1.3,color:0x83c3dc},
-  {id:'carousel-b',x:21,y:26,radius:1.1,phase:2.8,color:0x83c3dc},
-  {id:'star-a',x:-4,y:54,radius:1.2,phase:.2,color:0xebca73},
-  {id:'star-b',x:4,y:54,radius:1.2,phase:1.9,color:0xebca73},
-]);
-const START = Object.freeze({x:0,y:4});
-const SURFACE_DRAG = Object.freeze({rose:1.08,blue:.4});
-const FLOOR_KIND = Object.freeze({ROOM:'room',ROAD:'road',BANK:'bank'});
-const BANK = Object.freeze({rise:1.35,rim:.16,guide:1.5,downhill:.55,momentum:.16,minSpeed:3,topFactor:1.18});
-const BEAT = Object.freeze({period:3.6,active:.45,warning:.85});
+export const MARBLE_SLINGS = Object.freeze([{id:'sling-left',a:[-10,13],b:[-7.5,9.7]},
+  {id:'sling-right',a:[10,13],b:[7.5,9.7]}]);
+const START=Object.freeze({x:13,y:4}),TOTAL_TARGETS=MARBLE_BELLS.length,TARGETS_PER_TABLE=3;
+export const MARBLE_CLOCK=Object.freeze({x:0,y:29,length:5,radius:.2,speed:1.2,swing:.7});
+export const clockAngle=time=>Math.sin(time*MARBLE_CLOCK.speed)*MARBLE_CLOCK.swing;
+const LAUNCH_EXIT=36,LAUNCH_WALL=11.8,DRAIN_Y=.5,RESTITUTION=.82,SLING_FORCE=10;
+const TARGET_COOLDOWN=.32,BUMPER_COOLDOWN=.18,FLIP_COOLDOWN=.15;
+const NUDGE_UP=5,NUDGE_SIDE=3.5,FLIP_WINDOW=.19,BEAT_PERIOD=3.8;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
-export function bumperBeat(time,bumper) {
-  const phase=(time+bumper.phase)%BEAT.period,start=BEAT.period-BEAT.warning;
-  return {active:phase<BEAT.active,anticipation:phase>start? (phase-start)/BEAT.warning : 0};
+export function bumperBeat(time,bumper){
+  const phase=(time+bumper.phase)%BEAT_PERIOD;
+  return {active:phase<.45,anticipation:phase>3?(phase-3)/.8:0};
 }
 
-/** Signed distance to the union of rooms and roads; negative means safe floor. */
-export function marbleFloor(x,y) {
-  let best={distance:Infinity,x,y,id:'gutter',bank:false};
-  const consider=(cx,cy,radius,id,kind=FLOOR_KIND.ROOM)=>{
-    const dx=x-cx,dy=y-cy,span=Math.hypot(dx,dy),edge=span-radius;
-    if(edge>=best.distance)return;
-    best={distance:edge,x:cx+dx/Math.max(span,.001)*radius,y:cy+dy/Math.max(span,.001)*radius,centerX:cx,centerY:cy,id,bank:kind===FLOOR_KIND.BANK};
-  };
-  for(const room of MARBLE_ROOMS)consider(room.x,room.y,room.radius,room.id);
-  for(const road of MARBLE_PATHS)for(let i=1;i<road.points.length;i++){
-    const [ax,ay]=road.points[i-1],[bx,by]=road.points[i],dx=bx-ax,dy=by-ay;
-    const t=clamp(((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy),0,1);
-    consider(ax+dx*t,ay+dy*t,road.width/2,road.id,road.bank?FLOOR_KIND.BANK:FLOOR_KIND.ROAD);
-  }
-  return best;
+export function flipperSegment(spec,angle){
+  return {ax:spec.x,ay:spec.y,bx:spec.x+Math.cos(angle)*MARBLE.flipperLength*spec.side,
+    by:spec.y+Math.sin(angle)*MARBLE.flipperLength};
 }
 
-export function marbleHeight(x,y) {
-  const floor=marbleFloor(x,y);
-  if(!floor.bank)return 0;
-  return Math.sin(clamp((y-18)/36,0,1)*Math.PI)*BANK.rise+Math.hypot(x-floor.centerX,y-floor.centerY)**2*BANK.rim;
+export function marbleFloor(x,y){
+  return {id:'table',distance:Math.max(Math.abs(x)-14,1-y,y-43),bank:false};
 }
+export function marbleHeight(){return 0;}
 
-function homeTarget(x,y){
-  if(Math.abs(x)<5&&y>21)return y>43?{x:2,y:42}:y>31?{x:-2,y:30}:{x:0,y:18};
-  if(Math.abs(x)>6)return y>44?{x:Math.sign(x)*18,y:43}:y>31?{x:Math.sign(x)*18,y:29}
-    :y>21?{x:Math.sign(x)*10,y:18}:{x:0,y:18};
-  return {...START};
+function segmentContact(x,y,ax,ay,bx,by){
+  const dx=bx-ax,dy=by-ay,t=clamp(((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy),0,1);
+  const cx=ax+dx*t,cy=ay+dy*t,span=Math.hypot(x-cx,y-cy);
+  return {x:cx,y:cy,t,span,nx:span>.001?(x-cx)/span:0,ny:span>.001?(y-cy)/span:1};
 }
 
 export class MarbleRules {
-  #state={}; #notes=new Set(); #checkpoint={...START}; #bumpCooldown=new Map(); #bankVisits=new Set();
+  #state={}; #notes=new Set(); #cooldowns=new Map(); #flip={}; #jumpWasHeld=false;
 
   constructor(){this.reset();}
 
   reset(){
-    const r=this.#state;
-    Object.assign(r,{status:'playing',x:START.x,y:START.y,vx:0,vy:0,time:0,penalty:0,
-      cooldown:0,pulse:0,recovering:0,gutter:0,recoveries:0,bumps:0,braking:false,finishCharge:0});
-    this.#notes.clear();this.#bankVisits.clear();this.#bumpCooldown.clear();this.#checkpoint={...START};
+    Object.assign(this.#state,{status:'playing',phase:PINBALL_PHASE.SERVE,table:0,x:START.x,y:START.y,
+      vx:0,vy:0,time:0,penalty:0,cooldown:0,pulse:0,recovering:0,recoveries:0,bumps:0,
+      launches:0,flips:0,charge:0,transition:0,launchLane:true,saveTime:0});
+    this.#notes.clear();this.#cooldowns.clear();this.#jumpWasHeld=false;
+    this.#flip={left:{angle:MARBLE.flipperRest,held:false,window:0,cooldown:0},
+      right:{angle:MARBLE.flipperRest,held:false,window:0,cooldown:0}};
     return this.snapshot();
   }
 
+  #serve(){
+    const r=this.#state;r.phase=PINBALL_PHASE.SERVE;r.x=START.x;r.y=START.y;
+    r.vx=r.vy=r.charge=0;r.launchLane=true;this.#jumpWasHeld=false;
+  }
+
   #recover(){
-    const r=this.#state;
-    r.x=this.#checkpoint.x;r.y=this.#checkpoint.y;r.vx=r.vy=0;
-    r.gutter=0;r.recovering=MARBLE.recoveryTime;r.recoveries++;
+    const r=this.#state;this.#serve();r.recovering=MARBLE.recoveryTime;r.recoveries++;
     r.penalty+=MARBLE.recoveryPenalty;r.time+=MARBLE.recoveryPenalty;
     return {type:'rescue',penalty:MARBLE.recoveryPenalty};
   }
 
   rescue(){return this.#state.status==='playing'?[this.#recover()]:[];}
 
-  #ring(events){
-    const r=this.#state;
-    if(r.cooldown>0||r.recovering>0)return;
-    r.cooldown=MARBLE.pulseCooldown;r.pulse=MARBLE.pulseTime;events.push({type:'ring'});
-    const speed=Math.hypot(r.vx,r.vy);
-    for(const bell of MARBLE_BELLS){
-      if(this.#notes.has(bell.id)||distance(r,bell)>MARBLE.bellReach||speed>MARBLE.bellSpeed)continue;
-      this.#notes.add(bell.id);this.#checkpoint={x:bell.x,y:bell.y};
-      events.push({type:'note',id:bell.id,notes:this.#notes.size});
-    }
-    // A pulse nudges the bubble away from nearby cushions, making them useful toys.
-    for(const bumper of MARBLE_BUMPERS){
-      const span=distance(r,bumper);
-      if(span>MARBLE.pulseReach)continue;
-      const push=2.8*(1-span/MARBLE.pulseReach);
-      r.vx+=(r.x-bumper.x)/Math.max(.1,span)*push;
-      r.vy+=(r.y-bumper.y)/Math.max(.1,span)*push;
-      events.push({type:'marble-bumper',id:bumper.id});
-    }
+  #launch(events){
+    const r=this.#state;r.phase=PINBALL_PHASE.BALL;r.vy=MARBLE.launchMin+(MARBLE.launchMax-MARBLE.launchMin)*r.charge;
+    r.charge=0;r.launches++;r.saveTime=5;events.push({type:'spring'});
   }
 
   step(dt,input={}){
     const r=this.#state;
     if(r.status!=='playing'||!Number.isFinite(dt)||dt<=0)return [];
-    dt=Math.min(dt,.1);const events=[];
-    if(input.action)this.#ring(events);
-    r.braking=Boolean(input.jumpHeld);
+    dt=Math.min(dt,.1);const events=[],held=Boolean(input.jumpHeld);
+    const flippers={left:Boolean(input.flipperLeft??(input.x<-.25)),right:Boolean(input.flipperRight??(input.x>.25))};
+    for(const id of ['left','right']){
+      const f=this.#flip[id],active=flippers[id]||(held&&r.phase===PINBALL_PHASE.BALL);
+      if(active&&!f.held){f.window=FLIP_WINDOW;r.flips++;events.push({type:'flipper',side:id});}
+      f.held=active;
+    }
+    if(input.action&&r.phase===PINBALL_PHASE.BALL&&r.cooldown===0){
+      r.vx+=(flippers.left===flippers.right?0:flippers.left?-1:1)*NUDGE_SIDE;r.vy+=NUDGE_UP;
+      r.cooldown=MARBLE.pulseCooldown;r.pulse=MARBLE.pulseTime;events.push({type:'ring'});
+    }
+    if(r.phase===PINBALL_PHASE.SERVE&&this.#jumpWasHeld&&!held&&r.recovering===0)this.#launch(events);
+    this.#jumpWasHeld=held;
     const steps=Math.ceil(dt/MARBLE.physicsStep),h=dt/steps;
-    for(let i=0;i<steps&&r.status==='playing';i++)this.#tick(h,input,events);
+    for(let i=0;i<steps&&r.status==='playing';i++)this.#tick(h,held,events);
     return events;
   }
 
-  #tick(dt,input,events){
+  #hitSegment(ax,ay,bx,by,radius=0){
+    const r=this.#state,c=segmentContact(r.x,r.y,ax,ay,bx,by),reach=MARBLE.radius+radius;
+    if(c.span>=reach)return null;
+    r.x=c.x+c.nx*reach;r.y=c.y+c.ny*reach;
+    const inward=r.vx*c.nx+r.vy*c.ny;
+    if(inward<0){r.vx-=(1+RESTITUTION)*inward*c.nx;r.vy-=(1+RESTITUTION)*inward*c.ny;}
+    return c;
+  }
+
+  #circle(spec,force,events){
+    const r=this.#state,dx=r.x-spec.x,dy=r.y-spec.y,span=Math.hypot(dx,dy),reach=MARBLE.radius+spec.radius;
+    if(span>=reach)return false;
+    const nx=span>.001?dx/span:1,ny=span>.001?dy/span:0;
+    r.x=spec.x+nx*reach;r.y=spec.y+ny*reach;
+    const inward=r.vx*nx+r.vy*ny;
+    if(inward<0){r.vx-=(1+RESTITUTION)*inward*nx;r.vy-=(1+RESTITUTION)*inward*ny;}
+    if((this.#cooldowns.get(spec.id)||0)>0)return true;
+    r.vx+=nx*force;r.vy+=ny*force;this.#cooldowns.set(spec.id,BUMPER_COOLDOWN);
+    r.bumps++;events.push({type:'marble-bumper',id:spec.id});return true;
+  }
+
+  #flippers(dt,events){
     const r=this.#state;
-    r.time+=dt;r.cooldown=Math.max(0,r.cooldown-dt);r.pulse=Math.max(0,r.pulse-dt);
-    for(const [id,time]of this.#bumpCooldown)this.#bumpCooldown.set(id,Math.max(0,time-dt));
+    for(const spec of MARBLE_FLIPPERS){
+      const f=this.#flip[spec.id],target=f.held?MARBLE.flipperRaised:MARBLE.flipperRest;
+      f.angle+=clamp(target-f.angle,-MARBLE.flipperSpeed*dt,MARBLE.flipperSpeed*dt);
+      f.window=Math.max(0,f.window-dt);f.cooldown=Math.max(0,f.cooldown-dt);
+      if(r.phase!==PINBALL_PHASE.BALL||r.launchLane)continue;
+      const s=flipperSegment(spec,f.angle),incoming=r.vy;
+      const contact=this.#hitSegment(s.ax,s.ay,s.bx,s.by,MARBLE.flipperRadius);
+      if(!contact||contact.ny<-.2||!f.held||f.cooldown>0)continue;
+      if(incoming>2&&f.window===0)continue;
+      // Carry incoming momentum through each stroke to avoid repeating bounce loops.
+      const power=f.window>0?MARBLE.flipperShot:MARBLE.flipperHoldShot;
+      r.vy=power+Math.min(4,Math.abs(incoming)*.14);r.vx=spec.side*(1.5+(1-contact.t)*8)+r.vx*.28;
+      f.cooldown=FLIP_COOLDOWN;events.push({type:'flipper-hit',side:spec.id,strong:f.window>0});
+    }
+  }
+
+  #targets(events){
+    const r=this.#state;
+    for(const bell of MARBLE_BELLS){
+      if(bell.table!==r.table)continue;
+      const span=Math.hypot(r.x-bell.x,r.y-bell.y);
+      if(span<MARBLE.targetReach&&!this.#notes.has(bell.id)){
+        this.#notes.add(bell.id);events.push({type:'note',id:bell.id,notes:this.#notes.size});
+      }
+      if(span<MARBLE.radius+bell.radius)this.#circle(bell,1.5,events);
+    }
+  }
+
+  #tick(dt,held,events){
+    const r=this.#state;r.time+=dt;r.cooldown=Math.max(0,r.cooldown-dt);r.pulse=Math.max(0,r.pulse-dt);
+    for(const [id,time]of this.#cooldowns)this.#cooldowns.set(id,Math.max(0,time-dt));
+    this.#flippers(dt,events);
     if(r.recovering>0){r.recovering=Math.max(0,r.recovering-dt);return;}
-    const floor=marbleFloor(r.x,r.y),length=Math.max(1,Math.hypot(input.x||0,input.y||0));
-    const control=MARBLE.acceleration*(r.braking?MARBLE.brakeControl:1);
-    r.vx+=(input.x||0)/length*control*dt;r.vy+=(input.y||0)/length*control*dt;
-    const resistance=r.braking?MARBLE.brakeDrag:SURFACE_DRAG[floor.id]??MARBLE.drag;
-    r.vx*=Math.exp(-resistance*dt);r.vy*=Math.exp(-resistance*dt);
-    if(floor.bank){
-      const speed=Math.hypot(r.vx,r.vy);
-      // Carry momentum across the raised centre, with a gentle downhill pull.
-      r.vx+=(floor.centerX-r.x)*BANK.guide*dt;r.vy+=(floor.centerY-r.y)*BANK.guide*dt;
-      r.vy-=Math.cos(clamp((r.y-18)/36,0,1)*Math.PI)*BANK.downhill*dt;
-      if(speed>BANK.minSpeed&&!r.braking){r.vx*=1+dt*BANK.momentum;r.vy*=1+dt*BANK.momentum;this.#bankVisits.add(Math.sign(r.vy));}
+    if(r.phase===PINBALL_PHASE.SERVE){if(held)r.charge=Math.min(1,r.charge+dt/MARBLE.launchChargeTime);return;}
+    if(r.phase===PINBALL_PHASE.LIFT){
+      r.transition-=dt;
+      if(r.transition>0)return;
+      r.table++;this.#serve();events.push({type:'checkpoint',table:r.table});return;
     }
-    const speed=Math.hypot(r.vx,r.vy),limit=MARBLE.topSpeed*(floor.bank?BANK.topFactor:1);
-    if(speed>limit){r.vx*=limit/speed;r.vy*=limit/speed;}
+    const room=MARBLE_ROOMS[r.table];r.saveTime=Math.max(0,r.saveTime-dt);
+    r.vy-=room.gravity*dt;r.vx*=Math.exp(-MARBLE.drag*dt);r.vy*=Math.exp(-MARBLE.drag*dt);
+    const speed=Math.hypot(r.vx,r.vy);
+    if(speed>MARBLE.topSpeed){r.vx*=MARBLE.topSpeed/speed;r.vy*=MARBLE.topSpeed/speed;}
     r.x+=r.vx*dt;r.y+=r.vy*dt;
-    for(const bumper of MARBLE_BUMPERS){
-      const dx=r.x-bumper.x,dy=r.y-bumper.y,span=Math.hypot(dx,dy),reach=bumper.radius+MARBLE.radius;
-      if(span>=reach)continue;
-      const nx=span>.01?dx/span:1,ny=span>.01?dy/span:0;
-      r.x=bumper.x+nx*reach;r.y=bumper.y+ny*reach;
-      const inward=r.vx*nx+r.vy*ny;
-      if(inward<0){r.vx-=inward*1.35*nx;r.vy-=inward*1.35*ny;}
-      if((this.#bumpCooldown.get(bumper.id)||0)>0)continue;
-      const force=bumperBeat(r.time,bumper).active?3.7:1.8;
-      r.vx+=nx*force;r.vy+=ny*force;this.#bumpCooldown.set(bumper.id,.65);r.bumps++;
-      events.push({type:'marble-bumper',id:bumper.id});
+    if(r.launchLane){
+      r.x=START.x;r.vx=0;
+      if(r.y>=LAUNCH_EXIT){r.launchLane=false;r.x=10.4;r.vx=-13;r.vy=9;}
+      if(r.y<DRAIN_Y)events.push(this.#recover());return;
     }
-    const landed=marbleFloor(r.x,r.y);
-    r.gutter=landed.distance>0?r.gutter+dt:0;
-    if(r.gutter>MARBLE.gutterTime){events.push(this.#recover());return;}
-    if(landed.distance>0){r.vx*=Math.exp(-2*dt);r.vy*=Math.exp(-2*dt);}
-    for(const room of MARBLE_ROOMS)if(distance(r,room)<2.6)this.#checkpoint={x:room.x,y:room.y};
-    const ready=this.#notes.size===MARBLE_BELLS.length&&distance(r,START)<MARBLE.finishReach&&Math.hypot(r.vx,r.vy)<MARBLE.bellSpeed;
-    r.finishCharge=ready?r.finishCharge+dt:0;
-    if(r.finishCharge<MARBLE.finishHold)return;
-    r.status='finished';r.vx=r.vy=0;events.push({type:'finish'});
+    // The opening bank feeds the table; it cannot swallow a returning ball.
+    if(r.x>LAUNCH_WALL){r.x=LAUNCH_WALL;r.vx=-Math.abs(r.vx)*RESTITUTION;}
+    for(const [a,b]of MARBLE_WALLS)this.#hitSegment(...a,...b,.16);
+    for(const sling of MARBLE_SLINGS){
+      const c=this.#hitSegment(...sling.a,...sling.b,.3);
+      if(!c||(this.#cooldowns.get(sling.id)||0)>0)continue;
+      r.vx+=c.nx*SLING_FORCE;r.vy+=Math.max(3,c.ny*SLING_FORCE);
+      this.#cooldowns.set(sling.id,TARGET_COOLDOWN);events.push({type:'marble-bumper',id:sling.id});
+    }
+    if(r.table===PINBALL_TABLE.CLOCK){
+      const angle=clockAngle(r.time),dx=Math.cos(angle)*MARBLE_CLOCK.length/2,dy=Math.sin(angle)*MARBLE_CLOCK.length/2;
+      const c=this.#hitSegment(-dx,MARBLE_CLOCK.y-dy,dx,MARBLE_CLOCK.y+dy,MARBLE_CLOCK.radius);
+      if(c&&(this.#cooldowns.get('clock')||0)===0){
+        r.vy=Math.max(9,r.vy+6);r.vx+=Math.cos(r.time*MARBLE_CLOCK.speed)*3;
+        this.#cooldowns.set('clock',TARGET_COOLDOWN);events.push({type:'marble-bumper',id:'clock'});
+      }
+    }
+    for(const bumper of MARBLE_BUMPERS){
+      if(bumper.table!==r.table)continue;
+      this.#circle(bumper,bumperBeat(r.time,bumper).active?10:7,events);
+    }
+    this.#targets(events);
+    const ready=this.#notes.size>=(r.table+1)*TARGETS_PER_TABLE;
+    // Lit bell chutes gather close shots into the lift, without moving the ball elsewhere.
+    if(ready&&r.y>31){r.vx+=(0-r.x)*3*dt;r.vy+=14*dt;}
+    if(r.y>MARBLE.gateY&&Math.abs(r.x)<MARBLE.gateReach){
+      if(!ready){r.y=MARBLE.gateY;r.vy=-Math.abs(r.vy)*RESTITUTION;return;}
+      r.vx=r.vy=0;r.x=0;r.y=MARBLE.gateY;
+      if(r.table===MARBLE_ROOMS.length-1){r.status='finished';r.phase=PINBALL_PHASE.FINISHED;events.push({type:'finish'});return;}
+      r.phase=PINBALL_PHASE.LIFT;r.transition=MARBLE.transitionTime;events.push({type:'chime'});return;
+    }
+    if(r.y>42.5){r.y=42.5;r.vy=-Math.abs(r.vy)*RESTITUTION;}
+    if(r.y<DRAIN_Y){
+      // A five-second ball saver teaches the plunger without charging for an early miss.
+      if(r.saveTime>0){this.#serve();r.recovering=MARBLE.recoveryTime;events.push({type:'ball-save'});return;}
+      events.push(this.#recover());
+    }
   }
 
   snapshot(){
-    const r=this.#state;
-    const nearest=[...MARBLE_ROOMS].sort((a,b)=>distance(r,a)-distance(r,b))[0];
-    const bell=MARBLE_BELLS.find(b=>!this.#notes.has(b.id)&&distance(r,b)<MARBLE.bellReach);
-    const speed=Math.hypot(r.vx,r.vy),notes=this.#notes.size;
-    return {status:r.status,time:r.time,penalty:r.penalty,progress:r.status==='finished'?1:notes/4,
-      x:r.x,y:r.y,vx:r.vx,vy:r.vy,speed,braking:r.braking,notes,totalNotes:MARBLE_BELLS.length,
-      noteIds:[...this.#notes],notesNear:bell?.id??null,noteReady:Boolean(bell&&speed<=MARBLE.bellSpeed),roomName:nearest.name,
-      actionHint:bell?(speed>MARBLE.bellSpeed?'Bremsen → ♪':'♪ Glocke wecken'):notes===MARBLE_BELLS.length?'🥁 Zur Trommel':'♪ Klangstoss',
-      cooldown:r.cooldown,pulse:r.pulse,recoveries:r.recoveries,recovering:r.recovering,gutter:r.gutter,
-      bumps:r.bumps,bankTrips:this.#bankVisits.size,finishReady:notes===MARBLE_BELLS.length,finishCharge:r.finishCharge,
-      returnTarget:notes===MARBLE_BELLS.length?homeTarget(r.x,r.y):null,
-      floor:marbleFloor(r.x,r.y).id,height:marbleHeight(r.x,r.y),collectibles:notes};
+    const r=this.#state,notes=this.#notes.size,ready=notes>=(r.table+1)*TARGETS_PER_TABLE,served=r.phase===PINBALL_PHASE.SERVE;
+    return {status:r.status,phase:r.phase,time:r.time,penalty:r.penalty,progress:r.status==='finished'?1:notes/(TOTAL_TARGETS+1),
+      table:r.table,tableNumber:r.table+1,totalTables:MARBLE_ROOMS.length,roomName:MARBLE_ROOMS[r.table].name,
+      x:r.x,y:r.y,vx:r.vx,vy:r.vy,speed:Math.hypot(r.vx,r.vy),height:0,served,plungerCharge:r.charge,
+      flipperLeft:this.#flip.left.held,flipperRight:this.#flip.right.held,
+      flipperAngles:{left:this.#flip.left.angle,right:this.#flip.right.angle},
+      notes,totalNotes:TOTAL_TARGETS,noteIds:[...this.#notes],tableNotes:notes-r.table*TARGETS_PER_TABLE,
+      notesNear:null,noteReady:false,braking:false,collectibles:notes,finishReady:ready,finishCharge:0,
+      actionHint:served?'↓ halten · loslassen':ready?'↑ Zur Glocke':'← → Flipper · ♪ 3 Ziele',
+      cooldown:r.cooldown,pulse:r.pulse,recoveries:r.recoveries,recovering:r.recovering,gutter:0,
+      bumps:r.bumps,flips:r.flips,launches:r.launches,transition:r.transition,saveTime:r.saveTime,
+      floor:'table',returnTarget:null};
   }
 
-  layout(){return {rooms:MARBLE_ROOMS,paths:MARBLE_PATHS,bells:MARBLE_BELLS,bumpers:MARBLE_BUMPERS,start:START,finish:START};}
+  layout(){return {rooms:MARBLE_ROOMS,bells:MARBLE_BELLS,bumpers:MARBLE_BUMPERS,walls:MARBLE_WALLS,
+    flippers:MARBLE_FLIPPERS,slings:MARBLE_SLINGS,start:START,finish:{x:0,y:MARBLE.gateY}};}
 
   seek(progress){
     const r=this.#state;
-    let target;
-    if(typeof progress==='string')target=[...MARBLE_BELLS,...MARBLE_ROOMS,...MARBLE_BUMPERS].find(place=>place.id===progress);
-    else if(Number.isFinite(progress)){
-      const count=progress>=.95?3:clamp(Math.floor(progress*3),0,3);
-      this.#notes=new Set(MARBLE_BELLS.slice(0,count).map(b=>b.id));
-      target=count===3?START:MARBLE_BELLS[count];
+    if(Number.isFinite(progress)){
+      const count=progress>=.95?TOTAL_TARGETS:clamp(Math.floor(progress*TOTAL_TARGETS),0,TOTAL_TARGETS);
+      this.#notes=new Set(MARBLE_BELLS.slice(0,count).map(b=>b.id));r.table=Math.min(MARBLE_ROOMS.length-1,Math.floor(count/TARGETS_PER_TABLE));
+      this.#serve();
+      if(count===TOTAL_TARGETS){r.phase=PINBALL_PHASE.BALL;r.launchLane=false;r.x=0;r.y=39;r.vy=12;}
+      return this.snapshot();
     }
-    if(!target)return this.snapshot();
-    r.x=target.x;r.y=target.y;r.vx=r.vy=0;r.gutter=r.recovering=0;r.cooldown=0;
-    this.#checkpoint={x:target.x,y:target.y};return this.snapshot();
+    const target=MARBLE_BELLS.find(b=>b.id===progress)||MARBLE_BUMPERS.find(b=>b.id===progress);
+    if(target){r.table=target.table;r.phase=PINBALL_PHASE.BALL;r.launchLane=false;r.x=target.x;r.y=target.y+2;r.vx=0;r.vy=-3;}
+    if(progress==='drain'){r.phase=PINBALL_PHASE.BALL;r.launchLane=false;r.saveTime=0;r.x=0;r.y=1;r.vx=0;r.vy=-5;}
+    if(progress==='left'||progress==='right'){
+      const spec=MARBLE_FLIPPERS.find(f=>f.id===progress);r.phase=PINBALL_PHASE.BALL;r.launchLane=false;
+      r.x=spec.x+spec.side*3;r.y=9.5;r.vx=0;r.vy=-6;
+    }
+    r.recovering=0;return this.snapshot();
   }
 }
