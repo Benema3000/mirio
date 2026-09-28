@@ -1,4 +1,4 @@
-// Blütenpfad: deterministic movement, room links, and persistent discoveries.
+// Blütenpfad: deterministic side-on movement through the garden (garden-course.js).
 import { GARDEN, makeGardenCourse } from './garden-course.js';
 // Coordinates are metres; player y is at the soles and all platforms are one-way.
 export const RIBBON = Object.freeze({ speed: 7.2, acceleration: 40, braking: 54, airAcceleration: 29,
@@ -19,12 +19,11 @@ export class RibbonRules {
   constructor(course=makeRibbonCourse()){this.course=course;this.reset();}
   reset(){
     this.x=this.course.start.x;this.y=this.course.start.y;this.vx=0;this.vy=0;this.facing=1;
-    this.clock=0;this.time=0;this.penalties=0;this.status='playing';this.grounded=true;this.support='ground-0';
+    this.clock=0;this.time=0;this.penalties=0;this.status='playing';this.grounded=true;
+    this.support=this.course.platforms.find(p=>p.kind==='ground')?.id??null;
     this.coyote=RIBBON.coyote;this.buffer=0;this.airSpin=true;this.spin=0;this.springCooldown=0;
     this.recovery=0;this.invulnerable=0;this.checkpoint=0;this.collected=new Set();this.bumped=new Set();
-    this.recoveries=0;this.bestX=this.x;this.lastLanding=0;
-    this.seeds=new Set();this.discovered=new Set(['courtyard']);this.opened=new Set();
-    this.dream=GARDEN.dreamAsleep;this.portalCooldown=0;this.lastDiscovery=0;
+    this.recoveries=0;this.bestX=this.x;this.lastLanding=0;this.seeds=new Set();
     return this.snapshot();
   }
   step(dt,controls={}){
@@ -33,8 +32,7 @@ export class RibbonRules {
     dt=Math.min(dt,.25);
     const events=[];
     if(controls.jump)this.buffer=RIBBON.jumpBuffer;
-    const interacted=controls.action&&this.recovery<=0&&this._interact(events);
-    if(controls.action&&!interacted&&!this.grounded&&this.airSpin&&this.recovery<=0){
+    if(controls.action&&!this.grounded&&this.airSpin&&this.recovery<=0){
       this.airSpin=false;this.spin=.36;this.vy=Math.max(this.vy,4.4);
       this.vx=(Math.abs(controls.x||0)>.1?Math.sign(controls.x):this.facing)*10.2;
       events.push({type:'jump',kind:'spin',x:this.x,y:this.y});
@@ -46,7 +44,6 @@ export class RibbonRules {
   _tick(dt,controls,events){
     const beforeClock=this.clock;
     this.clock+=dt;this.time+=dt;
-    this.portalCooldown=Math.max(0,this.portalCooldown-dt);
     this.buffer=Math.max(0,this.buffer-dt);this.spin=Math.max(0,this.spin-dt);
     this.springCooldown=Math.max(0,this.springCooldown-dt);this.invulnerable=Math.max(0,this.invulnerable-dt);
     if(this.recovery>0){this.recovery=Math.max(0,this.recovery-dt);return;}
@@ -71,7 +68,6 @@ export class RibbonRules {
     let landed=null,highest=-Infinity;
     if(this.vy<=0){
       for(const p of this.course.platforms){
-        if(!this.platformActive(p))continue;
         const a=platformAt(p,beforeClock),b=platformAt(p,this.clock);
         if(this.x+RIBBON.halfWidth>b.x-b.w/2&&this.x-RIBBON.halfWidth<b.x+b.w/2&&oldY>=a.y-.07&&this.y<=b.y+.005&&b.y>highest){landed=b;highest=b.y;}
       }
@@ -110,71 +106,24 @@ export class RibbonRules {
         this.collected.add(gem.id);events.push({type:'bit',id:gem.id,x:gx,y:gy,collectibles:this.collected.size});
       }
     }
-    const room=this.room();
-    if(!this.discovered.has(room.id)){this.discovered.add(room.id);this.lastDiscovery=this.clock;}
     for(const cp of this.course.checkpoints){
-      // Reversing through the garden updates recovery to the room just visited.
+      // Walking back through the garden moves recovery to the flag just passed.
       if(cp.index!==this.checkpoint&&Math.abs(this.x-cp.x)<1.15&&this.y>=cp.y-.1){
         this.checkpoint=cp.index;events.push({type:'checkpoint',id:cp.id,index:cp.index,x:cp.x,y:cp.y});
       }
     }
-    for(const seed of this.course.seeds||[]){
+    for(const seed of this.course.seeds){
       if(this.seeds.has(seed.id)||Math.hypot(this.x-seed.x,this.y+.95-seed.y)>1.25)continue;
-      this.seeds.add(seed.id);this.lastDiscovery=this.clock;
+      this.seeds.add(seed.id);
       events.push({type:'bit',kind:'seed',id:seed.id,x:seed.x,y:seed.y,seeds:this.seeds.size});
-      if(this.gateOpen())events.push({type:'checkpoint',kind:'gate',x:GARDEN.finishX,y:2});
     }
     this.bestX=Math.max(this.bestX,this.x);
     if(this.y<RIBBON.fallY)this._recover(events);
-    if(this.gateOpen()&&Math.abs(this.x-this.course.finishX)<2.4&&this.y>=this.course.finishY-.1&&this.grounded){
+    if(Math.abs(this.x-this.course.finishX)<2.4&&this.y>=this.course.finishY-.1&&this.grounded){
       this.status='finished';this.vx=0;this.vy=0;events.push({type:'finish',time:this.time,collectibles:this.collected.size});
     }
   }
-  gateOpen(){return this.seeds.size===(this.course.seeds?.length||GARDEN.seedCount);}
-  platformActive(platform){return (!platform.dream||platform.dream===this.dream)&&(!platform.gate||this.gateOpen());}
-  room(){return this.course.rooms?.find(room=>this.x>=room.min&&this.x<room.max)||{id:'courtyard',name:'Blütenhof',color:0xc0e8ec};}
-  guidance(){
-    const room=this.room().id,missing=this.course.seeds?.filter(item=>!this.seeds.has(item.id))||[];
-    const seed=missing.find(item=>item.room===room)||missing[0];
-    const destination=seed?.room||'courtyard';
-    const route=this.course.guidanceRoutes?.find(item=>item.from===room&&item.to===destination&&this.y>=(item.minY??-Infinity));
-    const door=route&&this.course.doors.find(item=>item.id===route.door);
-    const stair=!seed&&room==='courtyard'&&this.course.platforms.find(p=>p.gate&&p.y>this.y+.2);
-    const finish=stair?{...stair,y:stair.y+.95,icon:'✿'}:{id:'flower-gate',x:GARDEN.finishX,y:GARDEN.finishY,icon:'✿'};
-    const target=door||seed||finish;
-    const dx=target.x-this.x,dy=target.y-this.y-.95;
-    const atDoor=door&&Math.abs(dx)<GARDEN.interactionRadius&&Math.abs(target.y-this.y)<1.6;
-    const direction=atDoor?'↻':Math.abs(dx)<3&&Math.abs(dy)>1.4?(dy>0?'↑':'↓'):(dx<0?'←':'→');
-    return {...target,kind:door?'door':seed?'seed':'finish',direction};
-  }
-  interaction(){
-    const near=item=>Math.abs(this.x-item.x)<GARDEN.interactionRadius&&Math.abs(this.y-item.y)<1.6;
-    const door=this.course.doors?.find(near);
-    if(door)return {kind:'door',item:door,hint:`↻ ${door.icon} ${door.label}`};
-    const flower=this.course.flowers?.find(near);
-    if(flower)return {kind:'song',item:flower,hint:'↻ ♪ ☀ / ☾'};
-    return null;
-  }
-  _interact(events){
-    const target=this.interaction();
-    if(!target||this.portalCooldown>0)return false;
-    this.portalCooldown=GARDEN.portalCooldown;
-    if(target.kind==='song'){
-      this.dream=this.dream===GARDEN.dreamAwake?GARDEN.dreamAsleep:GARDEN.dreamAwake;
-      this.lastDiscovery=this.clock;
-      events.push({type:'spring',kind:'song',x:this.x,y:this.y,dream:this.dream});
-      return true;
-    }
-    const door=target.item,destination=this.course.doors.find(item=>item.id===door.to);
-    this.opened.add(door.id);this.opened.add(destination.id);
-    this.x=destination.x;this.y=destination.y+.04;this.vx=0;this.vy=0;
-    this.grounded=false;this.support=null;this.airSpin=true;this.coyote=RIBBON.coyote;this.buffer=0;
-    this.lastDiscovery=this.clock;
-    const cp=this.course.checkpoints.find(item=>item.room===this.room().id);
-    if(cp)this.checkpoint=cp.index;
-    events.push({type:'checkpoint',kind:'door',id:door.id,x:this.x,y:this.y});
-    return true;
-  }
+  room(){return this.course.rooms.find(room=>this.x>=room.min&&this.x<room.max)??this.course.rooms[0];}
   _recover(events){
     const cp=this.course.checkpoints[this.checkpoint];
     this.x=cp.x;this.y=cp.y+.025;this.vx=0;this.vy=0;this.grounded=true;
@@ -185,24 +134,22 @@ export class RibbonRules {
   }
   rescue(){const events=[];if(this.status==='playing')this._recover(events);return events;}
   seek(progress){
-    // Test staging selects a region floor and never grants its discoveries.
-    const stops=[5,-24,49,125,5],index=Math.min(stops.length-1,Math.floor(clamp(progress,0,1)*stops.length));
-    const target=stops[index];
-    const p=this.course.platforms.find(p=>p.kind==='ground'&&target>=p.x-p.w/2&&target<=p.x+p.w/2);
-    this.x=target;this.y=p.y;
+    // Test staging: stands Mirio at a garden's flag without granting anything.
+    const stops=this.course.checkpoints,cp=stops[Math.min(stops.length-1,Math.floor(clamp(progress,0,1)*stops.length))];
+    const p=this.course.platforms.find(p=>p.kind==='ground'&&cp.x>=p.x-p.w/2&&cp.x<=p.x+p.w/2);
+    this.x=cp.x;this.y=p.y;
     this.vx=0;this.vy=0;this.grounded=true;this.support=p.id;this.coyote=RIBBON.coyote;
     this.buffer=0;this.recovery=0;this.invulnerable=1;this.airSpin=true;this.spin=0;this.springCooldown=0;
     return this.snapshot();
   }
   snapshot(){
-    const gate=this.gateOpen(),room=this.room(),interaction=this.interaction();
-    const guide=this.guidance();
-    return {status:this.status,time:this.time,progress:this.status==='finished'?1:this.seeds.size/GARDEN.seedCount*GARDEN.discoveryShare+(gate&&room.id==='courtyard'?clamp(this.y/GARDEN.finishY,0,1)*(1-GARDEN.discoveryShare):0),
+    const room=this.room(),start=this.course.start.x;
+    const progress=this.status==='finished'?1:clamp((this.bestX-start)/(this.course.finishX-start),0,1)*.95;
+    return {status:this.status,time:this.time,progress,
       collectibles:this.collected.size,totalCollectibles:this.course.gems.length,checkpoint:this.checkpoint,
       recoveries:this.recoveries,penalties:this.penalties,x:this.x,y:this.y,vx:this.vx,vy:this.vy,
       grounded:this.grounded,airSpin:this.airSpin,recovering:this.recovery>0,
-      seeds:this.seeds.size,totalSeeds:this.course.seeds?.length||0,seedIds:[...this.seeds],gateOpen:gate,
-      room:room.id,roomName:room.name,dream:this.dream,discovered:[...this.discovered],shortcuts:this.opened.size/2,
-      actionHint:interaction?.hint||'',guide,hint:gate||this.clock-this.lastDiscovery>GARDEN.hintDelay?`${guide.icon} ${guide.direction}`:''};
+      seeds:this.seeds.size,totalSeeds:this.course.seeds.length,seedIds:[...this.seeds],
+      room:room.id,roomName:room.name,actionHint:''};
   }
 }

@@ -21,8 +21,10 @@ function fixture(t) {
   const art = { shadow: new Texture() };
   const baseline = colliders(level.planets[0]).length;
   const plane = new Biplane(scene, level, art, colliders);
-  const up = level.spawn.dir.clone();
-  const checkpoint = { planet: level.spawn.planet, dir: up.clone() };
+  // The plane is parked on the far side of the planet: the player starts beside it.
+  const side = tangentDir(EAST, plane.home.dir), angle = 3 / plane.home.planet.radius;
+  const up = plane.home.dir.clone().multiplyScalar(Math.cos(angle)).addScaledVector(side, Math.sin(angle)).normalize();
+  const checkpoint = { planet: plane.home.planet, dir: up.clone() };
   const player = {
     state: 'play', hearts: 3, invulnerable: 0, checkpoint,
     body: { pos: surfacePoint(checkpoint.planet, up), up, vel: new Vector3(), planet: checkpoint.planet,
@@ -96,10 +98,11 @@ function gamepad() {
   return { connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false, value: 0 })) };
 }
 
-test('the biplane starts on a clear dry patch within boarding reach of the opening meadow', t => {
+test('the biplane parks on a clear dry patch on the far side from the start, boardable from beside it', t => {
   const { level, plane, player, colliders, baseline } = fixture(t);
   const chosen = chooseBiplaneHome(level);
   assert.equal(chosen.planet, level.spawn.planet);
+  assert.ok(chosen.dir.angleTo(level.spawn.dir) > 2.2, 'an easter egg, not in the first view');
   const original = colliders(plane.home.planet).filter(collider => collider !== plane.parkingCollider);
   assert.ok(clearLanding(chosen.planet, chosen.dir, original, 2.05));
   assert.equal(inWater(plane.flight.pos, plane.home.planet), false);

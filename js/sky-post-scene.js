@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { AIR_ROUTE, POST } from './sky-post-rules.js';
+import { POST } from './sky-post-rules.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const material = new THREE.MeshLambertMaterial({vertexColors: true});
@@ -57,8 +57,8 @@ function resident(id) {
 
 /** Original sky toys, separate from Miro's unchanged pilot and plane assets. */
 export class SkyPostScene {
-  #scene; #course; #frame; #stations = []; #lanes = []; #chimes = []; #cargo = [];
-  #projectiles = []; #courier; #whale; #whaleEyes; #spout; #birds = []; #office; #guests = []; #matrix = new THREE.Matrix4();
+  #scene; #course; #frame; #stations = []; #cargo = [];
+  #projectiles = []; #courier; #office; #guests = []; #matrix = new THREE.Matrix4();
   constructor(scene, plane, course, frame) {
     this.#scene = scene; this.#course = course; this.#frame = frame;
     for (const [index, delivery] of course.deliveries.entries()) {
@@ -68,7 +68,7 @@ export class SkyPostScene {
     }
     for (const d of course.deliveries) {const group = parcel(d.id); scene.add(group); this.#projectiles.push({id: d.id, group});}
     this.#courier = bird(); scene.add(this.#courier);
-    this.#buildLanes(); this.#buildChimes(); this.#buildArrival();
+    this.#buildArrival();
   }
   #place(object, s, x = 0, y = 0) {
     const f = this.#frame(s);
@@ -111,64 +111,7 @@ export class SkyPostScene {
     group.name = `sky:post-${delivery.id}`; this.#scene.add(group);
     return {delivery, group, friend, reaction, halo, symbol};
   }
-  #buildLanes() {
-    for (const section of this.#course.airSections) for (const route of this.#course.routes) {
-      const group = new THREE.Group();
-      // Repeated arches form distinct spatial lanes with broad gaps for changing routes.
-      for (let s = section.start; s <= section.end; s += 43) {
-        const parts = [];
-        if (route.id === AIR_ROUTE.LOWER) {
-          parts.push(ring(0, 0, 0, 3.6, .32, 0xe5f4e9));
-          for (let i = 0; i < 6; i++) parts.push(ball(Math.cos(i * Math.PI / 3) * 3.7, Math.sin(i * Math.PI / 3) * 3.7, 0, 1.05, .68, .8, 0xf7f9ed));
-        } else if (route.id === AIR_ROUTE.UPPER) {
-          for (let x = -2; x <= 2; x += 2) parts.push(tint(new THREE.ConeGeometry(.22, 1.2, 3).rotateX(-Math.PI / 2).translate(x, -2.3, 0), route.color));
-          parts.push(ring(0, 0, 0, 3.4, .045, route.color));
-        } else {
-          parts.push(tube(-4.6, -3, 0, .65, 8, 0xe8dcc7), tube(4.6, -3, 0, .65, 8, 0xe8dcc7));
-          for (const x of [-4.6, 4.6]) {
-            parts.push(box(x, 1, .2, 3, .25, .2, 0xb9a3d0), box(x, 1, .2, .25, 3, .2, 0xb9a3d0), ball(x, 1, .4, .24, .24, .16, 0xffd994));
-          }
-        }
-        const shape = mesh(parts); this.#place(shape, s, route.x, route.y); group.add(shape);
-      }
-      const gifts = new THREE.Group();
-      for (let s = section.start + 18; s <= section.end; s += 65) {
-        const parts = [];
-        if (route.id === AIR_ROUTE.LOWER) for (const side of [-1, 1]) {
-          parts.push(tube(side * 3.5, -1.2, 0, .12, 2, 0x74ad89), ball(side * 3.5, 0, 0, .8, .4, .75, 0xef9cba));
-        }
-        if (route.id === AIR_ROUTE.UPPER) for (let i = 0; i < 4; i++) parts.push(ball(3.7, i * 1.1 - 3, 0, .7 + i * .1, .4, .7, 0xfff5df));
-        if (route.id === AIR_ROUTE.MIDDLE) parts.push(tint(new THREE.OctahedronGeometry(.8).scale(.7, 1.3, .1).translate(-3.2, 2.2, 0), 0x8ccbd4));
-        const gift = mesh(parts); this.#place(gift, s, route.x, route.y); gifts.add(gift);
-      }
-      group.add(gifts);
-      group.name = `sky:air-${route.id}`; this.#scene.add(group);
-      this.#lanes.push({group, gifts, section, route});
-    }
-  }
-  #buildChimes() {
-    for (const data of this.#course.chimes) {
-      const group = new THREE.Group(), parts = [ring(0, 0, 0, 4.2, .15, data.color)];
-      for (let i = -2; i <= 2; i++) parts.push(tube(i * 1.25, 3.5 - Math.abs(i) * .2, 0, .16, 2 + Math.abs(i) * .5, i % 2 ? 0xffdf88 : data.color));
-      parts.push(ball(0, -3.2, 0, .4, .55, .4, 0xffd06e));
-      group.add(mesh(parts));
-      // A spiral teaches the same protective roll used around balloons.
-      const spiral = [];
-      for (let i = 0; i < 18; i++) {const a = i / 18 * Math.PI * 3.5, r = .25 + i * .045; spiral.push(ball(Math.cos(a) * r, Math.sin(a) * r, 0, .1, .1, .1, 0xfff0bf));}
-      const sign = mesh(spiral); sign.position.set(0, 6, 0); group.add(sign);
-      this.#place(group, data.s, data.x, data.y); this.#scene.add(group); this.#chimes.push({data, group});
-    }
-  }
   #buildArrival() {
-    this.#whale = new THREE.Group();
-    this.#whale.add(mesh([ball(0, 0, 0, 9, 3.3, 4, 0xb2d3dd), ball(-4.7, .7, 3.3, .3, .12, .15, 0x44566c), ball(-1.9, .7, 3.8, .3, .12, .15, 0x44566c),
-      ball(-3.4, -.4, 3.8, .8, .15, .12, 0xf1b3b4), ball(8, .1, 0, 4, .5, 3.7, 0x9cc4d2), ball(-1, -2, 2.8, 3, .35, 2, 0x9cc4d2)]));
-    this.#whaleEyes = mesh([ball(-4.7, .7, 3.4, .31, .42, .15, 0x44566c), ball(-1.9, .7, 3.9, .31, .42, .15, 0x44566c)]);
-    this.#whale.add(this.#whaleEyes);
-    this.#spout = mesh([tube(0, 4.3, 0, .27, 3.8, 0xd6ecdb), ball(-1, 6.5, 0, 1.3, .4, .8, 0xd6ecdb), ball(1, 6.5, 0, 1.3, .4, .8, 0xd6ecdb)]);
-    this.#whale.add(this.#spout);
-    this.#place(this.#whale, 1510, 17, 3); this.#scene.add(this.#whale);
-    for (let i = 0; i < 9; i++) {const b = bird(); this.#birds.push(b); this.#scene.add(b);}
     this.#office = new THREE.Group();
     this.#office.add(mesh([ball(0, -8, -8, 24, 3, 15, 0xf0f4e4), ball(0, -5.6, -8, 19, .7, 13, 0xa5c9a0),
       box(0, 0, -16, 15, 11, 7, 0xffe3ae), tint(new THREE.ConeGeometry(12, 6, 4).rotateY(Math.PI / 4).translate(0, 8, -16), 0x87bec4),
@@ -186,7 +129,7 @@ export class SkyPostScene {
     for (const cargo of this.#cargo) cargo.group.visible = !post.delivered.has(cargo.id) && post.parcel?.id !== cargo.id && !post.arrival;
     for (const station of this.#stations) {
       const {delivery, group, friend, reaction, halo, symbol} = station;
-      group.visible = delivery.s > run.s - 100 && delivery.s < run.s + 400;
+      group.visible = delivery.s > run.s - 100 && delivery.s < run.s + 300;
       const delivered = post.delivered.has(delivery.id);
       reaction.visible = delivered;
       const age = post.lastDelivery?.id === delivery.id ? Math.min(1, (t - post.lastDelivery.time) * 2) : 1;
@@ -196,16 +139,6 @@ export class SkyPostScene {
       halo.visible = !delivered;
       halo.scale.setScalar(reducedMotion ? 1 : 1 + Math.sin(t * 3) * .035);
       symbol.rotation.z = reducedMotion ? 0 : Math.sin(t * 1.4) * .08;
-    }
-    for (const lane of this.#lanes) {
-      lane.group.visible = lane.section.end > run.s - 60 && lane.section.start < run.s + 360;
-      // Flower parcels seed a glowing lower lane; bread warms the upper air.
-      const active = lane.route.id === AIR_ROUTE.LOWER && post.delivered.has('garden') || lane.route.id === AIR_ROUTE.UPPER && post.delivered.has('bakery') && lane.section.start > 800 || lane.route.id === AIR_ROUTE.MIDDLE && post.delivered.has('kite');
-      lane.gifts.visible = active;
-    }
-    for (const chime of this.#chimes) {
-      chime.group.visible = chime.data.s > run.s - 45 && chime.data.s < run.s + 320;
-      chime.group.rotation.z = !reducedMotion && post.chimes.has(chime.data.id) ? Math.sin(t * 7) * .07 : 0;
     }
     for (const [i, parcel] of this.#projectiles.entries()) {
       parcel.group.visible = post.parcel?.id === parcel.id;
@@ -233,19 +166,10 @@ export class SkyPostScene {
       this.#courier.quaternion.copy(projectile.quaternion);
       this.#courier.scale.setScalar(1.7);
     }
-    this.#whale.visible = run.s > 1180 && run.s < 1610;
-    this.#whaleEyes.visible = this.#spout.visible = post.choir;
-    this.#whale.position.y += reducedMotion ? 0 : Math.sin(t * .8) * dt * .22;
     this.#office.visible = run.s > this.#course.length - 380;
     for (const {guest, id} of this.#guests) {
       guest.visible = post.delivered.has(id);
       guest.rotation.z = reducedMotion ? 0 : Math.sin(t * 5) * .18;
-    }
-    for (const [i, bird] of this.#birds.entries()) {
-      bird.visible = post.choir || post.arrival;
-      if (!bird.visible) continue;
-      this.#place(bird, run.s + 12 + i * 2.5, Math.sin(i * 1.8) * (3 + i * .25), 2 + Math.cos(i * 1.8) * 2 + (reducedMotion ? 0 : Math.sin(t * 4 + i) * .3));
-      bird.scale.setScalar(1.5);
     }
   }
 }

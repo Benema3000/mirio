@@ -9,7 +9,7 @@ const TAU = Math.PI * 2;
 const EAST = new THREE.Vector3(1, 0, 0);
 const Z = new THREE.Vector3(0, 0, 1);
 // A few birds, not a crowd: the meadow is Miro's, the animals only liven it up.
-const LIMITS = [{ bird: 3, squirrel: 0 }, { bird: 4, squirrel: 0 }, { bird: 5, squirrel: 0 }];
+const LIMITS = [{ bird: 3, squirrel: 1 }, { bird: 4, squirrel: 2 }, { bird: 5, squirrel: 2 }];
 const PLAYGROUND_LIMITS = [{bird: 5, squirrel: 2}, {bird: 8, squirrel: 4}, {bird: 10, squirrel: 5}];
 export const WILDLIFE_POPULATION = Object.freeze({SPARSE: 'sparse', PLAYGROUND: 'playground'});
 const scratch = new THREE.Vector3();
@@ -155,6 +155,8 @@ export class Wildlife {
     }
     // Two on the ground away from the start, two in trees, one circling.
     for (const [lat, lon] of [[66, 120], [30, -36]]) add('bird', dirFromLatLon(lat, lon));
+    // Two squirrels, off the first view: one behind the start, one round the side.
+    for (const [lat, lon] of [[67, 163], [22, 46]]) add('squirrel', dirFromLatLon(lat, lon));
     for (const i of [0, 12]) {
       const tree = this.trees[i % this.trees.length];
       if (tree) add('bird', tree.dir, 'perch', tree);

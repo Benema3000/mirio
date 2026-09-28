@@ -11,13 +11,12 @@ export const MAGNET_TIME = 12;
 
 export function trailLayouts(level) {
   if (level.trails) return level.trails;
-  const [world, moon] = level.planets;
+  const [, moon] = level.planets;
   const landing = level.rocket.flight.landing;
   const along = tangentDir(new THREE.Vector3(0, 0, 1), landing) ?? tangentDir(new THREE.Vector3(1, 0, 0), landing);
   const side = new THREE.Vector3().crossVectors(landing, along).normalize();
+  // One trail, on the moon: a find for the second world, nothing at the start.
   return [
-    { id: 'meadow', name: 'Wiesenspuren', planet: world, color: 0xffce6b,
-      dirs: [82, 78.5, 75, 71.5, 68, 64.5].map(lat => dirFromLatLon(lat, -18)) },
     { id: 'moon', name: 'Mondspuren', planet: moon, color: 0x81f2ee,
       dirs: [.1, .145, .19, .235, .28, .325].map(t => landing.clone().multiplyScalar(Math.cos(Math.PI * t))
         .addScaledVector(along, Math.sin(Math.PI * t)).addScaledVector(side, -.19).normalize()) },

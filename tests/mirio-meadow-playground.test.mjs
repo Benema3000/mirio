@@ -5,11 +5,19 @@ import {makeLevel, collidersFor} from '../js/level.js';
 import {collide, inWater, stepBody, surfacePoint, tangentDir} from '../js/world.js';
 import {BOAT, MEADOW, createMeadowRun, meadowLayout, stepMeadowRun} from '../js/meadow-playground-rules.js';
 import {MeadowPlayground} from '../js/meadow-playground.js';
-import {chooseBiplaneHome, clearLanding} from '../js/biplane.js';
+import {clearLanding} from '../js/biplane.js';
+import {bonusPlaygroundLayout} from '../js/bonus-playground.js';
 import {Player} from '../js/player.js';
 
+function playgroundLevel() {
+  const world = makeLevel();
+  return {...world, ...bonusPlaygroundLayout(world.bonus.planet, world.bonus.spawn),
+    planets: [world.bonus.planet, ...world.planets.filter(planet => planet !== world.bonus.planet)]};
+}
+
 function setup() {
-  const level = makeLevel(), layout = meadowLayout(level), run = createMeadowRun(layout);
+  const level = playgroundLevel();
+  const layout = meadowLayout(level), run = createMeadowRun(layout);
   const input = {flying: true, planeDir: layout.wind.dir, planeAltitude: 1.5, planeSpeed: 10, boost: 1, planeDistance: 0,
     walking: false, playerDir: layout.wind.dir, playerHeight: 0, grounded: true};
   return {level, layout, run, input};
@@ -80,7 +88,7 @@ test('all five helps produce one picnic; dismounting preserves discoveries and k
 });
 
 function system() {
-  const level = makeLevel(), layout = meadowLayout(level), colliders = collidersFor(level), scene = new Scene();
+  const level = playgroundLevel(), layout = meadowLayout(level), colliders = collidersFor(level), scene = new Scene();
   const playground = new MeadowPlayground(scene, level, colliders);
   const player = {state: 'biplane', body: {planet: layout.planet, pos: surfacePoint(layout.planet, layout.wind.dir, 1.5), up: layout.wind.dir.clone(), onGround: false}, bounce(options) {this.bounced = options;}};
   const plane = {mounted: true, distance: 0, flight: {planet: layout.planet, pos: surfacePoint(layout.planet, layout.wind.dir, 1.5), up: layout.wind.dir.clone(), altitude: 1.5, speed: 10, boost: 1}};
@@ -114,7 +122,7 @@ test('reset removes only owned unlocks and restores the plane landing clearing',
   for (let i = 0; i < 8; i++) playground.step(.1, player, plane);
   playground.reset();assert.equal(colliders(layout.planet).length, before);assert.equal(playground.snapshot().completed, 0);
   assert.equal(clearLanding(layout.planet, layout.clearing.dir, colliders(layout.planet)), true);
-  const home = chooseBiplaneHome(level);assert.equal(clearLanding(layout.planet, home.dir, colliders(layout.planet), 2.05), true);
+  const home = level.biplaneHome;assert.equal(clearLanding(layout.planet, home.dir, colliders(layout.planet), 2.05), true);
 });
 
 test('inactive play freezes tasks and scenery remains finite with reduced motion', () => {
@@ -128,7 +136,7 @@ test('inactive play freezes tasks and scenery remains finite with reduced motion
 test('the wind-to-boat route stays flyable after the bridge grows', async () => {
   const {createFlight, stepFlight} = await import('../js/biplane-physics.js');
   const {level, colliders, playground, player} = system();
-  const home = chooseBiplaneHome(level), flight = createFlight(home.planet, home.dir);
+  const home = level.biplaneHome, flight = createFlight(home.planet, home.dir);
   const plane = {mounted: true, distance: 0, flight};
   player.body.pos = flight.pos; player.body.up = flight.up;
   for (let t = 0; t < 30 && playground.snapshot().boat !== BOAT.DOCKED; t += 1 / 120) {

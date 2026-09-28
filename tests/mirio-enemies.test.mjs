@@ -101,12 +101,12 @@ test('ground pounds defeat on impact, and inactive gameplay cancels pending char
   assert.ok(warning.rest > 1);
 });
 
-test('all seven homes and their full patrol leashes avoid water, props, trials, checkpoints and springs', () => {
+test('the three homes and their full patrol leashes avoid water, props, trials, checkpoints and springs', () => {
   const level = makeLevel();
   const layouts = enemyLayouts(level), colliders = collidersFor(level);
-  assert.equal(layouts.length, 7);
-  assert.equal(layouts.filter(e => e.kind === 'beetle').length, 5);
-  assert.equal(layouts.filter(e => e.kind === 'pebble').length, 2);
+  assert.equal(layouts.length, 3);
+  assert.equal(layouts.filter(e => e.kind === 'beetle').length, 2);
+  assert.equal(layouts.filter(e => e.kind === 'pebble').length, 1);
   for (const enemy of layouts) {
     const protectedDirs = [...level.flags.filter(f => f.planet === enemy.planet).map(f => f.dir),
       ...trailLayouts(level).filter(t => t.planet === enemy.planet).flatMap(t => t.dirs)];

@@ -21,9 +21,9 @@ function setup() {
     } };
 }
 
-test('a few birds, no squirrels: the rigs share a bounded draw budget and use positive transforms', () => {
+test('a few birds and two squirrels: the rigs share a bounded draw budget and use positive transforms', () => {
   const f = setup();
-  assert.deepEqual(f.wildlife.counts, { bird: 5, squirrel: 0 });
+  assert.deepEqual(f.wildlife.counts, { bird: 5, squirrel: 2 });
   f.tick();
   const matrix = new Matrix4();
   for (const mesh of f.wildlife.models.group.children) {
@@ -109,7 +109,7 @@ test('story scenes freeze wildlife and quality tiers retain nearby animals', () 
   f.wildlife.setQuality(0); f.tick();
   const visible = f.wildlife.animals.filter(animal => animal.visible);
   assert.ok(visible.filter(animal => animal.kind === 'bird').length <= 3);
-  assert.ok(visible.every(animal => animal.kind === 'bird'));
+  assert.ok(visible.filter(animal => animal.kind === 'squirrel').length <= 1);
   // Looking from the far side cannot render the starting animals through it.
   f.camera.position.set(0, -40, 0); f.camera.updateMatrixWorld(); f.tick();
   assert.equal(f.wildlife.animals[0].visible, false);
@@ -141,4 +141,22 @@ test('perched feet meet the actual scaled instanced canopy instead of an estimat
   wildlife.reset();
   assert.ok(Math.abs(bird.height - expected) < 1e-5);
   wildlife.dispose(); geometry.dispose(); material.dispose();
+});
+
+test('squirrels scurry away, return to a safe tree patch and hold an acorn', () => {
+  const f = setup();
+  const squirrel = f.wildlife.animals.find(animal => animal.kind === 'squirrel');
+  f.player.body.pos.copy(squirrel.pos);
+  const before = squirrel.pos.clone();
+  f.tick();
+  assert.equal(squirrel.state, 'scurry');
+  f.tick(40);
+  assert.ok(squirrel.pos.distanceTo(before) > 1.5);
+  f.player.body.pos.set(0, -26, 0);
+  const seen = new Set();
+  for (let i = 0; i < 700; i++) { f.tick(); seen.add(squirrel.state); }
+  assert.ok(seen.has('return'));
+  assert.ok(seen.has('sit'));
+  assert.ok(f.wildlife.safe(squirrel.dir));
+  f.wildlife.dispose();
 });

@@ -1,5 +1,5 @@
 // Forgiving postal flight. Course rules have no renderer or DOM.
-import { POST, createPostRun, deliveryTarget, makePostCourse, postalWind, postSnapshot, tossParcel, updatePost } from './sky-post-rules.js';
+import { POST, createPostRun, deliveryTarget, makePostCourse, postSnapshot, tossParcel, updatePost } from './sky-post-rules.js';
 export const SKY = Object.freeze({
   length: 1800, cruise: 24, boostSpeed: 35, boostDuration: 1.45, boostCooldown: 5,
   lateralSpeed: 9.5, verticalSpeed: 7.5, width: 12, height: 8,
@@ -72,16 +72,15 @@ export function stepSkyRun(run, course, dt, controls = {}) {
   for (let n = 0; n < count && run.status === 'playing'; n++) {
     const before = {s: run.s, x: run.x, y: run.y};
     for (const key of ['boost', 'cooldown', 'draft', 'roll', 'rollCooldown', 'invulnerable', 'slow']) run[key] = Math.max(0, run[key] - h);
-    run.post.wind = postalWind(run, course);
-    run.vx = damp(run.vx, x * SKY.lateralSpeed + run.post.wind.x, 12, h);
-    run.vy = damp(run.vy, y * SKY.verticalSpeed + run.post.wind.y, 12, h);
+    run.vx = damp(run.vx, x * SKY.lateralSpeed, 12, h);
+    run.vy = damp(run.vy, y * SKY.verticalSpeed, 12, h);
     run.x = clamp(run.x + run.vx * h, -SKY.width, SKY.width);
     run.y = clamp(run.y + run.vy * h, -SKY.height, SKY.height);
     if (Math.abs(run.x) === SKY.width && Math.sign(run.vx) === Math.sign(run.x)) run.vx = 0;
     if (Math.abs(run.y) === SKY.height && Math.sign(run.vy) === Math.sign(run.y)) run.vy = 0;
     const bay = deliveryTarget(run, course);
     const cruise = bay && run.s > bay.s - POST.bayApproach ? POST.baySpeed : SKY.cruise;
-    const target = (run.slow > 0 ? 13 : run.boost > 0 ? SKY.boostSpeed : run.draft > 0 ? SKY.draftSpeed : cruise) + run.post.wind.speed;
+    const target = run.slow > 0 ? 13 : run.boost > 0 ? SKY.boostSpeed : run.draft > 0 ? SKY.draftSpeed : cruise;
     run.speed = damp(run.speed, target, 6, h);
     const advance = Math.min(run.speed * h, course.length - run.s);
     const used = advance / Math.max(1, run.speed);

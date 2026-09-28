@@ -66,17 +66,22 @@ round with the kart and widens when it goes fast.
 ## Adventures from Sternenhof
 
 The start screen (Miro's drawing, the logo and the top 5 of the Planetenreise
-list) opens into **Sternenhof**, a little home planet under a starry sky
-(`js/hub-world.js`, rules in `js/hub-rules.js`). Mirio runs round it exactly as
-on the Planetenreise's planets. Six launch pads are scattered over it, each
-with its journey's name floating above it and a beam of light up to that
-journey's planet: a meadow planet with Miro's rocket, a planet with a
-checkered race ring, a cloud planet with a letter, a flower planet, a golden
-planet with notes, a star in a soap bubble. Step onto a pad and Mirio is flung
-up the beam into the journey; the pad you stand at also shows its name large
-at the bottom. Coming back, Mirio lands beside the pad he left from, and that
-pad waits until he steps away. Completed journeys get a gold star by their
-name. Every journey is open from the start; pause and results return to the
+list) opens into **Sternenhof**, a little home planet under a starry sky with
+nebulae and two far planets (`js/hub-world.js`, rules in `js/hub-rules.js`).
+Mirio runs round it exactly as on the Planetenreise's planets. Sandy paths run
+like a star from the spawn to the pads, past a farmhouse with a star on its
+roof, a pond, trees and fireflies. Each pad has its journey's name floating
+above it and a beam of light up to that journey's planet: a meadow planet with
+Miro's rocket, a cloud planet with a letter, a flower planet, a golden planet
+with notes, a star in a soap bubble. A small moon, covered in Miro's floor
+drawing, hangs ahead and to the right of the spawn; a spring flower under it
+hops Mirio up, and the race waits round the moon's underside, under a planet
+with a checkered ring. A spring on the moon hops him home; the spring he lands
+on waits until he steps off it. Step onto a pad and Mirio is flung up the beam
+into the journey; the pad you stand at also shows its name large at the
+bottom. Coming back, Mirio lands beside the pad he left from, and that pad
+waits until he steps away. Completed journeys get a gold star by their name.
+Every journey is open from the start; pause and results return to the
 Sternenhof, replay restarts the same journey. No timer and no score here.
 Pause provides help and separate time boards without leaving the current run.
 
@@ -84,8 +89,8 @@ Pause provides help and separate time boards without leaving the current run.
 | --- | --- | --- |
 | **Planetenreise** | The original journey: meadow, ring lake, rocket to the moon, boss fight, kart race to the Zielplanet | Platformer and kart controls |
 | **Sternenrennen** | Three laps round the Zielplanet against Finster-Mirio: ramp, dash panels, blocks, drifts and mini-turbos | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
-| **Wolkenpost** | Three parcel deliveries, upper currents, windmills, cloud arches and a singing cloud whale | WASD/arrows/stick steer; Space/A roll; Shift/X toss near baskets, turbo elsewhere |
-| **Blütenpfad** | Connected courtyard, orchard, musical conservatory and cellar; three lantern seeds open the final ascent | A/D or ←/→/stick move; Space/A jump; Shift/X air spin, song or door |
+| **Wolkenpost** | Fly through golden rings past floating islands, dodge balloons and throw three parcels to the islands' catchers | WASD/arrows/stick steer; Space/A roll; Shift/X throw at a catcher, turbo elsewhere |
+| **Blütenpfad** | One run through courtyard, tree house, glass house and cellar garden to a flower tower; three lantern seeds wait up high on the way | A/D or ←/→/stick move; Space/A jump; Shift/X air spin |
 | **Klangkugel** | Three connected pinball tables: pudding garden, cuckoo clock and moon concert; light note targets and shoot the bell lift | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
 | **Seifenstern** | Tilt floating paths beneath a soap bubble; balance over rainbow ribbons, inflate a foam bridge and reach the towel | WASD/arrows/stick tilt; hold Space/A/◎ to level and brake, or inflate the marked soap basin |
 
@@ -97,18 +102,18 @@ The new modes use the unchanged drawing-derived Mirio model. Their scenery is
 original procedural geometry. The menu logo and gameplay thumbnail provenance
 are documented in `assets/README.md`.
 
-## Playground routes edition
+## The journeys
 
-- **Wolkenpost:** match the visible parcels to flower, bread and kite signs.
-  Shift / X / ✦ tosses inside generous delivery areas; a bird returns a miss.
-  Recipients change later currents. Roll through three chimes on different air
-  routes to wake the cloud whale. Remaining cargo reaches the post office.
-- **Blütenpfad:** explore in either direction and use doors, rooftop windows
-  and a curtain passage to reconnect. Sing at a musical flower to exchange vine
-  stairs for sleepy spirit platforms. Three lantern seeds open the courtyard
-  ascent. Discoveries survive checkpoint recovery; replay resets them.
-  A delayed pictogram points through the nearest useful door when you pause
-  to find your bearings.
+- **Wolkenpost:** a close camera follows the plane along a line of golden
+  rings. Near each of the three islands the flight slows; steer at its
+  catcher and throw with Shift / X / ✦. A bird brings a miss back to retry.
+  Remaining cargo reaches the post office at the end.
+- **Blütenpfad:** one side-on run from left to right: Blütenhof, Baumhaus,
+  Glashaus and Kellergarten, with a creek to jump between each, and a flower
+  tower to the Blütentor at the end. Each garden has a climb (petal stairs,
+  vine stairs, a spring flower) to a lantern seed up high; the three lanterns
+  at the foot of the tower light up for the seeds found. Seeds are a bonus:
+  the Blütentor is always open.
 - **Klangkugel:** gravity drives the ball; movement keys operate the flippers,
   never steer it. A charged side plunger launches into three themed tables.
   Hit three note targets to open each bell lift. Bumpers, slingshots, a moving
@@ -116,17 +121,18 @@ are documented in `assets/README.md`.
   lit targets and cleared tables survive recovery (+2 seconds). Early misses
   use a free ball saver. Separate touch flippers support simultaneous presses.
   The whole table stays in view, including with reduced motion.
-- **Seifenstern:** tilt drives gravity and momentum. Broad bends reconnect with
+- **Seifenstern:** a bath-time world of soap paths over the bath water, soap
+  bubbles drifting past. The stick tilts the whole world and gravity rolls the
+  bubble; a steady camera watches from low behind. Broad bends reconnect with
   narrow banked ribbons at safe checkpoint islands. Stop on the soap basin and
-  hold the brake to inflate a lasting foam bridge; the broad route stays open.
-  Falls return Mirio to the latest island and keep the bridge inflated. The
-  camera stays upright; reduced motion calms the board's visible tilt.
+  hold the brake to inflate a lasting foam bridge. Reduced motion calms the
+  visible tilt.
 
 All scenery is procedural. Original drawings, derived models and floor textures
 are unchanged by these additions. Changed courses have separate records:
 `discovery-v3` (Planetenreise), `classic-v3` (single-track Sternenrennen),
-`branches-v3` (Sternenwege), and `pinball-v3` (Klangkugel). Wolkenpost,
-Blütenpfad and Seifenstern keep `playground-v2`. Earlier records and tokens
+`branches-v3` (Sternenwege), `pinball-v3` (Klangkugel), and `journey-v3`
+(Wolkenpost/Blütenpfad). Seifenstern keeps `playground-v2`. Earlier records and tokens
 remain stored under their original keys and directories.
 
 ## The hidden Wunderwiese
@@ -140,7 +146,7 @@ flower bridge, boat rescue, kite towing, squirrel-guided picnic and treehouse,
 ring trails with a gem magnet, gentle creatures, birds and squirrels. Southern
 cloud platforms and a guardian provide an optional airborne route. Ground paths
 and checkpoints remain available. Earned souvenirs, a spring flower and bird
-chorus have moved here from the former garden hub.
+chorus also live here.
 
 A chequered gate beyond the clouds starts **Sternenwege**, the branching kart
 race: three separate roads, windmills, rolling fruit, cloud springs, rival
@@ -181,6 +187,23 @@ A few birds peck, perch and take wing when Mirio comes close. They are original
 articulated 3D animals, with shared geometry and instanced parts. Nearby
 birdsong, rustling leaves and a quiet breeze complete the meadow. Meeting a bird
 earns a Tierfreund badge at the end. The wildlife is harmless.
+
+Three little guardians live in quiet corners away from the path: two
+**Mooskrabbler** on the far meadow and a hopping **Mondkiesel** on the moon.
+They patrol, visibly wind up a short attack, then recover and return home. A
+jump onto their head or a ground pound defeats them; spinning stuns them. A
+defeat restores one heart; the hearts show only in the boss fight or once a
+guardian has taken one. Two squirrels forage and scurry off when Mirio comes
+close.
+
+The moon hides one optional **Mondspur**: six glowing rings. Touch the first to
+start an 18-second run; finish in order for a badge and a 12-second
+Glitzermagnet that pulls in nearby gems, without changing the gem total.
+
+On the far side of the start planet a little turquoise biplane, the
+**Wiesensummer**, waits to be found. F, controller Y or its on-screen button
+boards it; it flies low round the planet (never above 4.5 metres) and lands
+itself in a clear, dry spot when you get out.
 
 Three giant spring blossoms are optional toys. Walk or land on their centres to
 bounce high, or ground-pound them for an extra lift. Trying all three earns the
@@ -244,7 +267,7 @@ measures only the race. Personal bests remain on the device without a server,
 with an in-memory fallback when storage is unavailable. Public submission is
 optional and only happens when the player submits a nickname.
 
-- `GET api/times.php?course=playground-v2&level=sky` returns the selected list and a signed token.
+- `GET api/times.php?course=journey-v3&level=sky` returns the selected list and a signed token.
   `POST {level,token,name,timeMs,penaltyMs?}` to the same course URL submits an integer total duration.
   Optional integer `penaltyMs` defaults to zero and must be between zero and
   `timeMs`. Active play (`timeMs - penaltyMs`) must meet the level minimum and
@@ -351,15 +374,19 @@ The playground update adds:
   guardian landing, gates and recovery.
 - `tests/mirio-bonus-regressions-e2e.mjs`: revisited flag recovery and flying
   gem collection.
+- `tests/mirio-plane-ownership-e2e.mjs`: independent meadow/bonus planes,
+  keyboard/controller boarding, rescue and portrait touch prompts.
 - `tests/mirio-discovery-race-e2e.mjs`: race warp, replay, return, original
   finale, separate records and preserved adventure token.
 - `tests/mirio-kart-camera-e2e.mjs`: reduced-motion camera for both tracks.
 - `tests/mirio-kart-routes-native-e2e.mjs`: complete keyboard branching race.
-- `tests/mirio-hub-e2e.mjs`: normal start, pad launches, returns, replay,
-  completion markers and keyboard/controller/touch hub controls.
+- `tests/mirio-hub-e2e.mjs`: normal start, pad launches (the race over the
+  springs on the moon), returns, replay, completion markers and
+  keyboard/controller/touch hub controls.
 - `tests/mirio-hub.test.mjs` (unit): six pads kept apart, a short run from the
-  spawn, the right name shown, a launch only from standing on a pad, and the
-  return spot beside the pad that waits.
+  spawn, the moon in view, the right name shown on either body, a launch only
+  from standing on a pad, the return spot beside the pad that waits, and the
+  springs hopping to the moon and back.
 - `tests/mirio-marble-e2e.mjs`: complete keyboard pinball adventure,
   drain recovery, controller/touch flippers, plunger, replay and isolated records.
 - `tests/mirio-tilt-e2e.mjs`: balance-course routes, foam bridge, recovery,
@@ -371,12 +398,12 @@ The playground update adds:
 - `tests/mirio-kart-native-e2e.mjs`: a complete race through ordinary keyboard
   input, including a charged drift and its release.
 - `tests/mirio-sky-post-e2e.mjs`: complete keyboard flight, all recipients,
-  air routes, chimes, arrival and replay.
+  arrival and replay.
 - `tests/mirio-sky-post-devices-e2e.mjs`: genuine touch events, controller
   delivery, missed-parcel return and pause.
-- `tests/mirio-garden-e2e.mjs`: complete keyboard exploration; set
-  `GARDEN_ROUTE=song` for the alternative conservatory/secret route.
-- `tests/mirio-garden-controls-e2e.mjs`: touch, controller, song, recovery,
+- `tests/mirio-garden-e2e.mjs`: the whole garden with the keyboard: every
+  climb and seed, the creeks, the tower and replay.
+- `tests/mirio-garden-controls-e2e.mjs`: touch, controller, air spin, recovery,
   pause and reduced motion.
 - `tests/mirio-course-records-e2e.mjs`: isolated PHP server verifies new boards,
   legacy preservation and cross-course token rejection. Accepts `PHP`.

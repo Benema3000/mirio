@@ -51,8 +51,9 @@ export function enemyLayouts(level) {
     layouts.push({ id: `${kind}-${layouts.length + 1}`, kind, planet, dir, name: kind === 'beetle' ? 'Mooskrabbler' : 'Mondkiesel', color: PALETTE[kind] });
     return true;
   };
-  const meadow = [[72, 105], [64, 80], [24, 65], [-16, -52], [-63, 35], [-22, 110], [67, -95], [18, -80], [-60, -90], [8, 110], [-32, 65]];
-  for (const [lat, lon] of meadow) { add(world, dirFromLatLon(lat, lon), 'beetle'); if (layouts.length >= 5) break; }
+  // Only a few, in quiet corners away from the start and the main path.
+  const meadow = [[-16, -52], [-63, 35], [-22, 110], [18, -80], [-60, -90], [8, 110], [-32, 65]];
+  for (const [lat, lon] of meadow) { add(world, dirFromLatLon(lat, lon), 'beetle'); if (layouts.length >= 2) break; }
   const landing = level.rocket.flight.landing;
   const along = tangentDir(new THREE.Vector3(0, 0, 1), landing) ?? tangentDir(new THREE.Vector3(1, 0, 0), landing);
   const side = new THREE.Vector3().crossVectors(landing, along).normalize();
@@ -61,7 +62,7 @@ export function enemyLayouts(level) {
       const heading = along.clone().multiplyScalar(Math.cos(bearing)).addScaledVector(side, Math.sin(bearing));
       const dir = landing.clone().multiplyScalar(Math.cos(angle)).addScaledVector(heading, Math.sin(angle)).normalize();
       add(moon, dir, 'pebble');
-      if (layouts.length >= 7) return layouts;
+      if (layouts.length >= 3) return layouts;
     }
   }
   return layouts;

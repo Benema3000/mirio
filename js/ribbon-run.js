@@ -127,10 +127,6 @@ export class RibbonRun {
         b.add('stem',p.x,p.y-.83,0,.11,.5,.11,0x81aa7d);
       }
     }
-    this._sign(3,1.1,-2.15,'← ♧   ✿   ☀ →','3 ✧ → ✿',4.9);
-    this._sign(-23,1.1,-2.3,'♧ Baumhaus','↑ ✧',3.8);
-    this._sign(46,1.1,-2.3,'☀ Glashaus','♪ ☀ ↔ ☾',3.8);
-    this._sign(122,1.1,-2.3,'☾ Kellergarten','♪ ☀ ↔ ☾',4.1);
   }
   _flowerBed(b,x,y,z,pal,rand){
     for(let j=0;j<3;j++){
@@ -153,14 +149,9 @@ export class RibbonRun {
       if(j%2===0)b.add('orb',px+.35*s,py-.48*s,pz+.75*s,.15*s,.17*s,.15*s,pal.flower);
     }
   }
-  _sign(x,y,z,title,subtitle,width){
-    const group=new THREE.Group();group.position.set(x,y,z);this.scene.add(group);
-    mesh(group,this.cylinder,this.materials.wood,[0,-.4,0],[.07,2.1,.07]);
-    mesh(group,new THREE.PlaneGeometry(width,width*.375),label(title,subtitle),[0,.72,.09]);
-  }
   _backdrop(b){
     const rand=random(43536);
-    for(let x=-130;x<230;x+=12){
+    for(let x=-40;x<370;x+=12){
       b.add('orb',x,-5,-37,18,13+rand()*9,9,rand()>.5?0xb2d7bc:0xb9d9c7);
       b.add('orb',x+5,-5,-24,13,8+rand()*7,7,rand()>.5?0x97c4ae:0xa1cbb5);
       if(rand()>.35){
@@ -169,11 +160,11 @@ export class RibbonRun {
       }
     }
     // The creek and its glints sit below the garden, never obscuring a landing.
-    for(let x=-120;x<230;x+=40)b.add('box',x+20,-5.6,-3,40,.15,30,0x83cace);
-    for(let x=-100;x<200;x+=3.4)b.add('box',x,-5.49,-1-rand()*9,1+rand()*2,.015,.08,0xc5eeea,0,.1);
+    for(let x=-40;x<370;x+=40)b.add('box',x+20,-5.6,-3,40,.15,30,0x83cace);
+    for(let x=-30;x<360;x+=3.4)b.add('box',x,-5.49,-1-rand()*9,1+rand()*2,.015,.08,0xc5eeea,0,.1);
     // Tall seed stalks behind the route provide distinct landmarks in each act.
-    for(const x of [-70,-31,20,71,149,178]){
-      const pal=PALETTE[x<0?1:x<40?0:x<115?2:3];
+    for(const [x,zone] of [[20,0],[90,1],[140,1],[190,2],[262,3],[300,4]]){
+      const pal=PALETTE[zone];
       b.rod(x,-1,-9,x+1,8,-9,.14,pal.leaf);
       for(let j=0;j<7;j++){const a=j/7*Math.PI*2;b.add('petal',x+1+Math.sin(a)*1.1,8+Math.cos(a)*1.1,-9,.8,1.1,.3,pal.flower,-a);}
       b.add('orb',x+1,8,-8.65,.65,.65,.2,0xf5d07e);
@@ -181,36 +172,29 @@ export class RibbonRun {
     }
   }
   _gardenLandmarks(b){
-    // Glass framing and a striped roof identify the conservatory from both paths.
-    for(let x=52;x<=108;x+=8){
+    // Glass framing and a striped roof identify the conservatory.
+    for(let x=158;x<=230;x+=8){
       b.rod(x,0,-3,x,9.8,-3,.10,0xf4edcf);
       b.rod(x,9.8,-3,x-3,11.4,-5,.10,0x769e94);
       b.add('box',x,9.9,-3,8,.16,.18,0xf4edcf);
     }
-    b.add('box',79,4.5,-3.2,58,9,.08,0xb8d9c7);
-    for(let x=53;x<108;x+=8)b.add('box',x,4.5,-3,7.4,.10,.2,0xf4edcf);
+    b.add('box',194,4.5,-3.2,72,9,.08,0xb8d9c7);
+    for(let x=159;x<230;x+=8)b.add('box',x,4.5,-3,7.4,.10,.2,0xf4edcf);
     // Cellar walls sit behind play: soft moonlight, oversized pots, and star windows.
-    b.add('box',153,3.5,-4,70,9,.35,0x828eaf);
-    for(let x=125;x<186;x+=11){
+    b.add('box',266,3.5,-4,60,9,.35,0x828eaf);
+    for(let x=242;x<292;x+=11){
       b.add('box',x,3.5,-3.7,4,5,.2,0x465779);
       b.add('orb',x,4.5,-3.5,.9,.9,.08,0xffe2a6);
       b.add('box',x,3.5,-3.3,.12,5.1,.22,0xbebbc8);
       b.add('box',x,3.5,-3.3,4.1,.12,.22,0xbebbc8);
     }
-    // A tree-house platform, ladder, and acorn lift advertise two ways up.
-    b.add('stem',-70,3,-2.4,.75,6,.75,0x967050);
-    b.add('box',-70,7.3,-2.8,13,2.2,2.3,0xdfbc83);
-    b.add('cone',-70,10,-2.8,8,3,2.3,0xcc8f80);
-    for(let y=.6;y<6;y+=.5)b.add('box',-79,y,-1.3,1.2,.1,.15,0xdbc39b);
-    b.rod(-79.55,0,-1.3,-79.55,6,-1.3,.07,0x977257);
-    b.rod(-78.45,0,-1.3,-78.45,6,-1.3,.07,0x977257);
-    // Tiny footprints lead to a fluttering curtain and a hollow stump.
-    for(let x=138;x<146;x+=.7)b.add('orb',x,6.44,(Math.floor(x/.7)%2?-.25:.25),.16,.025,.08,0xe9d7ac);
-    b.add('stem',-87,1,-2,.9,2,.9,0xa57b59);
-    b.add('orb',-87,1,-.98,.62,.8,.08,0x4d6260);
+    // The tree house under its balcony.
+    b.add('stem',113,3,-2.4,.75,6,.75,0x967050);
+    b.add('box',113,7.3,-2.8,13,2.2,2.3,0xdfbc83);
+    b.add('cone',113,10,-2.8,8,3,2.3,0xcc8f80);
   }
   _gardenToys(){
-    this.vines=[];this.seedToys=[];this.doors=[];this.songFlowers=[];this.spirits=[];
+    this.vines=[];this.seedToys=[];
     for(const p of this.course.platforms.filter(p=>p.kind==='vine')){
       const group=new THREE.Group();group.position.set(p.x,p.y,0);this.scene.add(group);
       mesh(group,this.box,this.materials.green,[0,-.13,0],[p.w,.26,2.6]);
@@ -225,87 +209,26 @@ export class RibbonRun {
       mesh(group,new THREE.TorusGeometry(.8,.045,5,24),this.materials.cream,[0,0,-.1]);
       this.seedToys.push({seed,group});
     }
-    for(const door of this.course.doors){
-      const group=new THREE.Group();group.position.set(door.x,door.y,-1);this.scene.add(group);
-      const color=door.secret?this.materials.pink:this.materials.teal;
-      mesh(group,this.box,color,[0,1.15,0],[1.8,2.4,.24]);
-      mesh(group,this.box,this.materials.dark,[0,1.1,.18],[1.3,1.9,.10]);
-      const curtain=mesh(group,this.box,color,[0,1.35,.3],[1.3,1.5,.12]);curtain.visible=!!door.secret;
-      mesh(group,new THREE.PlaneGeometry(1.4,1.3),label(door.icon,'↻','#35535b',192),[0,3.15,.25]);
-      mesh(group,this.sphere,this.materials.gold,[.5,1.1,.33],[.1,.1,.09]);
-      const halo=mesh(group,new THREE.TorusGeometry(1.28,.055,6,28),this.materials.gold,[0,1.25,.38],[.86,1.16,1]);
-      halo.visible=false;
-      this.doors.push({door,group,curtain,halo});
-    }
-    for(const flower of this.course.flowers){
-      const group=new THREE.Group();group.position.set(flower.x,flower.y,0);this.scene.add(group);
-      mesh(group,this.cylinder,this.materials.green,[0,.72,0],[.08,1.44,.08]);
-      const blossom=new THREE.Group();blossom.position.y=1.55;group.add(blossom);
-      for(let i=0;i<6;i++){const a=i*Math.PI/3;mesh(blossom,this.sphere,this.materials.pink,[Math.sin(a)*.44,Math.cos(a)*.44,0],[.28,.34,.12]);}
-      mesh(blossom,this.sphere,this.materials.gold,[0,0,.10],[.28,.28,.12]);
-      mesh(group,new THREE.PlaneGeometry(2.4,1.44),label('♪  ↻','☀ ↔ ☾','#35535b',320),[0,3.05,0]);
-      this.songFlowers.push({flower,group,blossom});
-    }
-    // These shy gardeners hum with the flower and water the lanterns you found.
-    for(const [x,y]of [[61,0],[84,0],[140,0],[175,0]]){
-      const group=new THREE.Group();this.scene.add(group);
-      mesh(group,this.sphere,this.materials.white,[0,.75,0],[.64,.74,.48]);
-      for(const side of [-1,1]){
-        mesh(group,this.sphere,this.materials.dark,[side*.21,.91,.43],[.07,.08,.03]);
-        mesh(group,this.sphere,this.materials.pink,[side*.39,.73,.40],[.10,.05,.03]);
-      }
-      const can=mesh(group,this.box,this.materials.teal,[.6,.52,.35],[.45,.38,.32]);
-      mesh(group,this.cylinder,this.materials.teal,[.9,.58,.35],[.07,.38,.07]).rotation.z=-1;
-      const water=mesh(group,this.cylinder,this.materials.teal,[1.04,.25,.35],[.024,.38,.024]);
-      this.spirits.push({x,y,group,can,water});
-    }
-    this.seedSockets=new THREE.Group();this.seedSockets.position.set(17,1.1,-1.6);this.scene.add(this.seedSockets);
+    // Three lanterns at the foot of the tower light up for the seeds found.
+    const sockets=new THREE.Group();sockets.position.set(300,0,-1.6);this.scene.add(sockets);
     this.lanterns=[];
     for(let i=0;i<GARDEN.seedCount;i++){
-      mesh(this.seedSockets,this.cylinder,this.materials.wood,[(i-1)*1.5,.4,0],[.06,.8,.06]);
-      this.lanterns.push(mesh(this.seedSockets,this.sphere,this.materials.cream,[(i-1)*1.5,1,0],[.43,.53,.36]));
+      mesh(sockets,this.cylinder,this.materials.wood,[(i-1)*1.5,.9,0],[.06,1.8,.06]);
+      this.lanterns.push(mesh(sockets,this.sphere,this.materials.cream,[(i-1)*1.5,2,0],[.43,.53,.36]));
     }
-    mesh(this.seedSockets,new THREE.PlaneGeometry(4.8,1.8),label('✧ ✧ ✧','↓ ✿ ↑'),[0,3,0]);
-    this.interactPrompt=mesh(this.scene,new THREE.PlaneGeometry(.9,.9),label('↻','','#35535b',192),[0,0,0]);
-    this.guide=mesh(this.scene,new THREE.ConeGeometry(.25,.6,3),this.materials.gold,[0,0,0]);
     this.gardenBackground=new THREE.Color();
   }
   _renderGarden(dt,{reducedMotion}){
-    const r=this.rules,t=this.animationTime,awake=r.dream===GARDEN.dreamAwake;
-    const target=r.guidance(),guiding=r.gateOpen()||r.clock-r.lastDiscovery>GARDEN.hintDelay;
+    const r=this.rules,t=this.animationTime;
     this.gardenBackground.setHex(r.room().color);
     this.scene.background.lerp(this.gardenBackground,1-Math.exp(-dt*3));this.scene.fog.color.copy(this.scene.background);
-    for(const {p,group}of this.vines)group.visible=r.platformActive(p)&&Math.abs(p.x-r.x)<42;
+    for(const {p,group}of this.vines)group.visible=Math.abs(p.x-r.x)<42;
     for(const {seed,group}of this.seedToys){
       group.visible=!r.seeds.has(seed.id)&&Math.abs(seed.x-r.x)<42;
       group.position.y=seed.y+(reducedMotion?0:Math.sin(t*2)*.17);
       group.rotation.y=reducedMotion?0:Math.sin(t)*.3;
     }
-    for(const {door,group,curtain,halo}of this.doors){
-      group.visible=Math.abs(door.x-r.x)<42;
-      halo.visible=guiding&&target.kind==='door'&&target.id===door.id;
-      if(door.secret){curtain.scale.x=r.opened.has(door.id)?.18:.78+(reducedMotion?0:Math.sin(t*2.5)*.1);curtain.position.x=r.opened.has(door.id)?.55:0;}
-    }
-    for(const {flower,group,blossom}of this.songFlowers){
-      group.visible=Math.abs(flower.x-r.x)<42;
-      blossom.rotation.z=reducedMotion?0:Math.sin(t*2)*.1;
-      blossom.scale.setScalar(awake?1:1.15);
-    }
-    for(const [index,spirit]of this.spirits.entries()){
-      const {group,y,water,can}=spirit,x=r.gateOpen()?12+index*2.8:spirit.x;
-      group.visible=Math.abs(x-r.x)<40;
-      group.position.set(x,y+(reducedMotion?.1:.12+Math.sin(t*1.4+x)*.12),-.5);
-      group.scale.y=awake?1:.7;group.rotation.z=reducedMotion?0:Math.sin(t+x)*.06;
-      can.rotation.z=awake?-.3:0;water.visible=awake||r.seeds.size>0;
-      water.scale.y=reducedMotion?1:.65+Math.sin(t*8+x)*.3;
-    }
     this.lanterns.forEach((lantern,i)=>{lantern.material=i<r.seeds.size?this.materials.gold:this.materials.cream;});
-    const interaction=r.interaction();this.interactPrompt.visible=!!interaction;
-    if(interaction)this.interactPrompt.position.set(r.x,r.y+3.5,.25);
-    this.guide.visible=guiding;
-    if(this.guide.visible){
-      this.guide.position.set(r.x,r.y+2.8,.2);this.guide.rotation.z=Math.atan2(-(target.x-r.x),target.y-r.y);
-    }
   }
   _movingPlatforms(){
     this.movers=[];
@@ -379,7 +302,7 @@ export class RibbonRun {
       for(let j=0;j<5;j++){const a=j/5*Math.PI*2;const petal=mesh(this.finish,this.sphere,this.materials.pink,[side*1.9+Math.sin(a)*.46,5+Math.cos(a)*.46,0],[.3,.4,.17]);petal.rotation.z=-a;}
       mesh(this.finish,this.sphere,this.materials.gold,[side*1.9,5,.17],[.23,.23,.11]);
     }
-    const banner=mesh(this.finish,new THREE.PlaneGeometry(3.8,1.24),label('Blütentor','Geschafft!'),[0,4.22,0]);
+    const banner=mesh(this.finish,new THREE.PlaneGeometry(3.8,1.24),label('Blütentor',''),[0,4.22,0]);
     banner.rotation.y=-.12;
     for(let j=0;j<9;j++){
       const pennant=mesh(this.finish,new THREE.ConeGeometry(.18,.43,3),j%2?this.materials.teal:this.materials.pink,[-1.7+j*.425,3.27-Math.sin(j/8*Math.PI)*.3,.12]);pennant.rotation.z=Math.PI;
@@ -412,7 +335,7 @@ export class RibbonRun {
     for(const e of events){
       if(e.type==='bit')this._burst(e.x,e.y,e.kind==='seed'?30:6);
       if(e.type==='spring'){const f=this.flowers.find(f=>f.s.id===e.id);if(f)f.pulse=.7;this._burst(e.x,e.y+.3,14);}
-      if(e.type==='checkpoint'){this._burst(e.x,e.y+1.7,16);if(e.kind==='door')this.cameraReady=false;}
+      if(e.type==='checkpoint')this._burst(e.x,e.y+1.7,16);
       if(e.type==='bump'){const c=this.critters.find(c=>c.c.id===e.id);if(c)c.bonk=.6;this._burst(e.x,e.y+.8,8);}
       if(e.type==='finish'){this._burst(this.rules.x,this.rules.y+2,60);this.finishedBurst=true;}
     }
@@ -441,17 +364,18 @@ export class RibbonRun {
     m.head.rotation.z=reducedMotion?0:Math.sin(t*2.1)*.025;
     this.recoveryCloud.visible=r.recovery>0;this.recoveryCloud.position.set(r.x,r.y+recover-.08,0);
     let floor=-6;
-    for(const p of this.course.platforms){if(!r.platformActive(p))continue;const a=platformAt(p,r.clock);if(r.x>a.x-a.w/2&&r.x<a.x+a.w/2&&a.y<=r.y+.1)floor=Math.max(floor,a.y);}
+    for(const p of this.course.platforms){const a=platformAt(p,r.clock);if(r.x>a.x-a.w/2&&r.x<a.x+a.w/2&&a.y<=r.y+.1)floor=Math.max(floor,a.y);}
     this.shadow.visible=floor>-6;this.shadow.position.set(r.x,floor+.045,.07);this.shadow.scale.setScalar(Math.max(.35,1-(r.y-floor)*.075));
     this.shadow.material.opacity=.24*Math.max(.15,1-(r.y-floor)*.11);
-    const aspect=Math.max(.35,camera.aspect||1.6),distance=Math.max(23,8/(aspect*Math.tan(43*Math.PI/360)));
-    const lead=Math.min(3.6,aspect*3.2),goalX=r.x+r.facing*lead,goalY=Math.max(.6,r.y*.8+1);
+    // Close enough that Mirio reads at a glance; the ground sits in the lower quarter.
+    const aspect=Math.max(.35,camera.aspect||1.6),distance=Math.max(17,7/(aspect*Math.tan(43*Math.PI/360)));
+    const lead=Math.min(3.6,aspect*3.2),goalX=r.x+r.facing*lead,goalY=Math.max(1.2,r.y*.8+1);
     if(!this.cameraReady){this.cameraX=goalX;this.cameraY=goalY;this.cameraReady=true;}
     const ease=1-Math.exp(-dt*7);this.cameraX+=(goalX-this.cameraX)*ease;this.cameraY+=(goalY-this.cameraY)*ease;
     if(camera.isPerspectiveCamera&&camera.fov!==43){camera.fov=43;camera.updateProjectionMatrix();}
-    camera.position.set(this.cameraX,this.cameraY+4.3,distance);camera.up.set(0,1,0);camera.lookAt(this.cameraX,this.cameraY+.6,0);
+    camera.position.set(this.cameraX,this.cameraY+4.2,distance);camera.up.set(0,1,0);camera.lookAt(this.cameraX,this.cameraY+2.2,0);
     for(const chunk of this.chunks)chunk.group.visible=Math.abs(chunk.center-r.x)<92;
-    for(const {p,group}of this.movers){const a=platformAt(p,r.clock);group.position.set(a.x,a.y,0);group.visible=Math.abs(a.x-r.x)<38&&r.platformActive(p);}
+    for(const {p,group}of this.movers){const a=platformAt(p,r.clock);group.position.set(a.x,a.y,0);group.visible=Math.abs(a.x-r.x)<38;}
     for(const f of this.flowers){f.pulse=Math.max(0,f.pulse-dt);f.blossom.scale.y=1-Math.sin(f.pulse/.7*Math.PI)*.44;f.group.visible=Math.abs(f.s.x-r.x)<38;}
     for(const {cp,group,flag}of this.flags){
       group.visible=Math.abs(cp.x-r.x)<38;flag.material.color.setHex(cp.index===r.checkpoint?0x61b6ad:0xf3c79c);
@@ -477,7 +401,7 @@ export class RibbonRun {
       this.particleDummy.rotation.set(t+i,Math.sin(t+i),t*.6+i);this.particleDummy.scale.set(.08,.035,.13);this.particleDummy.updateMatrix();this.petals.setMatrixAt(i,this.particleDummy.matrix);
     }
     this.petals.instanceMatrix.needsUpdate=true;
-    this.finish.visible=Math.abs(r.x-this.course.finishX)<44&&r.gateOpen();
+    this.finish.visible=Math.abs(r.x-this.course.finishX)<44;
     this._renderGarden(dt,{reducedMotion});
   }
 }

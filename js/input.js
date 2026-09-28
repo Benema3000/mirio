@@ -249,7 +249,7 @@ export class Input {
     this.knob.style.transform = '';
   }
 
-  /** Standard mapping: A jump, X spin, B pound; RT/LT drive; Start pauses. */
+  /** Standard mapping: A jump, X spin, B pound, Y ride; RT/LT drive; Start pauses. */
   sampleGamepad() {
     let pad = null;
     // The API can be unavailable in an embedded page or browser policy.

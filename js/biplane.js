@@ -26,11 +26,12 @@ export function chooseBiplaneHome(level) {
   const planet = level.planets[0];
   const colliders = collidersFor(level)(planet);
   const blossoms = [[81, 35], [24, 43], [-14, -28]].map(([lat, lon]) => dirFromLatLon(lat, lon));
-  for (const [lat, lon] of [[82, -100], [81, -90], [81, -120], [80, -65], [79, 180]]) {
+  // Parked on the far side of the planet from the start: an easter egg to find.
+  for (const [lat, lon] of [[-78, 180], [-80, 150], [-75, -150], [-82, 90], [-70, 180]]) {
     const dir = dirFromLatLon(lat, lon);
     if (clearLanding(planet, dir, colliders, 2.05) && blossoms.every(b => b.angleTo(dir) * planet.radius > 3.5)) return {planet, dir};
   }
-  return {planet, dir: dirFromLatLon(84, 180)};
+  return {planet, dir: dirFromLatLon(-84, 180)};
 }
 
 export class Biplane {

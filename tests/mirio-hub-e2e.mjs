@@ -46,13 +46,14 @@ async function driveTo(page,target,{device='keyboard',enter=true}={}) {
       if(device==='controller')window.__hubPad.axes=[0,0,0,0];
     };
     const driver=window.__hubPilot={done:false,error:null};
-    const start=performance.now();
+    const start=performance.now(),planet=window.__mirio.snapshot().hub.planet;
     const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0);
     function tick(){
       const snap=window.__mirio.snapshot();
       if(snap.state!=='hub'){stop();driver.done=enter;driver.error=enter?null:'left hub';return;}
       const h=snap.hub,d=target.map((v,i)=>v-h.pos[i]),distance=Math.hypot(...d);
-      if(!enter&&distance<1){stop();driver.done=true;return;}
+      // A spring hops Mirio away before he is quite on it: arriving elsewhere also ends the walk.
+      if(!enter&&(distance<1||h.planet!==planet)){stop();driver.done=true;return;}
       if(performance.now()-start>120000){stop();driver.error=JSON.stringify({target,hub:h});return;}
       const scale=Math.max(1,distance);
       let x=dot(d,h.right)/scale,y=dot(d,h.forward)/scale;
@@ -70,6 +71,20 @@ async function driveTo(page,target,{device='keyboard',enter=true}={}) {
   },{target,device,enter});
   await until(page,()=>window.__hubPilot.done||window.__hubPilot.error);
   assert.equal(await page.evaluate(()=>window.__hubPilot.error),null);
+}
+
+/** Walks to a pad on either body: over the springs when it is on the other one. */
+async function goTo(page,layout,portal,options={}) {
+  let here=(await snapshot(page)).hub.planet;
+  if(here!==portal.planet) {
+    const spring=layout.springs.find(s=>s.planet===here);
+    await driveTo(page,spring.pos,{...options,enter:false});
+    await until(page,to=>window.__mirio.snapshot().hub.planet===to&&window.__mirio.snapshot().hub.grounded,spring.to);
+    here=spring.to;
+    // Back home, walk up to the spawn's star first, so the way on does not linger on a pad.
+    if(here==='home')await driveTo(page,layout.spawn,{...options,enter:false});
+  }
+  await driveTo(page,portal.pos,options);
 }
 
 async function returnFromPause(page) {
@@ -123,7 +138,7 @@ try {
   const layout=await page.evaluate(()=>window.__mirio.layout().hub);
   for(const portal of layout.portals) {
     const id=portal.level;
-    await driveTo(page,portal.pos);
+    await goTo(page,layout,portal);
     const state=await snapshot(page);
     assert.equal(state.selectedLevel,id);
     assert.equal(state.state,id==='adventure'?'play':id==='kart'?'race':'chapter');
@@ -134,7 +149,7 @@ try {
   }
   // Finish only the last metres: race completion/replay are already driven end-to-end elsewhere.
   // A deliberate immediate walk back through the same gate starts another run.
-  await driveTo(page,layout.portals.find(p=>p.level==='kart').pos);
+  await goTo(page,layout,layout.portals.find(p=>p.level==='kart'));
   await until(page,()=>window.__mirio.snapshot().race.state==='race');
   await page.evaluate(()=>window.__mirio.raceSkip(.995));
   await page.keyboard.down('ArrowUp');await until(page,()=>window.__mirio.snapshot().state==='win');await page.keyboard.up('ArrowUp');
@@ -160,7 +175,7 @@ try {
   assert.deepEqual((await snapshot(page)).hub.pos,paused.hub.pos);
   await page.check('#reduced-motion');assert.equal(await page.evaluate(()=>localStorage.getItem('mirio-motion')),'quiet');
   await pad(1,true);await until(page,()=>!window.__mirio.snapshot().paused);await pad(1,false);
-  await driveTo(page,layout.portals.find(p=>p.level==='ribbon').pos,{device:'controller'});
+  await goTo(page,layout,layout.portals.find(p=>p.level==='ribbon'),{device:'controller'});
   assert.equal((await snapshot(page)).selectedLevel,'ribbon');
   await pad(9,true);await until(page,()=>window.__mirio.snapshot().paused);await pad(9,false);
   await pad(2,true);await until(page,()=>window.__mirio.snapshot().state==='hub');await pad(2,false);

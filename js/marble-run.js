@@ -7,6 +7,7 @@ import {MARBLE,MARBLE_ROOMS,MARBLE_BELLS,MARBLE_BUMPERS,MARBLE_FLIPPERS,
 
 const CREAM=0xfff0cc,INK=0x405267,GOLD=0xf5c454,UP=new THREE.Vector3(0,1,0);
 const FIELD=Object.freeze({width:30,length:46,center:22,near:64,fov:44});
+const DUSK=Object.freeze({radius:300,top:0x3d4a8f,horizon:0xf6b58f,stars:220,starRadius:280});
 const paint=(geometry,color)=>{
   const value=new THREE.Color(color),colors=new Float32Array(geometry.attributes.position.count*3);
   for(let i=0;i<colors.length;i+=3)value.toArray(colors,i);
@@ -46,7 +47,8 @@ export class MarbleRun {
   #pulse; #bird; #progress=[]; #wake=new Map(); #elapsed=0; #clockHand; #clockFace;
 
   constructor(art){
-    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0xbcd1d8);
+    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(DUSK.horizon);
+    this.#buildSky();
     this.scene.add(new THREE.HemisphereLight(0xfff3db,0x7892a8,2));
     const light=new THREE.DirectionalLight(0xfff0d6,2.4);light.position.set(-15,38,20);this.scene.add(light);
     const material=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide});
@@ -66,6 +68,26 @@ export class MarbleRun {
     this.#shadow.rotation.x=-Math.PI/2;this.scene.add(this.#shadow);
     this.#pulse=new THREE.Mesh(new THREE.RingGeometry(.92,1,40),new THREE.MeshBasicMaterial({color:GOLD,side:THREE.DoubleSide,transparent:true,opacity:.6,depthWrite:false}));
     this.#pulse.rotation.x=-Math.PI/2;this.scene.add(this.#pulse);this.reset();
+  }
+
+  #buildSky(){
+    // Keep the parent's dusk setting; the fixed table camera needs no distance fog.
+    const dome=new THREE.SphereGeometry(DUSK.radius,32,16),colors=[];
+    const top=new THREE.Color(DUSK.top),low=new THREE.Color(DUSK.horizon),color=new THREE.Color();
+    for(let i=0;i<dome.attributes.position.count;i++){
+      const y=dome.attributes.position.getY(i)/DUSK.radius;
+      color.copy(low).lerp(top,Math.pow(Math.max(0,y),.6));colors.push(color.r,color.g,color.b);
+    }
+    dome.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    this.scene.add(new THREE.Mesh(dome,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide,fog:false,depthWrite:false})));
+
+    const stars=[];
+    for(let i=0;i<DUSK.stars;i++){
+      const angle=i*2.399,y=.35+((i*.618)%1)*.6,radius=Math.sqrt(1-y*y)*DUSK.starRadius;
+      stars.push(Math.cos(angle)*radius,y*DUSK.starRadius,Math.sin(angle)*radius);
+    }
+    this.scene.add(new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(stars,3)),
+      new THREE.PointsMaterial({color:0xfff6dc,size:1.4,fog:false})));
   }
 
   #buildCabinet(material){

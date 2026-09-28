@@ -17,7 +17,7 @@ await p.waitForFunction(()=>window.__mirio.snapshot().chapterRun.x>6,null,{timeo
 await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
 await p.waitForFunction(()=>window.__mirio.snapshot().chapterRun.deliveryTarget!==null,null,{timeout:60000});
 await p.tap('#btn-spin');await p.waitForFunction(()=>window.__mirio.snapshot().chapterRun.parcelInFlight);
-assert.match(await p.textContent('#chapter-ability'), /Unterwegs/, 'do not offer Turbo while the parcel action is busy');
+assert.ok(await p.isHidden('#prompt'), 'no throw prompt while the parcel is on its way');
 if(process.env.SHOTS)await p.screenshot({path:`${process.env.SHOTS}/sky-phone-return.png`});
 await p.waitForFunction(()=>window.__mirio.snapshot().chapterRun.parcelReturns===1,null,{timeout:60000});
 // Retry via controller stick + X; both devices reach the same postal rules.
