@@ -3,6 +3,8 @@
 // Public-form submissions are deliberately restricted to a loopback server.
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
+import {personalBestKey} from '../js/course-version.js';
+const KART_BEST_KEY = personalBestKey('kart');
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:8766/';
 const origin = new URL(BASE);
@@ -65,7 +67,7 @@ try {
     assert.equal(start.time, 0);
     assert.equal(start.bits, 0);
     assert.match(await page.textContent('#bits'), /^0\s*\/\s*77$/);
-    assert.equal(await page.evaluate(() => localStorage.getItem('mirio-time-best-v2:kart')), null);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), KART_BEST_KEY), null);
     await until(page, () => window.__mirio.snapshot().race.state === 'race');
   });
 
@@ -79,7 +81,7 @@ try {
     assert.ok(after.time >= before.time + 12);
     assert.ok(after.race.progress > before.race.progress + .03, `progress ${after.race.progress}`);
     assert.ok(Number.isFinite(after.race.speed));
-    assert.equal(await page.evaluate(() => localStorage.getItem('mirio-time-best-v2:kart')), null,
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), KART_BEST_KEY), null,
       'a best must not be stored before finishing');
     await shot(page, 'kart-entry-driving');
   });
@@ -111,15 +113,15 @@ try {
     assert.equal(result.race.state, 'finished');
     assert.ok(result.time >= 12);
     assert.ok(result.winVisible);
-    assert.match(await page.textContent('#win-eyebrow'), /STERNENRENNEN/);
+    assert.match(await page.textContent('#win-title'), /Kristall/);
     const displayed = readDisplayTime(await page.textContent('#win-time'));
-    firstBest = await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v2:kart')));
+    firstBest = await page.evaluate(key => Number(localStorage.getItem(key)), KART_BEST_KEY);
     assert.ok(Number.isSafeInteger(firstBest) && firstBest >= 12000);
     assert.equal(firstBest, Math.round(result.time * 1000), 'PB and interpolated race clock differ');
     assert.ok(Math.abs(result.time * 1000 - displayed) < 10.6, 'displayed hundredths differ from final clock');
     assert.ok(firstBest >= displayed && firstBest - displayed < 10);
     for (const level of ['adventure', 'sky', 'ribbon']) assert.equal(
-      await page.evaluate(id => localStorage.getItem(`mirio-time-best-v2:${id}`), level), null);
+      await page.evaluate(key => localStorage.getItem(key), personalBestKey(level)), null);
     const stats = await page.textContent('#win-stats');
     assert.match(stats, /Kartrennen:/); assert.match(stats, /von 77/);
     assert.doesNotMatch(stats, /Wasser|Dreifachsprung|153/);
@@ -149,7 +151,7 @@ try {
     assert.equal(body.level, 'kart'); assert.equal(body.timeMs, firstBest);
     await until(page, () => document.getElementById('score-form').hidden);
     assert.match(await page.textContent('#score-status'), /Platz|eingetragen/);
-    assert.equal(await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v2:kart'))), firstBest);
+    assert.equal(await page.evaluate(key => Number(localStorage.getItem(key)), KART_BEST_KEY), firstBest);
   });
 
   await check('Nochmal resets the kart and its clock, and a second normal finish can return through the win menu', async () => {
@@ -158,7 +160,7 @@ try {
     assert.equal(retry.selectedLevel, 'kart'); assert.equal(retry.state, 'race');
     assert.equal(retry.time, 0); assert.equal(retry.bits, 0);
     assert.ok(retry.race.progress < .01);
-    assert.equal(await page.evaluate(() => Number(localStorage.getItem('mirio-time-best-v2:kart'))), firstBest);
+    assert.equal(await page.evaluate(key => Number(localStorage.getItem(key)), KART_BEST_KEY), firstBest);
     await until(page, () => window.__mirio.snapshot().race.state === 'race');
     await page.keyboard.down('ArrowUp');
     await gameTime(page, .3);
@@ -201,8 +203,9 @@ try {
     await choose(page, 'adventure');
     const adventure = await snap(page);
     assert.equal(adventure.state, 'play'); assert.equal(adventure.chapterRun, null);
-    assert.match(await page.textContent('#bits'), /^0\s*\/\s*153$/);
-    assert.ok(await page.isVisible('#ride-action'));
+    assert.match(await page.textContent('#bits'), /^0\s*\/\s*174$/);
+    assert.equal(adventure.discovery.discovered, false);
+    assert.equal(await page.isVisible('#discovery-action'), false, 'the hidden gate is not offered at spawn');
     await pauseMenu(page);
     assert.equal(posts.length, 1, 'a level transition unexpectedly submitted a public time');
     assert.deepEqual(errors, []);

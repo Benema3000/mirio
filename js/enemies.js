@@ -15,6 +15,7 @@ const CLEARANCE = ENEMY_RULES.leash + 1.1;
 
 /** Deterministic safe patches, with the complete leash clear of route props. */
 export function enemyLayouts(level) {
+  if (level.creatures) return level.creatures;
   const colliders = collidersFor(level);
   const trails = trailLayouts(level);
   const [world, moon] = level.planets;

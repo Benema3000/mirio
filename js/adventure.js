@@ -10,6 +10,7 @@ export const TRAIL_TIME = 18;
 export const MAGNET_TIME = 12;
 
 export function trailLayouts(level) {
+  if (level.trails) return level.trails;
   const [, moon] = level.planets;
   const landing = level.rocket.flight.landing;
   const along = tangentDir(new THREE.Vector3(0, 0, 1), landing) ?? tangentDir(new THREE.Vector3(1, 0, 0), landing);
@@ -83,7 +84,7 @@ export class Adventure {
     this.badges = new Set();
     this.trails.forEach(t => {t.run.reset(); t.cooldown = 0;});
   }
-  update(dt, player, active, time) {
+  update(dt, player, active, time, {reducedMotion = false} = {}) {
     this.group.visible = active;
     const events = [];
     this.magnet = Math.max(0, this.magnet - dt);
@@ -92,7 +93,7 @@ export class Adventure {
     if (this.aura.visible) {
       this.aura.position.copy(player.body.pos).addScaledVector(player.body.up, .15);
       this.aura.quaternion.setFromUnitVectors(UP, player.body.up);
-      this.aura.scale.setScalar(1.05 + Math.sin(time * 5) * .12);
+      this.aura.scale.setScalar(1.05 + (reducedMotion ? 0 : Math.sin(time * 5) * .12));
       this.aura.material.opacity = Math.min(1, this.magnet) * .65;
     }
     if (!active) {
@@ -118,9 +119,9 @@ export class Adventure {
       trail.rings.forEach((r, i) => {
         r.group.visible = !trail.run.complete && i >= trail.run.next;
         const target = i === trail.run.next;
-        r.material.emissiveIntensity = target ? 1.15 + Math.sin(time * 3) * .25 : .12;
-        r.group.scale.setScalar(target ? 1 + Math.sin(time * 2) * .045 : .76);
-        r.ring.rotation.z = time * (target ? .45 : -.2);
+        r.material.emissiveIntensity = target ? 1.15 + (reducedMotion ? 0 : Math.sin(time * 3) * .25) : .12;
+        r.group.scale.setScalar(target ? 1 + (reducedMotion ? 0 : Math.sin(time * 2) * .045) : .76);
+        r.ring.rotation.z = reducedMotion ? 0 : time * (target ? .45 : -.2);
       });
     }
     return events;

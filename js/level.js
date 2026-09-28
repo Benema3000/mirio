@@ -15,6 +15,7 @@
 
 import { Vector3 } from 'three';
 import { bezier, dirFromLatLon, surfacePoint, tangentDir } from './world.js';
+import { addDiscovery } from './discovery-level.js';
 
 const WORLD_RADIUS = 26;
 const MOON_RADIUS = 11;
@@ -172,7 +173,7 @@ export function makeLevel() {
   for (let deg = 0; deg < 360; deg += 60) bit(mond, offset(goalDir, deg, (ARENA.radius - 1) / (MOON_RADIUS + ARENA.top)), ARENA.top + 1);
   for (const t of [0.6, 0.7, 0.8]) bit(mond, route(t, 0.3), 1.2);
 
-  return {
+  return addDiscovery({
     planets: [welt, mond, ziel],
     spawn: { planet: welt, dir: new Vector3(0, 1, 0) },
     moonSpawn: { planet: mond, dir: route(0.1) },
@@ -189,7 +190,7 @@ export function makeLevel() {
     course,
     // Above the boss's head (he is ~6 tall); a held moon jump reaches it.
     goal: { planet: mond, dir: goalDir, height: ARENA.top + 8.3 },
-  };
+  });
 }
 
 /** Every collider, grouped by planet (see collide() in world.js). */

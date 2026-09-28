@@ -1,10 +1,9 @@
 // Local best times only; public entries are always explicitly submitted by
 // the player. No placeholder scores or cross-level comparisons are invented.
-import { PERSONAL_BEST_PREFIX } from './course-version.js';
+import { courseFor, personalBestKey } from './course-version.js';
 
 const LEVEL_IDS = new Set(['adventure', 'sky', 'ribbon', 'kart', 'marble', 'tilt']);
 const MAX_TIME_MS = 24 * 60 * 60 * 1000;
-const KEY_PREFIX = PERSONAL_BEST_PREFIX;
 const memory = new Map();
 
 const validTime = value => Number.isSafeInteger(value) && value > 0 && value <= MAX_TIME_MS;
@@ -18,27 +17,29 @@ export function formatRunTime(milliseconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(hundredths % 100).padStart(2, '0')}`;
 }
 
-export function readPersonalBest(level) {
+export function readPersonalBest(level, {course = courseFor(level)} = {}) {
   if (!LEVEL_IDS.has(level)) return null;
-  let best = memory.get(level) ?? null;
+  const key = personalBestKey(level, course);
+  let best = memory.get(key) ?? null;
   try {
-    const stored = globalThis.localStorage?.getItem(KEY_PREFIX + level);
+    const stored = globalThis.localStorage?.getItem(key);
     // Reject partially numeric strings, old JSON objects and damaged entries.
     if (typeof stored === 'string' && /^\d+$/.test(stored)) {
       const value = Number(stored);
       if (validTime(value) && (best === null || value < best)) best = value;
     }
   } catch { /* Private browsing still keeps a best for this session. */ }
-  if (best !== null) memory.set(level, best);
+  if (best !== null) memory.set(key, best);
   return best;
 }
 
-export function savePersonalBest(level, timeMs) {
-  const previous = readPersonalBest(level);
+export function savePersonalBest(level, timeMs, {course = courseFor(level)} = {}) {
+  const previous = readPersonalBest(level, {course});
   if (!LEVEL_IDS.has(level) || !validTime(timeMs) || (previous !== null && timeMs >= previous)) {
     return { best: previous, previous, isNew: false };
   }
-  memory.set(level, timeMs);
-  try { globalThis.localStorage?.setItem(KEY_PREFIX + level, String(timeMs)); } catch { /* Session best survives a full/blocked store. */ }
+  const key = personalBestKey(level, course);
+  memory.set(key, timeMs);
+  try { globalThis.localStorage?.setItem(key, String(timeMs)); } catch { /* Session best survives a full/blocked store. */ }
   return { best: timeMs, previous, isNew: true };
 }

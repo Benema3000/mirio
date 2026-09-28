@@ -61,12 +61,18 @@ try {
     else if (id !== 'adventure') await wait(() => window.__mirio.snapshot().chapterRun?.countdown === 0);
 
     const before = await snapshot(), key = id === 'adventure' ? 'KeyW' : id === 'kart' ? 'ArrowUp' : 'ArrowRight';
+    if (id === 'marble') {
+      await page.keyboard.down('Space');
+      await wait(() => window.__mirio.snapshot().chapterRun.plungerCharge > .7);
+      await page.keyboard.up('Space');
+    }
     await page.keyboard.down(key);
     await wait(({id, before}) => {
       const run = window.__mirio.snapshot();
       if (run.time <= before.time + .15) return false;
       if (id === 'adventure') return Math.hypot(...run.player.pos.map((value, i) => value - before.player.pos[i])) > .65;
       if (id === 'kart') return run.race.speed > 2 && run.race.s > before.race.s + .1;
+      if (id === 'marble') return run.chapterRun.launches > 0 && run.chapterRun.y > before.chapterRun.y + 1;
       return Number.isFinite(run.chapterRun?.x) && Number.isFinite(run.chapterRun?.y)
         && run.chapterRun.x > before.chapterRun.x + .5;
     }, {id, before});

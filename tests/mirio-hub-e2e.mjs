@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {readFile, mkdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {PERSONAL_BEST_PREFIX} from '../js/course-version.js';
+import {personalBestKey} from '../js/course-version.js';
 
 const {chromium}=await import(process.env.PLAYWRIGHT??'playwright');
 const browser=await chromium.launch({executablePath:process.env.CHROMIUM,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
@@ -25,9 +25,9 @@ async function load(context) {
     const name=route.request().url().split('three@0.186.0/')[1];
     await route.fulfill({body:await readFile(fileURLToPath(new URL('../node_modules/three/',import.meta.url))+name),contentType:'text/javascript',headers:{'access-control-allow-origin':'*'}});
   });
-  await page.addInitScript(({prefix,saved})=>{
-    for(const [id,time] of Object.entries(saved))localStorage.setItem(prefix+id,String(time));
-  },{prefix:PERSONAL_BEST_PREFIX,saved});
+  await page.addInitScript(entries=>{
+    for(const [key,time] of entries)localStorage.setItem(key,String(time));
+  },Object.entries(saved).map(([id,time])=>[personalBestKey(id),time]));
   await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8767/'}?test`);
   await until(page,()=>window.__mirio&&!document.querySelector('#start').disabled);
   return page;
@@ -160,7 +160,7 @@ try {
   await page.keyboard.down('ArrowUp');await until(page,()=>window.__mirio.snapshot().state==='win');await page.keyboard.up('ArrowUp');
   await page.click('#win-menu');await until(page,()=>window.__mirio.snapshot().state==='hub');
   assert.ok((await snapshot(page)).hub.completed.includes('kart'));
-  const bests=await page.evaluate(prefix=>Object.fromEntries(['adventure','sky','ribbon','kart'].map(id=>[id,Number(localStorage.getItem(prefix+id))])),PERSONAL_BEST_PREFIX);
+  const bests=await page.evaluate(keys=>Object.fromEntries(Object.entries(keys).map(([id,key])=>[id,Number(localStorage.getItem(key))])),Object.fromEntries(['adventure','sky','ribbon','kart'].map(id=>[id,personalBestKey(id)])));
   for(const id of ['adventure','sky','ribbon'])assert.equal(bests[id],saved[id]);
   assert.ok(Number.isSafeInteger(bests.kart)&&bests.kart>0);
   console.log('ok result return, same-level replay and separate personal records');

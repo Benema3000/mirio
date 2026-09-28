@@ -334,7 +334,7 @@ test('the level: the rocket flight stays clear of both worlds', () => {
 
 test('the level: planets and their gravity fields keep apart', () => {
   const { planets } = makeLevel();
-  assert.deepEqual(planets.map((p) => p.id), ['welt', 'mond', 'ziel']);
+  assert.deepEqual(planets.map((p) => p.id), ['welt', 'mond', 'ziel', 'wunderwiese']);
   for (const a of planets) {
     for (const b of planets) {
       if (a === b) continue;
@@ -493,10 +493,10 @@ test('the kart race lasts 35 to 60 seconds on full gas along the road', () => {
   assert.ok(t > 35 && t < 60, `the race took ${t.toFixed(1)} s`);
 });
 
-test('the high score server knows how many Glitzersteine there are', () => {
+test('the legacy score protocol keeps its original gem count', () => {
   const php = readFileSync(new URL('../api/scores.inc', import.meta.url), 'utf8');
   const max = Number(php.match(/MIRIO_SCORES_MAX_BITS = (\d+);/)[1]);
-  assert.equal(max, makeLevel().bits.length + RACE_BITS);
+  assert.equal(max, makeLevel().bits.filter(bit => bit.planet.id !== 'wunderwiese').length + RACE_BITS);
 });
 
 // ---- Movement and control regressions -----------------------------------------

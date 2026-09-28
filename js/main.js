@@ -16,12 +16,14 @@ import { TiltRun } from './tilt-run.js';
 import { CHAPTERS, medalFor, MEDALS } from './chapters.js';
 import { MenuNavigation } from './menu-navigation.js';
 import { formatRunTime, readPersonalBest, savePersonalBest } from './time-records.js';
-import { COURSE_VERSION } from './course-version.js';
+import { COURSE, courseFor } from './course-version.js';
+import { BonusPlayground } from './bonus-playground.js';
+import { DiscoveryGates } from './discovery-gates.js';
 import { Sound } from './audio.js';
 import { Boss } from './boss.js';
 import { CameraRig } from './camera.js';
 import { Input } from './input.js';
-import { KartRace } from './kart.js';
+import { KartRace, RACE_STYLE } from './kart.js';
 import { driftLevel } from './kart-physics.js';
 import { collidersFor, flightPoint, makeLevel } from './level.js';
 import { MAX_HEARTS, Player } from './player.js';
@@ -46,6 +48,7 @@ const SINGLE_ACTION_CLASS = 'chapter-single-action';
 const CHAPTER_MODE_CLASSES = [...Object.keys(CHAPTER_TYPES).map(id => `chapter-${id}`), SINGLE_ACTION_CLASS];
 
 const BIT_RADIUS = 1.3;
+const MOON_MAGNET_RADIUS = 3.8;
 const FLAG_RADIUS = 2.4;
 const COUNTDOWN = ['3', '2', '1', 'Start!'];
 const COUNTDOWN_STEP = 0.8;
@@ -81,14 +84,14 @@ function formatTime(seconds) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-const SCORES_URL = `api/times.php?course=${COURSE_VERSION}`;
+const scoresUrl = course => `api/times.php?course=${encodeURIComponent(course)}`;
 const NAME_KEY = 'mirio-name';
 const SCORES_DOWN = 'Die Bestenliste ist gerade nicht erreichbar.';
 const TITLE_SCORES = 5;
 
-async function fetchScores(level) {
-  const body = await (await fetch(`${SCORES_URL}&level=${encodeURIComponent(level)}`, { cache: 'no-store' })).json();
-  if (!body.ok || body.course !== COURSE_VERSION) throw new Error(body.message ?? SCORES_DOWN);
+async function fetchScores(level, course = courseFor(level)) {
+  const body = await (await fetch(`${scoresUrl(course)}&level=${encodeURIComponent(level)}`, { cache: 'no-store' })).json();
+  if (!body.ok || body.course !== course) throw new Error(body.message ?? SCORES_DOWN);
   return body;
 }
 
@@ -161,8 +164,10 @@ async function main() {
   const garden = new SpringGarden(scene, level, art);
   const enemies = new EnemySystem(scene, level, art);
   const wildlife = new Wildlife(scene, level, art);
+  const bonus = new BonusPlayground(scene, level, art, colliders);
+  const discovery = new DiscoveryGates(scene, level);
   // Trades resolution for frame rate on phones; see quality.js.
-  const governor = new QualityGovernor(renderer, { onChange: (l) => { world.setQuality(l); enemies.setQuality(l); wildlife.setQuality(l); } });
+  const governor = new QualityGovernor(renderer, { onChange: (l) => { world.setQuality(l); enemies.setQuality(l); wildlife.setQuality(l); bonus.setQuality(l); } });
   const particles = new Particles(scene, art.sparkle);
   const player = new Player(scene, art, level.planets, colliders);
   const biplane = new Biplane(scene, level, art, colliders);
@@ -177,6 +182,7 @@ async function main() {
     poundButton: $('btn-pound'),
     gasButton: $('btn-gas'),
     brakeButton: $('btn-brake'),
+    leftFlipperButton: $('flipper-left'), rightFlipperButton: $('flipper-right'), plungerButton: $('pinball-plunger'),
   });
 
   const adventure = new Adventure(scene, level);
@@ -305,7 +311,127 @@ async function main() {
   }
 
   // ---- The kart race -----------------------------------------------------------
-  const race = new KartRace(scene, art, { planets: level.planets, start: level.course.start, finish: level.course.finish });
+  const raceCourse = {planets: level.planets, start: level.course.start, finish: level.course.finish};
+  const classicRace = new KartRace(scene, art, raceCourse);
+  let race = classicRace, branchRace = null, branchVisit = null;
+  let discoveryQueued = false;
+  const activeCourse = () => branchVisit ? COURSE.BRANCHES : courseFor(selectedLevel);
+  const completedLevels = () => Object.keys(CHAPTERS).filter(id => readPersonalBest(id) || readPersonalBest(id, {course: COURSE.LEGACY})
+    || (id === 'kart' && readPersonalBest(id, {course: COURSE.BRANCHES})));
+
+  function renderDiscoveryHud() {
+    const exploring = state === 'play' && !fight.on;
+    const onBonus = exploring && player.body.planet === level.bonus.planet;
+    const gate = exploring && !bonus.mounted ? discovery.near(player) : null;
+    const plane = exploring && (bonus.mounted || bonus.canBoard(player));
+    $('discovery-action').hidden = !gate && !plane;
+    if (gate) $('discovery-action').textContent = `${input.gamepadConnected ? 'X · ' : document.body.classList.contains('touch') ? '' : 'Shift · '}${gate.label}`;
+    else if (plane) {
+      const key = input.gamepadConnected ? 'Y · ' : document.body.classList.contains('touch') ? '' : 'F · ';
+      $('discovery-action').textContent = `✈ ${key}${bonus.mounted ? 'Landen' : 'Einsteigen'}`;
+    }
+    $('bonus-hud').hidden = !onBonus;
+    if (!onBonus) return;
+    const run = bonus.snapshot();
+    $('bonus-task').textContent = run.meadow.task?.label ?? '✈ Wind · ♡ Freunde · ⚑ Sternenwege';
+    const trail = run.adventure.trails.find(item => item.active);
+    $('bonus-status').textContent = trail ? `✦ ${trail.next} / 6 · ${Math.ceil(trail.time)} s`
+      : run.adventure.magnet > 0 ? `✦ Glitzermagnet · ${Math.ceil(run.adventure.magnet)} s`
+      : bonus.mounted ? '↑ steigen · ⤓ sinken · ✦ Turbo' : '✦ Tore · ✈ Flugzeug · ↓ Wolkengarten';
+  }
+
+  // Side trips preserve the adventure's objects, flags and public run token.
+  function travelToDiscovery(event) {
+    const entering = event.destination === 'bonus';
+    const gate = level.bonus.gates.find(item => item.id === 'enter');
+    const landing = entering ? level.bonus.spawn : {planet: welt, dir: gate.dir.clone()};
+    const facing = tangentDir(entering ? level.bonus.gates[1].dir : startForward, landing.dir) ?? startForward;
+    bonus.recall(player);
+    player.reset(landing, facing);
+    if (!entering && event.checkpoint) player.checkpoint = event.checkpoint;
+    input.reset();
+    rig.snap(player, facing);
+    sound.play('arrive');
+    particles.burst(player.body.pos, {count: 24, color: [0x9decdf, 0xffe7a0], speed: 5, life: .7});
+    toast(entering ? '✦ Wunderwiese entdeckt!' : 'Zurück auf der Wiese');
+    hint(entering ? '✈ F / Y einsteigen · ✦ Tore öffnen' : HINTS.startKeys, 7);
+  }
+
+  function handleDiscoveryInput() {
+    const gate = !bonus.mounted ? discovery.near(player) : null;
+    const action = discoveryQueued;
+    discoveryQueued = false;
+    const ride = input.consumeRide();
+    if (gate && (action || input.spinQueued)) {
+      input.consumeSpin();
+      const event = discovery.activate(gate, player);
+      if (event?.type === 'race') beginBranchRace();
+      else if (event) travelToDiscovery(event);
+      return;
+    }
+    if (fight.on || (!ride && !action)) return;
+    const plane = bonus.mounted || bonus.canBoard(player) ? bonus : biplane;
+    if (!plane.mounted && !plane.canBoard(player)) return;
+    natureEvents.push(...plane.toggle(player));
+    input.consumeJump(); input.consumeSpin(); input.consumePound();
+  }
+
+  function beginBranchRace() {
+    if (branchVisit) branchVisit.racingTime += stats.time;
+    else {
+      branchVisit = {stats: {...stats}, token: runToken, tokenRequest: runTokenRequest, racingTime: 0,
+        checkpoint: {planet: player.checkpoint.planet, dir: player.checkpoint.dir.clone()}};
+    }
+    bonus.recall(player);
+    branchRace ??= new KartRace(scene, art, raceCourse, {routeStyle: RACE_STYLE.PLAYGROUND});
+    classicRace.group.visible = false;
+    race = branchRace;
+    selectedLevel = 'kart';
+    state = 'race'; paused = false; result = null; finishDelay = 0;
+    stats.time = stats.raceTime = stats.bits = 0;
+    input.reset(); input.enabled = true;
+    sound.setPaused(false); sound.stopVoices();
+    document.body.classList.remove('paused', 'flying');
+    document.body.classList.add('racing');
+    for (const id of ['pause', 'win']) $(id).classList.add('hidden');
+    $('bonus-return').hidden = false;
+    $('win-bonus-return').hidden = true;
+    $('race-hud').hidden = false;
+    player.board();
+    race.begin({pos: level.course.start.pos.clone(), up: level.course.start.up.clone()});
+    const shot = race.introShot();
+    camera.position.copy(shot.pos); camera.up.copy(shot.up); camera.lookAt(shot.look);
+    newRun();
+    toast('⚑ Sternenwege');
+    hint(document.body.classList.contains('touch') ? HINTS.raceTouch : HINTS.raceKeys, 10);
+    renderHud(true);
+  }
+
+  function returnFromBranchRace() {
+    if (!branchVisit) return;
+    // stats.time freezes at the finish line; result browsing never enters a run.
+    const saved = branchVisit, detourTime = branchVisit.racingTime + stats.time;
+    race.reset(); race = classicRace; branchVisit = null;
+    ++runGeneration;
+    runToken = saved.token; finishedRun = null;
+    Object.assign(stats, saved.stats);
+    stats.time += detourTime;
+    result = null; finishDelay = 0; paused = false; state = 'play';
+    selectedLevel = 'adventure';
+    runTokenRequest = saved.tokenRequest;
+    acceptRunToken(runTokenRequest, runGeneration, selectedLevel);
+    player.reset(saved.checkpoint, level.bonus.gates[2].dir);
+    rig.snap(player, player.facing);
+    input.reset(); input.enabled = true;
+    sound.setPaused(false); sound.engine(null); sound.stopVoices();
+    document.body.classList.remove('paused', 'racing');
+    for (const id of ['pause', 'win']) $(id).classList.add('hidden');
+    $('bonus-return').hidden = $('win-bonus-return').hidden = true;
+    $('race-hud').hidden = true;
+    bonus.setCompletedLevels?.(completedLevels());
+    renderHud(true);
+    hint('✦ Zurück zum Tor der Wiese oder weiter entdecken.', 6);
+  }
   const totalBits = () => selectedLevel === 'kart' ? race.bitCount : world.bits.length + race.bitCount;
   const cut = { t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), called: false };
   let timeScale = 1;
@@ -366,6 +492,10 @@ async function main() {
           bigToast('Los!');
           sound.play('go');
           break;
+        case 'route': toast(ev.name); break;
+        case 'route-catch': hint('↓ Hier geht’s weiter. Mit Drift-Turbo geht’s oben lang!', 5); break;
+        case 'race-split': toast(`✧ ${ev.n} · ${formatRunTime(Math.round(ev.time * 1000))}`); sound.play('ring'); break;
+        case 'race-bounce':
         case 'hop':
           sound.play('jump');
           break;
@@ -409,6 +539,14 @@ async function main() {
   // ---- Reset -----------------------------------------------------------------
   function resetGame() {
     document.body.classList.remove('racing', 'flying');
+    branchRace?.reset();
+    race = classicRace;
+    branchVisit = null;
+    bonus.reset(player);
+    bonus.setCompletedLevels?.(completedLevels());
+    discovery.reset();
+    discoveryQueued = false;
+    $('bonus-return').hidden = $('win-bonus-return').hidden = true;
     biplane.reset(player);
     adventure.reset();
     garden.reset();
@@ -460,6 +598,7 @@ async function main() {
 
   const hud = { bits: -1, hearts: -1, hp: -1 };
   function renderHud(force = false) {
+    renderDiscoveryHud();
     if (state === 'hub') {
       const visit = hub.snapshot();
       for (const id of ['hearts', 'ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud', 'chapter-hud']) $(id).hidden = true;
@@ -483,22 +622,24 @@ async function main() {
       const jumpKey = input.gamepadConnected ? 'A' : touchKeys ? CHAPTERS[selectedLevel].jumpIcon : 'Leertaste';
       // Only what can be done right here; the controls are in the help.
       let prompt = null;
+      // Keep pinball charge feedback clear of the touch flippers.
+      $('chapter-ability').hidden = selectedLevel !== 'marble';
+      if (selectedLevel === 'marble') $('chapter-ability').textContent = chapterCountdown > 0 ? 'Bereit?'
+        : run.served ? `${jumpKey} halten → loslassen · ${Math.round((run.plungerCharge ?? 0) * 100)}%`
+        : `${run.roomName ?? 'Flipper'} · ${run.actionHint ?? '← → Flipper · Leertaste: beide'}`;
       if (state !== 'chapter' || chapterCountdown > 0) prompt = null;
       else if (selectedLevel === 'sky') {
         if (run.deliveryTarget?.ready && !run.parcelInFlight) prompt = ['Paket werfen', actionKey];
-      } else if (selectedLevel === 'marble') {
-        if (run.noteReady) prompt = ['Glocke wecken', actionKey];
       } else if (selectedLevel === 'tilt') {
         if (run.basinNear && !run.bridgeOpen) prompt = [`Schaumsteg ${Math.round(run.bridgeCharge * 100)} %`, `${jumpKey} halten`];
-      } else if (run.actionHint) prompt = [run.actionHint, actionKey];
+      } else if (selectedLevel !== 'marble' && run.actionHint) prompt = [run.actionHint, actionKey];
       showPrompt(prompt?.[0] ?? null, prompt?.[1]);
       $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? (run.deliveryTarget ? 'Paket werfen' : 'Turbo') : (run.actionHint || CHAPTERS[selectedLevel].actionLabel));
       return;
     }
     showPrompt(null);
     $('chapter-hud').hidden = true;
-    // Hearts show in the boss fight, or once a guardian has taken one.
-    $('hearts').hidden = state !== 'play' || (!fight.on && player.hearts >= MAX_HEARTS);
+    $('hearts').hidden = state !== 'play' || (!fight.on && player.body.planet !== level.bonus.planet && player.hearts >= MAX_HEARTS);
     if (force || hud.bits !== stats.bits) {
       hud.bits = stats.bits;
       $('bits').textContent = `${stats.bits} / ${totalBits()}`;
@@ -510,6 +651,9 @@ async function main() {
     if (!$('race-hud').hidden) {
       $('race-progress').value = race.progress;
       $('race-speed').textContent = Math.round(Math.abs(race.player.v) * 3.6);
+      const routeHint = race.snapshot().routeHint;
+      $('race-route').hidden = !branchVisit || !routeHint;
+      $('race-route').textContent = routeHint ?? '';
       const boost = race.player.boost > 0 || race.player.turbo > 0;
       const charge = driftLevel(race.player);
       $('race-technique').hidden = !boost && !race.player.drift;
@@ -518,7 +662,8 @@ async function main() {
       $('race-place').textContent = `${race.place}.`;
       $('race-time').textContent = formatTime(race.state === 'race' ? stats.raceTime : result?.time ?? 0);
     }
-    const riding = biplane.mounted && state === 'play';
+    const riding = (biplane.mounted || bonus.mounted) && state === 'play';
+    const meadowRiding = biplane.mounted && state === 'play';
     document.body.classList.toggle('flying', riding);
     if (hud.riding !== riding) {
       hud.riding = riding;
@@ -528,11 +673,11 @@ async function main() {
       $('btn-spin').textContent = riding ? '✦' : '⟳';
       $('btn-spin').setAttribute('aria-label', riding ? 'Propeller-Turbo' : 'Drehen');
     }
-    $('ride-action').hidden = state !== 'play' || fight.on || (!riding && !biplane.canBoard(player));
+    $('ride-action').hidden = state !== 'play' || fight.on || bonus.mounted || (!meadowRiding && !biplane.canBoard(player));
     $('ride-label').textContent = riding ? (biplane.landing ? 'Landung abbrechen' : 'Landen & aussteigen') : 'Wiesensummer fliegen';
     $('ride-key').textContent = input.gamepadConnected ? 'Y' : 'F';
-    $('plane-hud').hidden = !riding;
-    if (riding) {
+    $('plane-hud').hidden = !meadowRiding;
+    if (meadowRiding) {
       $('plane-altitude').textContent = `${biplane.flight.altitude.toFixed(1)} m`;
       $('plane-height').value = biplane.flight.altitude;
       $('plane-speed').textContent = `${Math.round(biplane.flight.speed * 3.6)} km/h`;
@@ -546,7 +691,7 @@ async function main() {
       $('trail-time').textContent = `${Math.ceil(trail.run.time)} s`;
       $('trail-progress').value = trail.run.next;
     }
-    $('magnet-hud').hidden = adventure.magnet <= 0 || state !== 'play' || riding;
+    $('magnet-hud').hidden = adventure.magnet <= 0 || state !== 'play' || riding || player.body.planet === level.bonus.planet;
     $('magnet-time').textContent = `${Math.ceil(adventure.magnet)} s`;
     if (force || hud.hp !== boss.hp) {
       hud.hp = boss.hp;
@@ -581,14 +726,14 @@ async function main() {
   const bossEvents = [];
   const natureEvents = [];
   function simulate(h) {
-    // Keep the return islands usable after a fall from the boss arena.
+    natureEvents.push(...bonus.step(h, player, {active: state === 'play' && !fight.on}));
     if (biplane.mounted) natureEvents.push(...biplane.step(h, player));
-    else {
+    else if (!bonus.mounted) {
       natureEvents.push(...garden.step(h, player, state === 'play' && !fight.on));
       player.step(h);
     }
     natureEvents.push(...enemies.step(h, player, {active: state === 'play' && !fight.on}));
-    if (state === 'play' && !biplane.mounted && !fight.on && !boss.defeated && onArena()) {
+    if (state === 'play' && !fight.on && !boss.defeated && onArena()) {
       fight.on = true;
       boss.start();
       $('boss-bar').hidden = false;
@@ -598,11 +743,14 @@ async function main() {
     if (state === 'play') bossEvents.push(...boss.update(h, player));
     if (state !== 'play' || !['play', 'biplane'].includes(player.state)) return;
 
-    if (biplane.mounted) playerMid.copy(biplane.flight.pos).addScaledVector(biplane.flight.up, .65);
+    // Each plane collects along its own flight path; walking uses chest height.
+    if (bonus.mounted) bonus.collectionPoint(playerMid);
+    else if (biplane.mounted) playerMid.copy(biplane.flight.pos).addScaledVector(biplane.flight.up, .65);
     else playerMid.copy(player.body.pos).addScaledVector(player.body.up, 1);
+    const collectionRadius = bonus.magnet > 0 ? BIT_RADIUS * 4 : adventure.magnet > 0 ? MOON_MAGNET_RADIUS : BIT_RADIUS;
 
     for (const bit of world.bits) {
-      if (bit.taken || bit.mesh.position.distanceTo(playerMid) > (adventure.magnet > 0 ? 3.8 : BIT_RADIUS)) continue;
+      if (bit.taken || bit.mesh.position.distanceTo(playerMid) > collectionRadius) continue;
       bit.taken = true;
       bit.mesh.visible = false;
       stats.bits += 1;
@@ -610,14 +758,15 @@ async function main() {
       particles.burst(bit.mesh.position, { count: 6, color: bit.color, speed: 3, size: 0.45, life: 0.4 });
     }
 
-    // Flying can collect existing gems; checkpoints and story boarding still
-    // belong to Mirio on foot, so the plane cannot trigger the rocket or boss.
-    if (biplane.mounted) return;
-
+    if (player.state !== 'play') return;
     for (const [i, f] of world.flags.entries()) {
-      if (f.reached || f.center.distanceTo(player.body.pos) > FLAG_RADIUS) continue;
+      if (f.center.distanceTo(player.body.pos) > FLAG_RADIUS) continue;
+      if (player.checkpoint.planet !== f.planet || !player.checkpoint.dir.equals(f.dir)) {
+        player.checkpoint = {planet: f.planet, dir: f.dir.clone()};
+      }
+      // Lit flags remain recovery points on a return visit, without replaying rewards.
+      if (f.reached) continue;
       f.reached = true;
-      player.checkpoint = { planet: f.planet, dir: f.dir.clone() };
       player.hearts = MAX_HEARTS;
       sound.play('flag');
       toast('Checkpoint!');
@@ -704,7 +853,21 @@ async function main() {
     player.events.length = 0;
 
     for (const ev of natureEvents) {
-      sound.play(ev.type);
+      if (ev.type === 'wildlifeSound') { sound.wildlife(ev); continue; }
+      sound.play(ev.type === 'wildlifeMeet' ? 'ring' : ev.type);
+      if (ev.type === 'wildlifeMeet') friends.add(ev.kind);
+      if (ev.type === 'trailWin') toast('✦ Glitzermagnet!');
+      if (ev.type === 'hubEcho') sound.play('ring');
+      if (ev.type === 'hubChorus') { sound.play('trailWin'); toast('♪ Die Wunderwiese singt!'); }
+      if (ev.type.startsWith('meadow')) {
+        sound.play(ev.type === 'meadowSpring' ? 'spring' : ev.type === 'meadowKiteGate' ? 'ring' : 'flag');
+        const message = {meadowWind: '✣ Die Blütenbrücke wächst!', meadowTow: '⚓ Zum Steg!',
+          meadowBoat: '♡ Das Boot ist zu Hause!', meadowKiteHook: '◇ Durch die Drachenringe!',
+          meadowKite: '◇ Dein Drachen bleibt am Himmel!', meadowSpringOpen: '❀ Folge dem Eichhörnchen!',
+          meadowPicnic: '♡ Picknick im Baumhaus!'}[ev.type];
+        if (message) hint(message, 5);
+        if (ev.pos) particles.burst(ev.pos, {count: 10, color: [ev.color ?? 0xffdf88, 0xffefa5], speed: 3, size: .3, life: .6});
+      }
       if (ev.type === 'planeBoard') {
         toast('Wiesensummer!');
         const keys = input.gamepadConnected ? 'Stick lenken · A steigen · B sinken · X Turbo · Y landen' : document.body.classList.contains('touch') ? 'Links lenken · ↑ steigen · ↓ sinken · ✦ Turbo · Tippen zum Landen' : 'WASD lenken · Leertaste steigen · C sinken · Shift Turbo · F landen';
@@ -780,6 +943,7 @@ async function main() {
 
   // ---- Separate time boards, with local bests even when the server is offline.
   let runToken = null;
+  let runTokenRequest = null;
   let runGeneration = 0;
   let boardRequest = 0;
   let resultBoardRevision = 0;
@@ -787,8 +951,14 @@ async function main() {
   function newRun() {
     runToken = null;
     finishedRun = null;
-    const generation = ++runGeneration, levelId = selectedLevel;
-    fetchScores(levelId).then(b => {
+    const generation = ++runGeneration, levelId = selectedLevel, course = activeCourse();
+    runTokenRequest = fetchScores(levelId, course);
+    acceptRunToken(runTokenRequest, generation, levelId);
+  }
+
+  // A detour retains this request even if the original board responds after the return.
+  function acceptRunToken(request, generation, levelId) {
+    request?.then(b => {
       if (generation !== runGeneration || selectedLevel !== levelId) return;
       runToken = b.token;
       if (state === 'win' && finishedRun?.level === levelId) {
@@ -835,15 +1005,15 @@ async function main() {
     for (const button of document.querySelectorAll('[data-help-level]')) button.setAttribute('aria-pressed', String(button.dataset.helpLevel === id));
   }
 
-  function showScores(id) {
+  function showScores(id, course = courseFor(id)) {
     if (!Object.hasOwn(CHAPTERS, id)) return;
     const chapter = CHAPTERS[id];
-    $('title-scores-heading').textContent = `Bestzeiten · ${chapter.short}`;
+    $('title-scores-heading').textContent = `Bestzeiten · ${course === COURSE.BRANCHES ? 'Sternenwege' : chapter.short}`;
     $('title-board').replaceChildren();
     $('title-board-status').textContent = 'Bestzeiten werden geladen …';
     for (const button of document.querySelectorAll('[data-scores-level]')) button.setAttribute('aria-pressed', String(button.dataset.scoresLevel === id));
     const request = ++boardRequest;
-    fetchScores(id).then(body => {
+    fetchScores(id, course).then(body => {
       if (request !== boardRequest) return;
       showBoard($('title-board'), body.top.slice(0, TITLE_SCORES));
       $('title-board-status').textContent = 'Nur die Zeit zählt. Jede Reise hat ihre eigene Liste.';
@@ -865,11 +1035,11 @@ async function main() {
   function offerHighScore() {
     const run = chapterGame?.snapshot();
     finishedRun = Object.freeze({
-      level: selectedLevel,
+      level: selectedLevel, course: activeCourse(),
       timeMs: Math.max(1, Math.round((run ? run.time : selectedLevel === 'kart' ? result.time : stats.time) * 1000)),
       penaltyMs: Math.round((run?.penalty ?? run?.penalties ?? 0) * 1000),
     });
-    const personal = savePersonalBest(finishedRun.level, finishedRun.timeMs);
+    const personal = savePersonalBest(finishedRun.level, finishedRun.timeMs, {course: finishedRun.course});
     $('win-time').textContent = formatRunTime(finishedRun.timeMs);
     $('personal-best').textContent = personal.isNew ? (personal.previous ? 'Neue persönliche Bestzeit!' : 'Deine erste Bestzeit. Abenteuer geschafft!') : `Deine Bestzeit: ${formatRunTime(personal.best)}`;
     const medal = document.createElement('span');
@@ -882,7 +1052,7 @@ async function main() {
     $('score-send').disabled = false;
     try { $('score-name').value = localStorage.getItem(NAME_KEY) ?? ''; } catch {}
     const completed = finishedRun, revision = ++resultBoardRevision;
-    fetchScores(completed.level).then(b => {
+    fetchScores(completed.level, completed.course).then(b => {
       if (finishedRun === completed && state === 'win' && revision === resultBoardRevision) showBoard($('win-board'), b.top);
     }).catch(() => {});
   }
@@ -896,7 +1066,7 @@ async function main() {
     $('score-send').disabled = true;
     scoreStatus('Wird eingetragen …');
     try {
-      const res = await fetch(SCORES_URL, {
+      const res = await fetch(scoresUrl(completed.course), {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({...completed, token, name}),
       });
@@ -926,7 +1096,8 @@ async function main() {
     input.enabled = false;
     hint('', 0);
     $('race-hud').hidden = true;
-    $('win-title').textContent = 'Dein Kristall!';
+    $('win-title').textContent = branchVisit ? 'Sternenwege geschafft!' : 'Dein Kristall!';
+    $('win-bonus-return').hidden = !branchVisit;
     const place = result.place === 1 ? '1. Platz' : `${result.place}. Platz`;
     $('win-stats').innerHTML = (selectedLevel === 'kart' ? [
       `Kartrennen: <b>${place}</b> in ${formatTime(result.time)}`,
@@ -950,6 +1121,8 @@ async function main() {
       ...(garden.used.size === 3 ? ['❀ Blütenflieger'] : []),
       ...(biplane.distance >= 150 ? ['✈ Wiesenpilot'] : []),
       ...(race.snapshot().bestDrift === 2 ? ['✦ Driftsonne'] : []),
+      ...(race.snapshot().routes?.length === 3 ? ['↗ Wegefinder'] : []),
+      ...(!branchVisit && discovery.snapshot().discovered ? ['✦ Wunderwiese entdeckt'] : []),
     ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
     offerHighScore();
     $('win').classList.remove('hidden');
@@ -965,13 +1138,13 @@ async function main() {
     sound.setScene('victory');
     hint('', 0);
     const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
-    $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Die Trommel singt!'
+    $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Das Sternenkonzert!'
       : selectedLevel === 'tilt' ? 'Weich gelandet!' : 'Der Blütenhof leuchtet!';
     $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ◇ ${run.collectibles} Ringe`
       : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} Inseln · ↗ ${run.shortcuts} Abkürzungen · ↺ ${run.recoveries} Landungen`
-      : selectedLevel === 'marble' ? `♪ ${run.notes} Töne · ${run.bankTrips} Klangkurven · ${run.bumps} Kissenhüpfer`
+      : selectedLevel === 'marble' ? `♪ ${run.notes} Noten · ${run.bumps} Bumper · ↺ ${run.recoveries} Rettungen`
       : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
-    $('win-extra').textContent = '';
+    $('win-extra').textContent = selectedLevel === 'marble' ? 'Die drei Spieluhren singen zusammen.' : '';
     $('win-badges').replaceChildren();
     offerHighScore();
     $('win').classList.remove('hidden');
@@ -981,13 +1154,14 @@ async function main() {
 
   function handleChapterEvents(events) {
     for (const event of events ?? []) {
-      if (event.type !== 'finish') sound.play(({foam: 'spring', note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', arrival: 'flag'})[event.type] ?? event.type);
-      // Short toasts only: a count, a checkpoint, the seconds a fall cost.
-      if (event.penalty > 0) toast(`+${event.penalty} s`);
+      if (selectedLevel === 'marble' && event.type === 'spring') hint('', 0);
+      if (event.type !== 'finish') sound.play(({flipper: 'click', 'flipper-hit': 'spring', 'ball-save': 'land', foam: 'spring', note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
+      if (event.penalty > 0) toast(`${selectedLevel === 'marble' ? 'Kuckuck! ' : ''}+${event.penalty} s`);
       else if (event.type === 'delivery') toast(`✉ ${event.deliveries} / ${chapterGame.snapshot().totalDeliveries}`);
       else if (event.type === 'note') toast(`♪ ${event.notes} / ${chapterGame.snapshot().totalNotes}`);
       else if (event.type === 'foam') toast('Schaumsteg!');
       else if (event.type === 'bit' && event.kind === 'seed') toast(`✧ ${event.seeds} / ${chapterGame.snapshot().totalSeeds}`);
+      else if (event.type === 'checkpoint' && selectedLevel === 'marble') toast(`♫ ${chapterGame.snapshot().roomName}`);
       else if (event.type === 'checkpoint') toast('Checkpoint!');
     }
   }
@@ -1122,7 +1296,7 @@ async function main() {
     resetGame();
     state = 'hub';
     hub ??= new HubWorld(art);
-    hub.reset({completed: Object.keys(CHAPTERS).filter(id => readPersonalBest(id)), lastLevel});
+    hub.reset({completed: completedLevels(), lastLevel});
     camera.fov = baseFov();
     camera.updateProjectionMatrix();
     document.body.classList.remove('paused', 'racing', 'flying', 'chapter-mode', ...CHAPTER_MODE_CLASSES);
@@ -1180,7 +1354,10 @@ async function main() {
     else enterHub();
   }
   startButton.addEventListener('click', start);
-  $('again').addEventListener('click', startLevel);
+  $('again').addEventListener('click', () => branchVisit ? beginBranchRace() : startLevel());
+  $('bonus-return').addEventListener('click', returnFromBranchRace);
+  $('win-bonus-return').addEventListener('click', returnFromBranchRace);
+  $('discovery-action').addEventListener('click', () => { if (input.enabled) discoveryQueued = true; });
   $('score-form').addEventListener('submit', sendHighScore);
   $('pause-menu').addEventListener('click', leaveLevel);
   $('win-menu').addEventListener('click', leaveLevel);
@@ -1194,7 +1371,7 @@ async function main() {
   $('pause-quick').addEventListener('click', showQuick);
   selectLevel('adventure');
   for (const id of ['show-times', 'pause-times']) $(id)?.addEventListener('click', () => {
-    showScores(selectedLevel);
+    showScores(selectedLevel, activeCourse());
     $('scores-dialog').showModal();
   });
   for (const id of ['show-help', 'pause-help']) $(id)?.addEventListener('click', () => {
@@ -1230,6 +1407,8 @@ async function main() {
     player.poundRequest = false;
     biplane.clearIntent();
     hub?.clearIntent();
+    bonus.clearIntent();
+    discoveryQueued = false;
     sound.setPaused(paused);
     document.body.classList.toggle('paused', paused);
     $('pause').classList.toggle('hidden', !paused);
@@ -1258,6 +1437,7 @@ async function main() {
       return;
     }
     if (state !== 'play' || !['play', 'biplane'].includes(player.state)) return;
+    bonus.recall(player);
     biplane.recall(player);
     player.respawn();
     boss.reset();
@@ -1365,7 +1545,7 @@ async function main() {
         input.consumeJump(); input.consumeSpin(); input.consumePound();
         if (chapterCountdown === 0) { bigToast('Los!'); sound.play('go'); }
       } else {
-        const events = chapterGame.step(dt, {x: input.move.x, y: input.move.y, jump: input.consumeJump(), jumpHeld: input.jumpHeld, action: input.consumeSpin()});
+        const events = chapterGame.step(dt, {x: input.move.x, y: input.move.y, jump: input.consumeJump(), jumpHeld: input.jumpHeld, action: input.consumeSpin(), flipperLeft: input.pinball.left, flipperRight: input.pinball.right});
         input.consumePound(); input.consumeRide();
         handleChapterEvents(events);
         if (chapterGame.snapshot().status === 'finished') finishChapter();
@@ -1403,15 +1583,11 @@ async function main() {
       chapterFrame(dt, raw);
       return;
     }
-    if (input.consumeRide() && state === 'play' && !fight.on) {
-      natureEvents.push(...biplane.toggle(player));
-      input.consumeJump(); input.consumeSpin(); input.consumePound();
-    }
     elapsed += dt;
     sound.setScene(state === 'win' ? 'victory' : state === 'race' || state === 'raceEnd' ? 'race' : fight.on ? 'boss' : player.body.planet === mond || state === 'rocket' ? 'moon' : 'explore');
     sound.footstep({ dt, speed: player.body.vel.length(), grounded: state === 'play' && player.state === 'play' && player.body.onGround, surface: player.body.planet === mond ? 'stone' : 'grass' });
     if (finishDelay > 0) { finishDelay -= dt; if (finishDelay <= 0) win(); }
-    for (const ev of adventure.update(dt, player, state === 'play' && !fight.on && !biplane.mounted, elapsed)) {
+    for (const ev of adventure.update(dt, player, state === 'play' && !fight.on && !biplane.mounted && !bonus.mounted, elapsed, {reducedMotion})) {
       sound.play(ev.type);
       if (ev.pos) particles.burst(ev.pos, {count: ev.type === 'trailWin' ? 28 : 10, color: ev.color, speed: 4, size: .4, life: .65});
       if (ev.type === 'trailStart') hint('Folge den leuchtenden Ringen! Alle sechs schenken dir einen Glitzermagneten.', 6);
@@ -1419,7 +1595,10 @@ async function main() {
       if (ev.type === 'trailFail') hint('Fast geschafft! Der erste Ring startet die Spur neu.', 5);
     }
     if (state === 'play') {
-      if (biplane.mounted) biplane.readInput(input, rig);
+      handleDiscoveryInput();
+      if (state !== 'play') return;
+      if (bonus.mounted) bonus.readInput(input, rig);
+      else if (biplane.mounted) biplane.readInput(input, rig);
       else player.readInput(input, rig);
       stats.time += dt;
     }
@@ -1437,7 +1616,8 @@ async function main() {
     // The engine runs from the start signal until the win screen.
     const engineOn = racing && (race.state === 'race' || (race.state === 'finished' && state === 'raceEnd'));
     sound.engine(engineOn ? { speed: Math.abs(race.player.v), gas: race.player.throttle } : null);
-    sound.biplane(biplane.mounted ? {active: true, speed: biplane.flight.speed, throttle: biplane.intent.throttle, boost: biplane.flight.boost > 0} : null);
+    sound.biplane(state !== 'play' ? null : bonus.mounted ? bonus.soundState : biplane.mounted
+      ? {active: true, speed: biplane.flight.speed, throttle: biplane.intent.throttle, boost: biplane.flight.boost > 0} : null);
     if (state === 'title') rig.forward.applyAxisAngle(rig.up, dt * 0.2);
 
     acc += dt;
@@ -1454,7 +1634,7 @@ async function main() {
     }
 
     animateWorld(dt, elapsed);
-    if (state === 'play') rig.distance = playDistance() + (fight.on ? 4 : biplane.mounted ? 3 : 0);
+    if (state === 'play') rig.distance = playDistance() + (fight.on ? 4 : biplane.mounted || bonus.mounted ? 3 : 0);
     if (racing) race.updateCamera(camera, dt, {reducedMotion});
     else rig.update(dt, player, input);
     const fov = baseFov() + (racing && !reducedMotion ? race.fovKick : 0);
@@ -1471,6 +1651,8 @@ async function main() {
     biplane.update(dt, elapsed, camera, player, reducedMotion);
     enemies.update(elapsed, camera);
     garden.update(elapsed, camera);
+    bonus.update(dt, elapsed, camera, player, {active: state === 'play', reducedMotion});
+    discovery.update(dt, elapsed, camera, {reducedMotion});
     for (const ev of wildlife.update(dt, elapsed, player, {active: state === 'play' && !fight.on, camera})) {
       if (ev.type === 'wildlifeMeet') {
         friends.add(ev.kind);
@@ -1499,6 +1681,8 @@ async function main() {
         adventure: { badges: [...adventure.badges], magnet: adventure.magnet, trails: adventure.trails.map(t => ({id: t.id, next: t.run.next, active: t.run.active, time: t.run.time})) },
         fps,
         rendering: { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, quality: governor.level, pixelRatio: governor.pixelRatio },
+        discovery: {...discovery.snapshot(), onPlanet: player.body.planet === level.bonus.planet, branchRace: Boolean(branchVisit)},
+        bonus: bonus.snapshot(),
         creatures: stats.creatures,
         enemies: enemies.snapshot(),
         wildlife: wildlife.snapshot(),
@@ -1535,6 +1719,8 @@ async function main() {
         blocks: level.blocks.map((b) => ({ planet: b.planet.id, dir: b.dir.toArray(), top: b.top })),
         rocket: { planet: welt.id, dir: launchUp.toArray(), height: level.rocket.height },
         goal: { planet: level.goal.planet.id, dir: level.goal.dir.toArray(), height: level.goal.height },
+        discovery: discovery.layout(),
+        bonus: bonus.layout(),
         trails: adventure.trails.map(t => ({id: t.id, planet: t.planet.id, dirs: t.dirs.map(d => d.toArray())})),
         enemies: enemies.layout(),
         wildlife: wildlife.layout(),
@@ -1564,6 +1750,7 @@ async function main() {
       },
       teleport(id, dir, height = 0.2) {
         if (biplane.mounted) biplane.recall(player);
+        if (bonus.mounted) bonus.recall(player);
         const p = planetById(id);
         const d = new THREE.Vector3(...dir).normalize();
         surfacePoint(p, d, height, player.body.pos);

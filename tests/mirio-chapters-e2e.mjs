@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {CHAPTERS} from '../js/chapters.js';
+import {personalBestKey} from '../js/course-version.js';
 const {chromium} = await import(process.env.PLAYWRIGHT ?? 'playwright');
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:8766/';
 const browser = await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
@@ -95,8 +96,8 @@ try{
     await until(page,()=>window.__mirio.snapshot().state==='win');
     assert.match(await page.textContent('#win-title'),/Post/);
     assert.match(await page.textContent('#win-time'),/^\d+:\d{2}\.\d{2}$/);
-    assert.ok(await page.evaluate(()=>Number(localStorage.getItem('mirio-time-best-v2:sky'))>0));
-    assert.equal(await page.evaluate(()=>localStorage.getItem('mirio-time-best-v2:ribbon')),null);
+    assert.ok(await page.evaluate(key=>Number(localStorage.getItem(key))>0,personalBestKey('sky')));
+    assert.equal(await page.evaluate(key=>localStorage.getItem(key),personalBestKey('ribbon')),null);
     await shot(page,'chapter-result');
   });
   await check('a temporary score-server failure permits retry with the same finished run',async()=>{
