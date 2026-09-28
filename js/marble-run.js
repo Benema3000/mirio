@@ -1,4 +1,6 @@
-// A connected musical toy board. The bubble carries Miro's unchanged character.
+// A connected musical toy board at dusk. The bubble carries Miro's unchanged
+// character; a low camera rolls along behind it and the stick steers relative
+// to that camera, so up is always "further along".
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {buildMirio} from './mirio-model.js';
@@ -17,13 +19,6 @@ const cylinder=(x,y,z,r,h,color)=>paint(new THREE.CylinderGeometry(r,r,h,24).tra
 function batch(parts,material){
   const flat=parts.map(g=>g.index?g.toNonIndexed():g),geometry=mergeGeometries(flat);
   for(const g of new Set([...parts,...flat]))g.dispose();return new THREE.Mesh(geometry,material);
-}
-function sign(text,width=5){
-  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
-  const ctx=canvas.getContext('2d');ctx.fillStyle='#fff3d9';ctx.beginPath();ctx.roundRect(4,4,504,120,26);ctx.fill();
-  ctx.fillStyle='#405267';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 58px sans-serif';ctx.fillText(text,256,66);
-  const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
-  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map,depthWrite:false}));sprite.scale.set(width,width/4,1);return sprite;
 }
 function noteGlyph(text,color){
   const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
@@ -57,11 +52,12 @@ function stations(points){
 export class MarbleRun {
   scene; #rules=new MarbleRules(); #hero; #bubble; #shell; #rim; #shadow; #roll=new THREE.Group();
   #bells=[]; #bumpers=[]; #notes=[]; #pulse; #brake; #drum; #homeArrow; #wake=new Map();
-  #elapsed=0; #cameraReady=false; #focus=new THREE.Vector3(); #finishPetals=[];
+  #elapsed=0; #cameraReady=false; #focus=new THREE.Vector3(); #eye=new THREE.Vector3(); #heading=0; #finishPetals=[];
 
   constructor(art){
-    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0xbedee5);
-    this.scene.fog=new THREE.Fog(0xbedee5,75,135);
+    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0xf2b99a);
+    this.scene.fog=new THREE.Fog(0xf2b99a,60,140);
+    this.#buildSky();
     this.scene.add(new THREE.HemisphereLight(0xfff7df,0x7898ae,2.25));
     const light=new THREE.DirectionalLight(0xfff2d8,2.6);light.position.set(-20,35,12);this.scene.add(light);
     const material=new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide});
@@ -85,7 +81,8 @@ export class MarbleRun {
     this.#pulse.rotation.x=-Math.PI/2;this.scene.add(this.#pulse);
     this.#brake=new THREE.Mesh(new THREE.TorusGeometry(1.1,.05,5,40),new THREE.MeshBasicMaterial({color:0xffdf7c}));
     this.#brake.rotation.x=-Math.PI/2;this.scene.add(this.#brake);
-    this.#homeArrow=new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(),3,GOLD,.85,.6);
+    // With all three notes: a golden cone ahead of the bubble points home to the drum.
+    this.#homeArrow=new THREE.Mesh(new THREE.ConeGeometry(.35,.9,12).rotateX(Math.PI/2),new THREE.MeshLambertMaterial({color:GOLD,emissive:0x6a4a00}));
     this.scene.add(this.#homeArrow);
     for(const bell of MARBLE_BELLS){
       const note=noteGlyph(bell.note,bell.color);this.scene.add(note);this.#notes.push({id:bell.id,object:note});
@@ -114,10 +111,20 @@ export class MarbleRun {
       parts.push(cylinder(x,-.1,-y,.18,3.1,0xb59a85),orb(x,1.5,-y,1.4,1.7,1.1,side<0?0xd9b7cd:0xadc8de));
     }
     this.scene.add(batch(parts,material));
-    for(const [text,x,y,width]of [['♪  +  ⏸',0,10,4],['← ♪    ♬ ↑    ♫ →',0,21,7],['↗  ♬',-18,38,3.6],['♬  ↖',18,38,3.6],['3 ♪ → 🥁',0,5,4.2]]){
-      const board=sign(text,width);board.position.set(x,1.1,-y);this.scene.add(board);
+  }
+
+  #buildSky(){
+    // A dusk dome: deep blue overhead, warm at the horizon, and early stars.
+    const dome=new THREE.SphereGeometry(300,32,16),colors=[],top=new THREE.Color(0x3d4a8f),low=new THREE.Color(0xf6b58f),c=new THREE.Color();
+    for(let i=0;i<dome.attributes.position.count;i++){
+      const y=dome.attributes.position.getY(i)/300;c.copy(low).lerp(top,Math.pow(Math.max(0,y),.6));colors.push(c.r,c.g,c.b);
     }
-    const bank=sign('↕ ♫',3);bank.position.set(-3,2.4,-34);this.scene.add(bank);
+    dome.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    this.scene.add(new THREE.Mesh(dome,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide,fog:false,depthWrite:false})));
+    const stars=[];
+    for(let i=0;i<220;i++){const a=i*2.399,y=.35+((i*.618)%1)*.6,r=Math.sqrt(1-y*y);stars.push(Math.cos(a)*r*280,y*280,Math.sin(a)*r*280);}
+    this.scene.add(new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(stars,3)),
+      new THREE.PointsMaterial({color:0xfff6dc,size:1.4,fog:false})));
   }
 
   #buildBells(material){
@@ -157,15 +164,17 @@ export class MarbleRun {
     }
   }
 
-  reset(){this.#elapsed=0;this.#cameraReady=false;this.#wake.clear();this.#roll.rotation.set(0,0,0);return this.#rules.reset();}
-  step(dt,input){
-    const events=this.#rules.step(dt,input);
+  reset(){this.#elapsed=0;this.#cameraReady=false;this.#heading=0;this.#wake.clear();this.#roll.rotation.set(0,0,0);return this.#rules.reset();}
+  step(dt,input={}){
+    // The stick is relative to the camera: up rolls the way it looks.
+    const h=this.#heading,ix=input.x||0,iy=input.y||0;
+    const events=this.#rules.step(dt,{...input,x:ix*Math.cos(h)+iy*Math.sin(h),y:-ix*Math.sin(h)+iy*Math.cos(h)});
     for(const event of events)if(event.type==='marble-bumper')this.#wake.set(event.id,.6);
     return events;
   }
   rescue(){this.#cameraReady=false;return this.#rules.rescue();}
   seek(progress){this.#cameraReady=false;return this.#rules.seek(progress);}
-  snapshot(){return {...this.#rules.snapshot(),name:'Klangkugel'};}
+  snapshot(){return {...this.#rules.snapshot(),name:'Klangkugel',heading:this.#heading};}
   layout(){return this.#rules.layout();}
 
   render(camera,dt=0,{reducedMotion=false}={}){
@@ -181,9 +190,10 @@ export class MarbleRun {
     this.#brake.visible=r.braking;this.#brake.position.set(r.x,r.height+.12,-r.y);
     this.#homeArrow.visible=r.finishReady&&r.status!=='finished';
     if(r.returnTarget){
-      this.#homeArrow.position.set(r.x,r.height+.22,-r.y);
       const direction=new THREE.Vector3(r.returnTarget.x-r.x,0,r.y-r.returnTarget.y);
-      if(direction.lengthSq()>.01)this.#homeArrow.setDirection(direction.normalize());
+      if(direction.lengthSq()>.01)direction.normalize();
+      this.#homeArrow.position.set(r.x+direction.x*1.8,r.height+.6+(reducedMotion?0:Math.sin(t*4)*.1),-r.y+direction.z*1.8);
+      this.#homeArrow.lookAt(this.#homeArrow.position.clone().add(direction));
     }
     this.#pulse.visible=r.pulse>0;this.#pulse.position.set(r.x,r.height+.14,-r.y);
     this.#pulse.scale.setScalar(1+(1-r.pulse/MARBLE.pulseTime)*4);this.#pulse.material.opacity=r.pulse;
@@ -207,12 +217,19 @@ export class MarbleRun {
     for(const [i,petal]of this.#finishPetals.entries()){
       petal.visible=r.finishReady;petal.position.y=r.status==='finished'&&!reducedMotion?.35+Math.sin(t*4+i)*.2:.1;
     }
-    const target=new THREE.Vector3(r.x,0,-r.y-3);
-    if(!this.#cameraReady){this.#focus.copy(target);this.#cameraReady=true;}
-    this.#focus.lerp(target,1-Math.exp(-dt*6));
-    const portrait=camera.aspect<1,height=portrait?34:22,behind=portrait?20:16;
-    if(camera.fov!==48){camera.fov=48;camera.updateProjectionMatrix();}
-    camera.position.set(this.#focus.x,this.#focus.y+height,this.#focus.z+behind);camera.up.copy(UP);camera.lookAt(this.#focus);
+    // The camera swings round behind the way the bubble rolls, but not when it
+    // rolls backwards: pulling back does not turn the view round.
+    if(r.speed>1.2){
+      const turn=Math.atan2(r.vx,r.vy)-this.#heading,diff=Math.atan2(Math.sin(turn),Math.cos(turn));
+      if(Math.cos(diff)>-.2)this.#heading+=diff*(1-Math.exp(-dt*(reducedMotion?.8:1.8)*Math.min(1,r.speed/4)));
+    }
+    const fx=Math.sin(this.#heading),fy=Math.cos(this.#heading),portrait=camera.aspect<1;
+    const back=portrait?11:8,rise=portrait?7.5:4.8,ahead=3;
+    const eye=new THREE.Vector3(r.x-fx*back,r.height+rise,-(r.y-fy*back)),target=new THREE.Vector3(r.x+fx*ahead,r.height+.8,-(r.y+fy*ahead));
+    if(!this.#cameraReady){this.#eye.copy(eye);this.#focus.copy(target);this.#cameraReady=true;}
+    const ease=1-Math.exp(-dt*6);this.#eye.lerp(eye,ease);this.#focus.lerp(target,ease);
+    if(camera.fov!==55){camera.fov=55;camera.updateProjectionMatrix();}
+    camera.position.copy(this.#eye);camera.up.copy(UP);camera.lookAt(this.#focus);
     this.#rim.quaternion.copy(camera.quaternion);
   }
 }

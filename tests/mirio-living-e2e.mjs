@@ -31,11 +31,11 @@ try {
   await until(page, () => window.__mirio.snapshot().state === 'play');
   const layout = await page.evaluate(() => window.__mirio.layout());
 
-  await check('the meadow has a few birds and three springflowers, no crowd and no hearts outside the boss', async () => {
+  await check('the meadow has a few birds, two squirrels and three springflowers, no crowd and no hearts outside the boss', async () => {
     const s = await snapshot(page);
     console.log(`     renderer: ${s.rendering.calls} calls, ${s.rendering.triangles} triangles, quality ${s.rendering.quality}`);
     assert.ok(s.wildlife.counts.bird >= 3 && s.wildlife.counts.bird <= 5);
-    assert.equal(s.wildlife.counts.squirrel, 0);
+    assert.ok(s.wildlife.counts.squirrel >= 1 && s.wildlife.counts.squirrel <= 2);
     assert.equal(layout.garden.length, 3);
     assert.equal(await page.isVisible('#hearts'), false);
     await shot(page, 'living-meadow');

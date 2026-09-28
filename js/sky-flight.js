@@ -1,4 +1,4 @@
-// A postal journey through connected air lanes. Miro’s drawing-derived pilot
+// A postal flight past floating islands. Miro’s drawing-derived pilot
 // stays unchanged; the islands, recipients and sky toys are original scenery.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -231,7 +231,7 @@ export class SkyFlight {
   snapshot() { return skySnapshot(this.run, this.course); }
   layout() {
     return {length: this.course.length, width: SKY.width, height: SKY.height,
-      deliveries: this.course.deliveries.map(d => ({...d})), routes: this.course.routes.map(r => ({...r})), chimes: this.course.chimes.map(c => ({...c})), airSections: this.course.airSections.map(a => ({...a})),
+      deliveries: this.course.deliveries.map(d => ({...d})),
       rings: this.course.rings.map(r => ({...r})), obstacles: this.course.obstacles.map(o => ({...o})), checkpoints: [...this.course.checkpoints]};
   }
 
@@ -249,15 +249,16 @@ export class SkyFlight {
     this.plane.propeller.rotation.z += dt * (65 + r.speed * 2);
     this.bumpFlash = Math.max(0, this.bumpFlash - dt);
     this.plane.group.visible = !this.bumpFlash || Math.floor(this.bumpFlash * 28) % 2 === 0;
-    const followDistance = 13.5 * Math.max(1, Math.min(1.9, .85 / Math.max(.2, camera.aspect)));
-    const ahead = skyFrame(r.s + 45), behind = skyFrame(r.s - followDistance);
-    cameraPosition.copy(point(behind, r.x * .28, 3.2 + r.y * .24));
-    focus.copy(point(ahead, r.x * .24, r.y * .23));
+    // Close behind the plane, so Mirio and his parcels read at a glance.
+    const followDistance = 8.5 * Math.max(1, Math.min(1.9, .85 / Math.max(.2, camera.aspect)));
+    const ahead = skyFrame(r.s + 40), behind = skyFrame(r.s - followDistance);
+    cameraPosition.copy(point(behind, r.x * .45, 2.3 + r.y * .4));
+    focus.copy(point(ahead, r.x * .35, r.y * .3 + 1));
     // The world stays upright; barrel rolls never rotate the camera.
     if (!this.cameraReady) { camera.position.copy(cameraPosition); this.cameraFocus = focus.clone(); this.cameraReady = true; }
     else { camera.position.lerp(cameraPosition, blend); this.cameraFocus.lerp(focus, blend); }
     camera.up.copy(Y); camera.lookAt(this.cameraFocus);
-    const fov = (camera.aspect < .85 ? 73 : 62) + (!reducedMotion && r.boost > 0 ? 4 : 0);
+    const fov = (camera.aspect < .85 ? 70 : 58) + (!reducedMotion && r.boost > 0 ? 4 : 0);
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     this.sky.position.copy(camera.position);
     this.sun.position.copy(frame.center).add(new THREE.Vector3(-80, 120, 90));
@@ -266,7 +267,7 @@ export class SkyFlight {
     for (let i = 0; i < this.course.rings.length; i++) {
       const ring = this.course.rings[i], f = skyFrame(ring.s);
       const burst = this.ringBursts.get(ring.id), age = burst === undefined ? 1 : r.elapsed - burst;
-      const visible = ring.s > r.s - 8 && ring.s < r.s + 370 && (!r.collected.has(ring.id) || age < .3);
+      const visible = ring.s > r.s - 8 && ring.s < r.s + 220 && (!r.collected.has(ring.id) || age < .3);
       dummy.position.copy(point(f, ring.x, ring.y)); orient(dummy, f);
       dummy.scale.setScalar(visible ? r.collected.has(ring.id) ? 1 + age * 3 : 1 : 0);
       dummy.updateMatrix(); this.rings.setMatrixAt(i, dummy.matrix);
@@ -276,7 +277,7 @@ export class SkyFlight {
       const obstacle = this.course.obstacles[i], p = balloonPosition(obstacle, r.elapsed);
       dummy.position.copy(point(skyFrame(obstacle.s), p.x, p.y));
       dummy.rotation.set(0, this.visualTime * .06 + obstacle.phase, Math.sin(this.visualTime + obstacle.phase) * .04);
-      dummy.scale.setScalar(obstacle.s > r.s - 25 && obstacle.s < r.s + 360 ? 1 : 0);
+      dummy.scale.setScalar(obstacle.s > r.s - 25 && obstacle.s < r.s + 240 ? 1 : 0);
       dummy.updateMatrix(); this.balloons.setMatrixAt(i, dummy.matrix);
     }
     this.balloons.instanceMatrix.needsUpdate = true;

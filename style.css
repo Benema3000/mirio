@@ -632,21 +632,21 @@ body.playing .pill { gap: 10px; }
 #win-menu { display: block; margin: 14px auto 0; }
 #chapter-hud { position: fixed; z-index: 3; top: 18px; left: 50%; transform: translateX(-50%); width: 224px; border: 1px solid #c7ece766; border-radius: 16px; padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; gap: 5px; background: #102a3bea; color: #fff1cd; font-variant-numeric: tabular-nums; }
 #chapter-timer { font-size: 21px; font-weight: 700; }
+#chapter-best:empty { display: none; }
 #chapter-best { font-size: 9px; align-self: center; color: #bde5d8; text-align: right; white-space: pre-line; }
-#chapter-progress, #chapter-ability { grid-column: 1 / -1; width: 100%; }
-#chapter-ability { font-size: 10px; color: #c4dedc; }
+#chapter-progress { grid-column: 1 / -1; width: 100%; }
 body.chapter-mode #btn-pound { display: none; }
 body.hub-mode #hud > .pill { display: none; }
 body.hub-mode #hud { justify-content: flex-end; }
-/* The gate Mirio stands at: its name big, in the hint's place (the hint waits). */
-#gate-name { position: fixed; z-index: 3; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; justify-items: center; gap: 2px; padding: 10px 26px 12px; border-radius: 22px; background: #102a3be6; color: #fff1cd; text-align: center; pointer-events: none; box-shadow: 0 10px 30px #0006; }
-#gate-name[hidden] { display: none; }
-body.at-gate #hint { opacity: 0; }
+/* What Mirio can do right here (a gate's name, a parcel to throw): big, in the hint's place. */
+#prompt { position: fixed; z-index: 3; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; justify-items: center; gap: 2px; padding: 10px 26px 12px; border-radius: 22px; background: #102a3be6; color: #fff1cd; text-align: center; pointer-events: none; box-shadow: 0 10px 30px #0006; }
+#prompt[hidden] { display: none; }
+body.prompting #hint { opacity: 0; }
 @media (orientation: portrait) {
-  body.touch #gate-name { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 190px); }
+  body.touch #prompt { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 190px); }
 }
-#gate-name strong { font-size: clamp(26px, 5vw, 40px); line-height: 1.1; }
-#gate-name small { font-size: 14px; color: #bde5d8; }
+#prompt strong { font-size: clamp(26px, 5vw, 40px); line-height: 1.1; }
+#prompt small { font-size: 14px; color: #bde5d8; }
 body.chapter-mode #toast { top: max(130px,22%); }
 body.chapter-mode #btn-spin { color: #ffe2a0; }
 body.chapter-single-action #btn-spin { display: none; }

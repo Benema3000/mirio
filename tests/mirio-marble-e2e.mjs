@@ -40,7 +40,9 @@ async function drive(page,route){
       const [tx,ty,bell]=route[pilot.index],dx=tx-r.x,dy=ty-r.y,distance=Math.hypot(dx,dy);
       if(distance<.6&&r.speed<1&&(!bell||r.noteIds.includes(bell))){pilot.index++;requestAnimationFrame(tick);return;}
       const wanted=Math.min(4.6,distance*2),scale=wanted/Math.max(.1,distance);
-      const x=clamp((dx*scale-r.vx)*.55),y=clamp((dy*scale-r.vy)*.55);
+      // Wanted push on the board, turned into the camera's frame (the stick is camera-relative).
+      const bx=clamp((dx*scale-r.vx)*.55),by=clamp((dy*scale-r.vy)*.55),h=r.heading??0;
+      const x=clamp(bx*Math.cos(h)-by*Math.sin(h)),y=clamp(bx*Math.sin(h)+by*Math.cos(h));
       pulse.x+=x;pulse.y+=y;
       const turnX=pulse.x>.5?1:pulse.x<-.5?-1:0,turnY=pulse.y>.5?1:pulse.y<-.5?-1:0;
       pulse.x-=turnX;pulse.y-=turnY;
@@ -87,7 +89,18 @@ try{
   await drive(page,[[0,18],[-2,30],[2,42],[0,54],[0,57,'gold']]);
   assert.ok((await snap(page)).chapterRun.bankTrips>0);await shot(page,'marble-bank');
   const before=(await snap(page)).chapterRun;
-  await page.keyboard.down('ArrowRight');await wait(page,n=>window.__mirio.snapshot().chapterRun.recoveries>n,before.recoveries);await page.keyboard.up('ArrowRight');
+  // Roll off the board's right-hand side: the stick is camera-relative, so turn board right into keys each frame.
+  await page.evaluate(n=>{
+    const held=new Set(),press=(code,on)=>{if(held.has(code)===on)return;on?held.add(code):held.delete(code);window.dispatchEvent(new KeyboardEvent(on?'keydown':'keyup',{code,key:code,bubbles:true}));};
+    (function tick(){
+      const r=window.__mirio.snapshot().chapterRun,h=r.heading??0;
+      if(r.recoveries>n){for(const code of [...held])press(code,false);return;}
+      const x=Math.cos(h),y=Math.sin(h);
+      press('ArrowRight',x>.35);press('ArrowLeft',x<-.35);press('ArrowUp',y>.35);press('ArrowDown',y<-.35);
+      requestAnimationFrame(tick);
+    })();
+  },before.recoveries);
+  await wait(page,n=>window.__mirio.snapshot().chapterRun.recoveries>n,before.recoveries);
   const rescued=(await snap(page)).chapterRun;assert.equal(rescued.notes,1);assert.equal(rescued.penalty,2);
   console.log('ok alternate bank, gutter catch and carried-note recovery');
   await page.evaluate(()=>{

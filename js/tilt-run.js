@@ -1,4 +1,6 @@
-// A stable camera watches a tilting toy world; gravity rules share its exact map.
+// A bath-time toy world: paths of soap float over the bath water, and a steady
+// camera watches from low behind as the stick tilts the whole world. Gravity
+// rules share its exact map.
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {buildMirio} from './mirio-model.js';
@@ -67,10 +69,11 @@ function road(path){
 export class TiltRun {
   scene; #rules=new TiltRules(); #board=new THREE.Group(); #world=new THREE.Group();
   #bubble=new THREE.Group(); #roll=new THREE.Group(); #hero; #rim; #shell; #brake; #shadow;
-  #foam; #foamBubbles=[]; #basinRing; #flags=[]; #towel; #finish; #finishMat; #time=0;
+  #foam; #foamBubbles=[]; #basinRing; #flags=[]; #towel; #finish; #finishMat; #time=0; #floaters=[];
 
   constructor(art){
-    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0xc5dfe7);this.scene.fog=new THREE.Fog(0xc5dfe7,50,100);
+    this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0xcdeaf0);this.scene.fog=new THREE.Fog(0xcdeaf0,55,120);
+    this.#buildBath();
     this.scene.add(new THREE.HemisphereLight(0xfff6df,0x8597b2,2.3));
     const light=new THREE.DirectionalLight(0xfff6e2,2.5);light.position.set(-15,30,15);this.scene.add(light);
     this.scene.add(this.#board);this.#board.add(this.#world);
@@ -120,10 +123,6 @@ export class TiltRun {
       const bubble=new THREE.Mesh(new THREE.SphereGeometry(.6,12,8),new THREE.MeshPhongMaterial({color:0xf7f2d9,transparent:true,opacity:.75,shininess:80}));
       bubble.position.set(b.x+Math.cos(i)*3,h+.65,-b.y+Math.sin(i)*3);this.#world.add(bubble);this.#foamBubbles.push(bubble);
     }
-    for(const [text,x,y,width] of [['↑  Neigen',0,10,4.6],['◎  Bremsen',0,20,4.8],['← Breit   Schmal ↗',8,34,7],
-      ['← Breit   Schaum ↗',0,82,7],['◎ Halten → ○ ○ ○',0,75,6],['↖ Schmal   Breit ↗',0,126,7],['◎  Ziel',0,153,4.8]]){
-      const label=sign(text,width);label.position.set(x,tiltFloor(x,y,{bridgeOpen:true}).height+2,-y);this.#world.add(label);
-    }
     const f=TILT_FINISH;
     this.#finish=new THREE.Mesh(new THREE.CircleGeometry(3.8,48),new THREE.MeshBasicMaterial({color:0xe7c99b,side:THREE.DoubleSide}));
     this.#finish.rotation.x=-Math.PI/2;this.#finish.position.set(f.x,f.height+.12,-f.y);this.#world.add(this.#finish);
@@ -131,6 +130,25 @@ export class TiltRun {
     const stripes=[];for(let x=-3.4;x<=3.4;x+=.85)stripes.push(paint(new THREE.BoxGeometry(.24,.17,4.5).translate(x,-.18,0),0xb7d6d9));
     this.#towel=batch([towel,...stripes],material);this.scene.add(this.#towel);
     this.#finishMat=this.#towel.clone();this.#finishMat.position.set(f.x,f.height+.35,-f.y);this.#world.add(this.#finishMat);
+  }
+
+  #buildBath(){
+    // Bath water far below, a soft sky over it, and soap bubbles drifting up past the camera.
+    const dome=new THREE.SphereGeometry(260,32,16),colors=[],top=new THREE.Color(0x8fcbe8),low=new THREE.Color(0xf7dbe7),c=new THREE.Color();
+    for(let i=0;i<dome.attributes.position.count;i++){
+      const y=dome.attributes.position.getY(i)/260;c.copy(low).lerp(top,Math.max(0,y));colors.push(c.r,c.g,c.b);
+    }
+    dome.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+    this.scene.add(new THREE.Mesh(dome,new THREE.MeshBasicMaterial({vertexColors:true,side:THREE.BackSide,fog:false,depthWrite:false})));
+    const water=new THREE.Mesh(new THREE.CircleGeometry(240,64).rotateX(-Math.PI/2),new THREE.MeshPhongMaterial({color:0x6fcad6,shininess:90,specular:0xe8fbff}));
+    water.position.y=-9;this.scene.add(water);
+    const shell=new THREE.SphereGeometry(1,20,14);
+    for(let i=0;i<26;i++){
+      const tint=[0xfbe3f0,0xdff4ff,0xfff5d6][i%3];
+      const bubble=new THREE.Mesh(shell,new THREE.MeshPhongMaterial({color:tint,transparent:true,opacity:.3,shininess:120,specular:0xffffff,depthWrite:false}));
+      bubble.userData={x:Math.cos(i*2.4)*(9+i%5*3),z:-6-(i*7.3)%38,size:.35+(i%4)*.22,speed:.5+(i%3)*.25,phase:i*1.7};
+      this.scene.add(bubble);this.#floaters.push(bubble);
+    }
   }
 
   #buildBubble(art){
@@ -180,9 +198,14 @@ export class TiltRun {
     for(const {ring,index} of this.#flags)ring.material.color.setHex(r.checkpoint>=index?0x9ec9a6:0xe7bb62);
     this.#finish.material.color.setHex(r.status==='finished'?0xffef9c:r.finishReady?0xf5d991:0xe7c99b);
     this.#finishMat.scale.z=r.status==='finished'&&!reducedMotion?1.35+Math.sin(t*3)*.05:1;
+    for(const bubble of this.#floaters){
+      const b=bubble.userData,rise=reducedMotion?0:(t*b.speed+b.phase)%14;
+      bubble.position.set(b.x+(reducedMotion?0:Math.sin(t*.7+b.phase)*.6),-6+rise,b.z);bubble.scale.setScalar(b.size);
+    }
+    // Low behind Mirio, so the paths ahead and the tilt of the world both read.
     const portrait=camera.aspect<1;
-    if(camera.fov!==48){camera.fov=48;camera.updateProjectionMatrix();}
-    camera.position.set(0,portrait?24:19,portrait?18:14);camera.up.copy(UP);camera.lookAt(0,0,-4.5);
+    if(camera.fov!==50){camera.fov=50;camera.updateProjectionMatrix();}
+    camera.position.set(0,portrait?15:10.5,portrait?16:12.5);camera.up.copy(UP);camera.lookAt(0,0,-7.5);
     this.#rim.quaternion.copy(camera.quaternion);
   }
 }

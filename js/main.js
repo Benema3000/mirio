@@ -437,11 +437,13 @@ async function main() {
   }
 
   // ---- HUD ---------------------------------------------------------------
-  /** In the Sternenhof, the name of the gate Mirio stands at, big enough to read on a phone. */
-  function showGateName(name) {
-    $('gate-name').hidden = !name;
-    document.body.classList.toggle('at-gate', Boolean(name));
-    if (name && $('gate-name-text').textContent !== name) $('gate-name-text').textContent = name;
+  /** What Mirio can do right here, big enough to read on a phone: a pad's name, a parcel to throw. */
+  function showPrompt(text, key = '') {
+    $('prompt').hidden = !text;
+    document.body.classList.toggle('prompting', Boolean(text));
+    if (!text) return;
+    if ($('prompt-text').textContent !== text) $('prompt-text').textContent = text;
+    if ($('prompt-key').textContent !== key) $('prompt-key').textContent = key;
   }
 
   const hud = { bits: -1, hearts: -1, hp: -1 };
@@ -449,10 +451,9 @@ async function main() {
     if (state === 'hub') {
       const visit = hub.snapshot();
       for (const id of ['hearts', 'race-hud', 'boss-bar', 'chapter-hud']) $(id).hidden = true;
-      showGateName(visit.near?.label ?? null);
+      showPrompt(visit.near?.label ?? null, 'Lauf drauf');
       return;
     }
-    showGateName(null);
     if (chapterGame && (state === 'chapter' || state === 'win')) {
       const run = chapterGame.snapshot();
       $('hearts').hidden = true;
@@ -463,28 +464,26 @@ async function main() {
       $('chapter-hud').hidden = state !== 'chapter';
       $('chapter-timer').textContent = formatRunTime(Math.round(run.time * 1000));
       const best = readPersonalBest(selectedLevel);
-      $('chapter-best').textContent = best ? `BESTE ZEIT\n${formatRunTime(best)}` : 'DEIN ERSTER LAUF';
+      $('chapter-best').textContent = best ? `BESTZEIT\n${formatRunTime(best)}` : '';
       $('chapter-progress').value = run.progress;
-      const cooldown = run.cooldown ?? 0;
       const touchKeys = document.body.classList.contains('touch');
       const actionKey = input.gamepadConnected ? 'X' : touchKeys ? CHAPTERS[selectedLevel].actionIcon : 'Shift';
       const jumpKey = input.gamepadConnected ? 'A' : touchKeys ? CHAPTERS[selectedLevel].jumpIcon : 'Leertaste';
-      let ability = run.actionHint ? `${actionKey} ${run.actionHint.replace('↻ ', '')}` : `${actionKey}: Luftwirbel`;
-      if (selectedLevel === 'sky') {
-        ability = run.parcelInFlight ? '✉ Unterwegs …' : run.deliveryTarget ? `${run.deliveryTarget.icon} → ${run.deliveryTarget.ready ? `${actionKey}: werfen` : 'Zum Korb'}`
-          : run.chimeNear ? `♪ ${jumpKey}: Rolle` : run.boost > 0 ? '✦ Rückenwind!'
-          : cooldown > 0 ? `✦ ${Math.ceil(cooldown)} s · ${jumpKey}: Rolle` : `${actionKey}: Turbo · ${jumpKey}: Rolle`;
+      // Only what can be done right here; the controls are in the help.
+      let prompt = null;
+      if (state !== 'chapter' || chapterCountdown > 0) prompt = null;
+      else if (selectedLevel === 'sky') {
+        if (run.deliveryTarget?.ready && !run.parcelInFlight) prompt = ['Paket werfen', actionKey];
       } else if (selectedLevel === 'marble') {
-        ability = run.notesNear && !run.noteReady ? `${jumpKey} halten: bremsen`
-          : run.noteReady ? `${actionKey}: Glocke wecken` : `${jumpKey}: Bremse · ${actionKey}: Klangstoss`;
+        if (run.noteReady) prompt = ['Glocke wecken', actionKey];
       } else if (selectedLevel === 'tilt') {
-        ability = run.basinNear && !run.bridgeOpen ? `${jumpKey} halten: Schaumsteg ${Math.round(run.bridgeCharge * 100)}%`
-          : `${jumpKey} halten: bremsen`;
-      }
-      $('chapter-ability').textContent = chapterCountdown > 0 ? 'Bereit?' : ability;
+        if (run.basinNear && !run.bridgeOpen) prompt = [`Schaumsteg ${Math.round(run.bridgeCharge * 100)} %`, `${jumpKey} halten`];
+      } else if (run.actionHint) prompt = [run.actionHint, actionKey];
+      showPrompt(prompt?.[0] ?? null, prompt?.[1]);
       $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? (run.deliveryTarget ? 'Paket werfen' : 'Turbo') : (run.actionHint || CHAPTERS[selectedLevel].actionLabel));
       return;
     }
+    showPrompt(null);
     $('chapter-hud').hidden = true;
     // Hearts matter only in the boss fight.
     $('hearts').hidden = state !== 'play' || !fight.on;
@@ -869,7 +868,7 @@ async function main() {
     $('win-badges').replaceChildren(...[
       ...(stats.bestJump === 3 ? ['↟ Sprungkünstler'] : []),
       ...(stats.bits >= 50 ? ['◇ Glitzersammler'] : []),
-      ...(friends.size > 0 ? ['♡ Tierfreund'] : []),
+      ...(friends.size === 2 ? ['♡ Tierfreund'] : []),
       ...(garden.used.size === 3 ? ['❀ Blütenflieger'] : []),
       ...(race.snapshot().bestDrift === 2 ? ['✦ Driftsonne'] : []),
     ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
@@ -889,11 +888,11 @@ async function main() {
     const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
     $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Die Trommel singt!'
       : selectedLevel === 'tilt' ? 'Weich gelandet!' : 'Der Blütenhof leuchtet!';
-    $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ♪ ${run.chimes} Glocken · ◇ ${run.collectibles} Ringe`
+    $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ◇ ${run.collectibles} Ringe`
       : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} Inseln · ↗ ${run.shortcuts} Abkürzungen · ↺ ${run.recoveries} Landungen`
       : selectedLevel === 'marble' ? `♪ ${run.notes} Töne · ${run.bankTrips} Klangkurven · ${run.bumps} Kissenhüpfer`
       : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
-    $('win-extra').textContent = selectedLevel === 'sky' && run.choir ? 'Der Wolkenwal singt für dich!' : 'Welchen Weg nimmst du nächstes Mal?';
+    $('win-extra').textContent = '';
     $('win-badges').replaceChildren();
     offerHighScore();
     $('win').classList.remove('hidden');
@@ -903,20 +902,14 @@ async function main() {
 
   function handleChapterEvents(events) {
     for (const event of events ?? []) {
-      if (event.type !== 'finish') sound.play(({foam: 'spring', note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
-      if (event.penalty > 0) hint(`${event.id?.startsWith('sky-balloon-') ? 'Ballon berührt' : 'Zurück am Checkpoint'} · +${event.penalty} s. Weiter geht’s!`, 4);
-      else if (event.type === 'delivery') { toast(`✉ ${event.deliveries} / ${chapterGame.snapshot().totalDeliveries}`); hint(({garden: 'Blumenwind!', bakery: 'Warmer Rückenwind!', kite: 'Drachen voraus!'})[event.id] ?? 'Post ist da!', 4); }
-      else if (event.type === 'parcel-return') hint('Der Vogel bringt dein Paket zurück.', 4);
-      else if (event.type === 'choir') hint('Der Wolkenwal singt mit!', 5);
-      else if (event.type === 'arrival') toast('Willkommen bei der Wolkenpost!');
+      if (event.type !== 'finish') sound.play(({foam: 'spring', note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', arrival: 'flag'})[event.type] ?? event.type);
+      // Short toasts only: a count, a checkpoint, the seconds a fall cost.
+      if (event.penalty > 0) toast(`+${event.penalty} s`);
+      else if (event.type === 'delivery') toast(`✉ ${event.deliveries} / ${chapterGame.snapshot().totalDeliveries}`);
       else if (event.type === 'note') toast(`♪ ${event.notes} / ${chapterGame.snapshot().totalNotes}`);
-      else if (event.type === 'foam') hint('○ Der Schaumsteg ist bereit!', 5);
+      else if (event.type === 'foam') toast('Schaumsteg!');
       else if (event.type === 'bit' && event.kind === 'seed') toast(`✧ ${event.seeds} / ${chapterGame.snapshot().totalSeeds}`);
-      else if (event.type === 'spring' && event.kind === 'song') toast(event.dream === 'awake' ? '♪ ☀' : '♪ ☾');
-      else if (event.type === 'checkpoint' && event.kind === 'gate') hint('✿ Zurück zum Blütenhof — hinauf!', 6);
-      else if (event.type === 'checkpoint' && event.kind !== 'door') { toast('Checkpoint!'); hint('Hier wartet ein sicherer Platz auf dich.', 3); }
-      else if (event.type === 'rescue') hint('Weich gelandet. Einfach nochmal hüpfen!', 4);
-      else if (event.type === 'bump') hint('Hoppla! Alles gut — weiter geht’s.', 3);
+      else if (event.type === 'checkpoint') toast('Checkpoint!');
     }
   }
 
@@ -1264,10 +1257,10 @@ async function main() {
         startLevel();
         return;
       }
-      sound.play(event.type === 'jump' ? ['jump', 'jump2', 'triple'][(event.level ?? 1) - 1] : event.type);
+      sound.play(event.type === 'jump' ? ['jump', 'jump2', 'triple'][(event.level ?? 1) - 1] : event.type === 'hop' ? 'spring' : event.type === 'souvenir' ? 'star' : event.type);
     }
     const visit = hub.snapshot();
-    sound.footstep({dt, speed: Math.hypot(...visit.velocity), grounded: visit.grounded, surface: 'grass'});
+    sound.footstep({dt, speed: Math.hypot(...visit.velocity), grounded: visit.grounded, surface: visit.planet === 'moon' ? 'stone' : 'grass'});
     sound.ambience({active: true, dt});
     if (hintTimer > 0) { hintTimer -= dt; if (hintTimer <= 0) $('hint').classList.remove('show'); }
     hub.render(camera, dt, {reducedMotion});

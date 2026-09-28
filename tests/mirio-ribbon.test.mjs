@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { RIBBON, RibbonRules, makeRibbonCourse, platformAt } from '../js/ribbon-rules.js';
 const DT=1/120;
 function run(body,seconds,input={},dt=DT){const events=[];for(let t=0;t<seconds-1e-9;t+=dt)events.push(...body.step(Math.min(dt,seconds-t),typeof input==='function'?input(body,t):input));return events;}
-function flat(){const course=makeRibbonCourse();course.platforms=[{id:'ground-0',x:20,y:0,w:60,kind:'ground'}];course.springs=[];course.critters=[];course.gems=[];return new RibbonRules(course);}
+function flat(){const course=makeRibbonCourse();course.start={x:5,y:0};course.platforms=[{id:'ground-0',x:20,y:0,w:60,kind:'ground'}];course.springs=[];course.critters=[];course.gems=[];return new RibbonRules(course);}
 
 test('running is responsive, braking stops promptly, and invalid time is harmless',()=>{
   const p=flat();run(p,.3,{x:1});assert.equal(p.vx,RIBBON.speed);assert.ok(p.x>6);
@@ -47,10 +47,10 @@ test('collectibles and checkpoints only award once; cloud rescue retains gems wi
   assert.equal(p.x,8);assert.equal(p.collected.size,1);assert.equal(p.penalties,2);assert.ok(p.time>=before+2);
   run(p,1);assert.equal(p.recovery,0);assert.equal(p.recoveries,1);
 });
-test('reversing through rooms updates checkpoints and friendly critters never remove gems',()=>{
-  const p=new RibbonRules();p.x=49;p.y=0;p.grounded=false;p.coyote=0;
+test('walking back through the garden updates checkpoints and friendly critters never remove gems',()=>{
+  const p=new RibbonRules();p.x=160;p.y=0;p.grounded=false;p.coyote=0;
   assert.ok(p.step(DT).some(e=>e.type==='checkpoint'));assert.equal(p.checkpoint,2);
-  p.x=-24;p.y=0;p.step(DT);assert.equal(p.checkpoint,1);
+  p.x=74;p.y=0;p.step(DT);assert.equal(p.checkpoint,1);
   const c=p.course.critters[0];p.x=c.x+Math.sin(p.clock*c.speed+c.phase)*c.range;p.y=c.y;p.collected.add('kept');p.invulnerable=0;
   const e=p.step(DT);assert.ok(e.some(e=>e.type==='bump'&&e.friendly));assert.ok(p.vy>0);assert.ok(p.collected.has('kept'));assert.equal(p.penalties,0);
 });
