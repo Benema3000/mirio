@@ -4,21 +4,32 @@ export const HUB = Object.freeze({
   portalRelease: 2.6, returnDistance: 3.8, approachTime: .28,
   toyReach: 2.5, toyCooldown: 1.2, springSpeed: 16,
   souvenirDistance: 4.4, echoReach: 1.8, echoHeight: 2.4, chorusMinimum: 2, chorusDuration: 6,
-  spawn: Object.freeze({x: 0, z: 6}), toy: Object.freeze({x: 0, z: .5}),
+  spawn: Object.freeze({x: 0, z: 3}), toy: Object.freeze({x: 0, z: 0}),
 });
 
+// The gates stand in a ring round the central flower, each a short walk from
+// spawn: the first journey straight ahead, its neighbours ahead left and
+// right, the others a turn away. The camera stays inside the ring, so the
+// gates behind it never block the view. (A fan across the whole view made
+// every sign too small to read.)
+const GATE_RING = 11;
+const gate = (level, label, degrees, color) => {
+  const a = degrees * Math.PI / 180;
+  return {level, label, x: Math.round(GATE_RING * Math.sin(a) * 100) / 100, z: Math.round(-GATE_RING * Math.cos(a) * 100) / 100, color};
+};
 export const HUB_PORTALS = Object.freeze([
-  {level: 'adventure', label: 'Planetenreise', x: -11.5, z: -4, color: 0xf5bb78},
-  {level: 'sky', label: 'Wolkenpost', x: -8.2, z: -10, color: 0x88cbd7},
-  {level: 'marble', label: 'Klangkugel', x: -3.4, z: -14, color: 0xf2ce6d},
-  {level: 'tilt', label: 'Seifenstern', x: 3.4, z: -14, color: 0x94d6c4},
-  {level: 'ribbon', label: 'Blütenpfad', x: 8.2, z: -10, color: 0xe9a7c3},
-  {level: 'kart', label: 'Sternenrennen', x: 11.5, z: -4, color: 0xbbafe4},
+  gate('adventure', 'Planetenreise', 0, 0xf5bb78),
+  gate('kart', 'Sternenrennen', 60, 0xbbafe4),
+  gate('ribbon', 'Blütenpfad', 120, 0xe9a7c3),
+  gate('tilt', 'Seifenstern', 180, 0x94d6c4),
+  gate('marble', 'Klangkugel', 240, 0xf2ce6d),
+  gate('sky', 'Wolkenpost', 300, 0x88cbd7),
 ]);
 
 export const HUB_STONE_RADIUS = 1.05;
+// Out by the rim, in the gap between the Blütenpfad and Seifenstern gates.
 export const HUB_STONES = Object.freeze([
-  {x: -4.5, z: 7.5, height: .55}, {x: -6, z: 9, height: 1}, {x: -7, z: 10.5, height: 1.5},
+  {x: 6.75, z: 11.7, height: .55}, {x: 7.5, z: 13, height: 1}, {x: 8.25, z: 14.3, height: 1.5},
 ]);
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);

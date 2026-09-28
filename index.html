@@ -46,10 +46,7 @@
     </div>
   </div>
 
-  <div id="journey" aria-label="Dein nächstes Ziel">
-    <span class="compass" aria-hidden="true"><svg id="compass-arrow" viewBox="0 0 32 32"><path d="M16 4 26 26 16 21 6 26Z"/></svg></span>
-    <span><small id="chapter">01 / WIESENWELT</small><strong id="objective">Folge den Glitzersteinen</strong></span>
-  </div>
+  <div id="gate-name" hidden><strong id="gate-name-text"></strong><small>Lauf hinein</small></div>
   <div id="trail-hud" hidden><span id="trail-label"></span><strong id="trail-time"></strong><progress id="trail-progress" max="6" value="0"></progress></div>
   <div id="magnet-hud" hidden>✦ Glitzermagnet <span id="magnet-time"></span></div>
   <div id="plane-hud" hidden aria-label="Wiesensummer Fluganzeige"><span class="plane-name">✈ WIESENSUMMER</span><span id="plane-altitude">0.0 m</span><progress id="plane-height" value="0" max="4.5" aria-label="Flughöhe, maximal 4,5 Meter"></progress><span id="plane-speed">0 km/h</span><span id="plane-boost">✦ Turbo bereit</span></div>
@@ -79,18 +76,25 @@
   </div>
 
   <section id="title" class="overlay">
-    <div class="game-menu">
-      <div class="menu-heading"><h1><img id="game-logo" src="assets/mirio-logo.png" alt="Mirio" width="720" height="240"></h1><div class="title-art"><img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro"></div></div>
-      <button id="start" class="big" data-menu-default disabled>Lädt …</button>
-      <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
-      <div class="menu-links"><button id="show-times" class="text-button">Bestzeiten</button><button id="show-help" class="text-button">Hilfe &amp; Credits</button></div>
-      <button id="title-quick" class="text-button quick-link">Reise direkt wählen</button>
+    <div class="game-menu title-layout">
+      <div class="title-art"><img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro"></div>
+      <div class="title-main">
+        <h1><img id="game-logo" src="assets/mirio-logo.png" alt="Mirio" width="720" height="240"></h1>
+        <button id="start" class="big" data-menu-default disabled>Lädt …</button>
+        <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
+        <section id="title-top" class="title-scores" aria-labelledby="title-top-heading" hidden>
+          <h3 id="title-top-heading">Bestenliste · Planetenreise</h3>
+          <ol id="title-top-board" class="board"></ol>
+        </section>
+        <div class="menu-links"><button id="show-times" class="text-button">Bestzeiten</button><button id="show-help" class="text-button">Hilfe &amp; Credits</button></div>
+        <p class="credit">Figur und Zeichnungen: Miro · Mit KI gemacht</p>
+      </div>
     </div>
   </section>
 
   <dialog id="quick-dialog" class="menu-dialog" aria-labelledby="quick-title">
     <button class="dialog-close" data-close="quick-dialog" aria-label="Reisewahl schliessen">×</button>
-    <h2 id="quick-title">Direkt zur Reise</h2>
+    <h2 id="quick-title">Reise wählen</h2>
     <div id="chapter-select" class="chapter-select" role="group" aria-label="Abenteuer auswählen">
       <button class="chapter-card selected" data-level="adventure" aria-pressed="true"><img src="assets/menu-adventure.png" alt=""><strong>Planetenreise</strong><em data-best="adventure"></em></button>
       <button class="chapter-card" data-level="kart" aria-pressed="false"><img src="assets/menu-kart.png" alt=""><strong>Sternenrennen</strong><em data-best="kart"></em></button>
@@ -99,7 +103,6 @@
       <button class="chapter-card" data-level="marble" aria-pressed="false"><span class="marble-preview" aria-hidden="true"><i></i></span><strong>Klangkugel</strong><em data-best="marble"></em></button>
       <button class="chapter-card" data-level="tilt" aria-pressed="false"><span class="tilt-preview" aria-hidden="true"><i>✦</i></span><strong>Seifenstern</strong><em data-best="tilt"></em></button>
     </div>
-    <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
   </dialog>
 
   <dialog id="scores-dialog" class="menu-dialog" aria-labelledby="title-scores-heading">
@@ -113,7 +116,6 @@
       <button data-scores-level="tilt" aria-pressed="false">Seifenstern</button>
     </nav>
     <section id="title-scores" class="title-scores"><h2 id="title-scores-heading">Bestzeiten · Planetenreise</h2><ol id="title-board" class="board"></ol><p id="title-board-status" class="status" role="status"></p></section>
-    <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
   </dialog>
   <dialog id="help-dialog" class="menu-dialog" aria-labelledby="help-title">
     <button class="dialog-close" data-close="help-dialog" aria-label="Hilfe schliessen">×</button>
@@ -129,38 +131,30 @@
     </nav>
     <p id="chapter-description" class="chapter-description"></p><p id="chapter-keys" class="controls keys"></p><p id="chapter-touch" class="controls touch"></p>
     <p id="chapter-controller" class="controls"></p>
-    <p class="credit">Figur und Zeichnungen: <b>Miro</b> · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
+    <p class="credit">Figur und Zeichnungen: <b>Miro</b> · Mit KI gemacht · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
     <p class="credit"><a href="https://github.com/Benema3000/mirio" target="_blank" rel="noopener">Quellcode (MIT)</a> · <a href="audio/CREDITS.md" target="_blank" rel="noopener">Audio &amp; Credits</a></p>
     <p class="legal">Miros Zeichnungen bleiben seine. Ein kostenloses, nicht kommerzielles Spiel. Zusätzliche Klangaufnahmen sind gemeinfrei (CC0).</p>
-    <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
   </dialog>
 
   <section id="pause" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title">
     <div class="card pause-card">
-      <p class="eyebrow">ZEIT ZUM DURCHATMEN</p><h2 id="pause-title">Kleine Pause.</h2>
-      <p class="pause-objective" id="pause-objective"></p>
+      <h2 id="pause-title">Pause</h2>
       <button id="resume" class="big" data-menu-default>Weiter geht's</button>
       <div class="settings">
         <label for="music-volume">Musik <input id="music-volume" type="range" min="0" max="100" step="5" value="55"></label>
         <label for="effects-volume">Geräusche <input id="effects-volume" type="range" min="0" max="100" step="5" value="80"></label>
         <label class="check-setting"><input id="reduced-motion" type="checkbox"> Ruhiges Bild <small>Ohne Kamerawackeln</small></label>
       </div>
-      <div class="field-guide" aria-label="Entdeckte Tierfreunde"><span id="friend-bird">Wiesenvogel</span><span id="friend-squirrel">Eichhörnchen</span><small id="garden-guide">0 / 3 Sprungblüten</small></div>
-      <div class="move-guide"><p><kbd>WASD / ↑↓←→</kbd> Laufen <kbd>Leertaste</kbd> Springen</p><p><kbd>Shift</kbd> Drehen <kbd>C</kbd> Stampfen <kbd>Q / E</kbd> Kamera</p><p>Controller: linker Stick · A springen · X drehen · B stampfen<br>Kart: RT Gas · LT Bremse · A + lenken driften</p></div>
-      <p class="trail-tip">✦ Entdecke die leuchtenden Ringe! Eine ganze Spur schenkt dir 12 Sekunden Glitzermagnet.<br>❀ Grosse Blüten federn dich hoch. Kleine Wächter: von oben hüpfen oder drehen!</p>
-      <p class="plane-guide">✈ <b>Wiesensummer</b> · F / Y: einsteigen und landen<br>Leertaste / A: steigen · C / B: sinken · Shift / X: Turbo<br>Bleibt nah an der Wiese. Zum Mond geht es mit der Rakete!</p>
-      <p id="chapter-guide" class="chapter-guide" hidden></p>
       <div class="menu-links pause-links"><button id="pause-times" class="text-button">Bestzeiten</button><button id="pause-help" class="text-button">Hilfe &amp; Credits</button></div>
       <button id="rescue" class="text-button">Zurück zum Checkpoint</button>
       <button id="pause-menu" class="text-button">Zum Sternenhof</button>
-      <button id="pause-quick" class="text-button">Reise direkt wählen</button>
-      <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
+      <button id="pause-quick" class="text-button">Reise wählen</button>
     </div>
   </section>
 
   <section id="win" class="overlay hidden">
     <div class="card">
-      <p class="eyebrow" id="win-eyebrow">ABENTEUER GESCHAFFT</p><h2 id="win-title">Dein Kristall!</h2><p id="win-badges" class="win-badges"></p>
+      <h2 id="win-title">Dein Kristall!</h2><p id="win-badges" class="win-badges"></p>
       <p id="win-stats" class="stats"></p>
       <p id="win-extra" class="status"></p>
       <p class="points"><b id="win-time">00:00.00</b><span> Deine Zeit</span></p><p id="personal-best" class="personal-best"></p>
@@ -176,7 +170,6 @@
       <ol id="win-board" class="board"></ol>
       <button id="again" class="big" data-menu-default>Nochmal spielen</button>
       <button id="win-menu" class="text-button">Zum Sternenhof</button>
-      <small class="controller-menu">Steuerkreuz / Stick · A wählen · B Sternenhof</small>
     </div>
   </section>
 

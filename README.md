@@ -1,12 +1,10 @@
 # Mirio
 
-> This repository is a copy of the game. It is developed in the Goodvantage
-> website repository and deployed with it to <https://goodvantage.ch/mirio/>.
+> This repository is the game's home. <https://goodvantage.ch/mirio/> runs
+> a copy of it, updated from here.
 >
-> Mirio was created with Claude Opus 5.5, an AI model by Anthropic, which
-> wrote the code; people chose the direction and played it. The figure and
-> the drawings are Miro's. Mirio is a free, non-commercial experiment: the
-> graphics, music and program were made for it.
+> Mirio is made with AI. The figure and the drawings are Miro's. Mirio is a
+> free, non-commercial experiment.
 
 A small platformer in the browser at <https://goodvantage.ch/mirio/>: one big
 round world with its own gravity, a
@@ -67,8 +65,12 @@ round with the kart and widens when it goes fast.
 
 ## Adventures from Sternenhof
 
-The original **Mirio** logo opens into **Sternenhof**, a playable garden hub.
-Walk into a landmark portal to start an adventure. Every level is
+The start screen (Miro's drawing, the logo and the top 5 of the Planetenreise
+list) opens into **Sternenhof**, a playable garden hub: six landmark portals
+stand in a ring round the central flower, Planetenreise straight ahead and
+its neighbours to either side, the others a turn away. The camera stays
+inside the ring, and the portal you stand at shows its name large at the
+bottom. Walk into a portal to start an adventure. Every level is
 available immediately; pause and results return to the hub, while replay
 restarts the same level. Completed adventures light their portal medals.
 The hub has no timer or score. Help, time boards and an optional quick selector

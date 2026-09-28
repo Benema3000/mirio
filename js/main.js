@@ -461,23 +461,27 @@ async function main() {
     stats.creatures = 0;
     shown.clear();
     friends.clear();
-    $('friend-bird').classList.remove('found');
-    $('friend-squirrel').classList.remove('found');
-    $('garden-guide').textContent = '0 / 3 Sprungblüten';
     rig.snap(player, startForward);
     renderHud(true);
   }
 
   // ---- HUD ---------------------------------------------------------------
+  /** In the Sternenhof, the name of the gate Mirio stands at, big enough to read on a phone. */
+  function showGateName(name) {
+    $('gate-name').hidden = !name;
+    document.body.classList.toggle('at-gate', Boolean(name));
+    if (name && $('gate-name-text').textContent !== name) $('gate-name-text').textContent = name;
+  }
+
   const hud = { bits: -1, hearts: -1, hp: -1 };
   function renderHud(force = false) {
     if (state === 'hub') {
       const visit = hub.snapshot();
       for (const id of ['hearts', 'ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud', 'chapter-hud']) $(id).hidden = true;
-      $('chapter').textContent = 'STERNENHOF';
-      $('objective').textContent = visit.actionHint || (visit.near ? `→ ${visit.near.label}` : `${Object.keys(CHAPTERS).length} Tore · Deine Reise`);
+      showGateName(visit.near?.label ?? null);
       return;
     }
+    showGateName(null);
     if (chapterGame && (state === 'chapter' || state === 'win')) {
       const run = chapterGame.snapshot();
       $('hearts').hidden = true;
@@ -508,11 +512,6 @@ async function main() {
       }
       $('chapter-ability').textContent = chapterCountdown > 0 ? 'Bereit?' : ability;
       $('btn-spin').setAttribute('aria-label', selectedLevel === 'sky' ? (run.deliveryTarget ? 'Paket werfen' : 'Turbo') : (run.actionHint || CHAPTERS[selectedLevel].actionLabel));
-      $('chapter').textContent = CHAPTERS[selectedLevel].eyebrow;
-      $('objective').textContent = selectedLevel === 'sky' ? '✉ Folge den Paketzeichen'
-        : selectedLevel === 'tilt' ? `${run.zoneName} · ${run.checkpoint === run.totalCheckpoints ? '⚑ Zum Handtuch' : '⚑ Zur nächsten Insel'}`
-        : selectedLevel === 'marble' ? `${run.roomName} · ${run.finishReady ? '♪ Zur Trommel · bremsen' : '♪ Glocken wecken'}`
-        : `${run.roomName} · ${run.hint || (run.gateOpen ? '✿ ↑ Blütenhof' : '✧ Laternensamen finden')}`;
       return;
     }
     $('chapter-hud').hidden = true;
@@ -539,7 +538,6 @@ async function main() {
       $('race-place').textContent = `${race.place}.`;
       $('race-time').textContent = formatTime(race.state === 'race' ? stats.raceTime : result?.time ?? 0);
     }
-    updateJourney();
     const riding = biplane.mounted && state === 'play';
     document.body.classList.toggle('flying', riding);
     if (hud.riding !== riding) {
@@ -577,51 +575,6 @@ async function main() {
   }
 
   // Surface-relative compass: follows the journey even around a planet.
-  const guideDir = new THREE.Vector3();
-  const guideRight = new THREE.Vector3();
-  function updateJourney() {
-    let label = 'Folge den Glitzersteinen';
-    let chapter = '01 / WIESENWELT';
-    let target = null;
-    if (biplane.mounted) {
-      const task = meadow.snapshot().task;
-      chapter = 'WIESENSUMMER / WINDGARTEN';
-      label = biplane.landing ? 'Wir landen auf der Wiese …' : task.label;
-      target = surfacePoint(welt, new THREE.Vector3(...task.dir), task.height);
-    }
-    else if (state === 'race' || state === 'raceEnd') { chapter = '03 / STERNENRENNEN'; label = 'Hol dir den Kristall!'; }
-    else if (state === 'rocket') { chapter = '02 / AUF ZUM MOND'; label = 'Nächster Halt: Miros Mond'; }
-    else if (state === 'cutscene') { chapter = '03 / STERNENRENNEN'; label = 'Dem Kristall hinterher!'; }
-    else if (player.body.planet === mond) {
-      chapter = '02 / MIROS MOND';
-      label = fight.on ? 'Spring auf die schwindlige Mütze' : 'Klettere zum Kristall';
-      // The nearest uncollected moon-route gem gives a useful direction on
-      // the far side, where the arena itself would point through the ground.
-      const gems = world.bits.filter(b => !b.taken && b.planet === mond);
-      target = gems.reduce((near, b) => !near || b.mesh.position.distanceToSquared(player.body.pos) < near.distanceToSquared(player.body.pos) ? b.mesh.position : near, null) ?? arenaCenter;
-      if (fight.on) target = null;
-    } else {
-      const next = world.flags.find(f => !f.reached);
-      label = next ? ['Über die Baumstümpfe zum See', 'Überquere den Glitzersee', 'Durch die Hügel zur Rakete'][world.flags.indexOf(next)] : 'Die Rakete wartet auf dem Plateau';
-      target = next?.center ?? padBase;
-      const discovery = meadow.snapshot();
-      const destination = surfacePoint(welt, new THREE.Vector3(...discovery.task.dir), discovery.task.height);
-      if (discovery.windPowered && ['bridge', 'walk', 'picnic'].includes(discovery.task.id) && player.body.pos.distanceTo(destination) < 18) {
-        label = discovery.task.label;
-        target = destination;
-      }
-    }
-    if ($('objective').textContent !== label) $('objective').textContent = label;
-    if ($('chapter').textContent !== chapter) $('chapter').textContent = chapter;
-    const direction = target && tangentDir(guideDir.subVectors(target, player.body.pos), player.body.up, guideDir);
-    const forward = tangentDir(rig.forward, player.body.up, tmp2);
-    if (direction && forward) {
-      guideRight.crossVectors(forward, player.body.up);
-      $('compass-arrow').style.transform = `rotate(${Math.atan2(direction.dot(guideRight), direction.dot(forward))}rad)`;
-    }
-    $('compass-arrow').style.opacity = target ? '1' : '.35';
-  }
-
   let toastTimeout = 0;
   function toast(text, big = false) {
     const el = $('toast');
@@ -811,7 +764,6 @@ async function main() {
         if (ev.kind === 'moonGuardian') hint('☾ Der Mondwächter trägt dich hinauf!', 5);
         else hintOnce('spring', 7);
         particles.burst(ev.pos, {count: 12, color: [ev.color, 0xffefa5], speed: 4, size: .3, life: .65});
-        $('garden-guide').textContent = `${garden.used.size} / 3 Sprungblüten`;
         if (ev.strong) toast('Blütensprung!');
       }
     }
@@ -933,6 +885,14 @@ async function main() {
     });
   }
 
+  /** The start screen's top 5 of the main journey; hidden while the list is out of reach. */
+  function showTitleTop() {
+    fetchScores('adventure').then((body) => {
+      showBoard($('title-top-board'), body.top.slice(0, TITLE_SCORES));
+      $('title-top').hidden = false;
+    }).catch(() => { $('title-top').hidden = true; });
+  }
+
   function scoreStatus(text) { $('score-status').textContent = text; }
 
   function offerHighScore() {
@@ -999,7 +959,6 @@ async function main() {
     input.enabled = false;
     hint('', 0);
     $('race-hud').hidden = true;
-    $('win-eyebrow').textContent = selectedLevel === 'kart' ? 'STERNENRENNEN GESCHAFFT' : 'PLANETENREISE GESCHAFFT';
     $('win-title').textContent = 'Dein Kristall!';
     const place = result.place === 1 ? '1. Platz' : `${result.place}. Platz`;
     $('win-stats').innerHTML = (selectedLevel === 'kart' ? [
@@ -1041,7 +1000,6 @@ async function main() {
     sound.setScene('victory');
     hint('', 0);
     const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
-    $('win-eyebrow').textContent = `${chapter.short.toUpperCase()} GESCHAFFT`;
     $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Die Trommel singt!'
       : selectedLevel === 'tilt' ? 'Weich gelandet!' : 'Der Blütenhof leuchtet!';
     $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ♪ ${run.chimes} Glocken · ◇ ${run.collectibles} Ringe`
@@ -1148,7 +1106,6 @@ async function main() {
     $('title').classList.add('hidden');
     $('win').classList.add('hidden');
     document.body.classList.add('playing');
-    $('chapter-guide').hidden = selectedLevel === 'adventure' || selectedLevel === 'kart';
     if (Object.hasOwn(CHAPTER_TYPES, selectedLevel)) {
       if (!chapterGames.has(selectedLevel)) chapterGames.set(selectedLevel, new CHAPTER_TYPES[selectedLevel](art));
       chapterGame = chapterGames.get(selectedLevel);
@@ -1163,7 +1120,6 @@ async function main() {
       $('btn-jump').setAttribute('aria-label', chapter.jumpLabel);
       $('btn-spin').textContent = chapter.actionIcon;
       $('btn-spin').setAttribute('aria-label', chapter.actionLabel);
-      $('chapter-guide').textContent = `${chapter.keys}. Controller: ${chapter.controller}. ${selectedLevel === 'sky' ? 'Ballons bremsen dich kurz: +2,5 Sekunden. Eine Rolle schützt dich.' : 'Eine weiche Landung bringt dich zum Checkpoint zurück: +2 Sekunden.'} Die Uhr pausiert mit dir.`;
       hint(document.body.classList.contains('touch') ? chapter.touch : chapter.keys, 12);
       chapterGame.render(camera, 0, {reducedMotion});
     } else {
@@ -1215,8 +1171,6 @@ async function main() {
     for (const id of ['title', 'win', 'pause']) $(id).classList.add('hidden');
     $('toast').classList.remove('show');
     $('pause-menu').hidden = true;
-    $('chapter-guide').hidden = false;
-    $('chapter-guide').textContent = 'Laufe in ein Tor. Jede Reise hat ihre eigene Bestzeit. Im Sternenhof läuft keine Uhr.';
     $('btn-jump').textContent = '↑';
     $('btn-jump').setAttribute('aria-label', 'Springen');
     $('btn-spin').textContent = '⟳';
@@ -1257,6 +1211,7 @@ async function main() {
     camera.fov = baseFov();
     camera.updateProjectionMatrix();
     selectLevel(selectedLevel);
+    showTitleTop();
     document.querySelector(`[data-level="${selectedLevel}"]`).focus();
   }
 
@@ -1277,7 +1232,6 @@ async function main() {
   });
   if (TEST_MENU) $('start').before($('chapter-select'));
   const showQuick = () => { updatePersonalBests(); $('quick-dialog').showModal(); };
-  $('title-quick').addEventListener('click', showQuick);
   $('pause-quick').addEventListener('click', showQuick);
   selectLevel('adventure');
   for (const id of ['show-times', 'pause-times']) $(id)?.addEventListener('click', () => {
@@ -1321,10 +1275,8 @@ async function main() {
     document.body.classList.toggle('paused', paused);
     $('pause').classList.toggle('hidden', !paused);
     $('rescue').hidden = state === 'chapter' ? chapterCountdown > 0 : state !== 'play' || !['play', 'biplane'].includes(player.state);
-    if (paused) {
-      $('pause-objective').textContent = $('objective').textContent;
-      $('resume').focus();
-    } else $('pause-button').focus();
+    if (paused) $('resume').focus();
+    else $('pause-button').focus();
   }
   input.onPause = () => {
     if (document.querySelector('dialog[open]')) return;
@@ -1389,6 +1341,7 @@ async function main() {
   startButton.disabled = false;
   startButton.textContent = 'Spielen';
   $('status').textContent = '';
+  showTitleTop();
   if (!TEST_MENU) {
     $('chapter-description').textContent = 'Vom Sternenhof beginnt deine Reise.';
     $('chapter-keys').textContent = 'WASD / Pfeile laufen · Leertaste springen · Laufe in ein Tor';
@@ -1566,8 +1519,6 @@ async function main() {
     for (const ev of wildlife.update(dt, elapsed, player, {active: state === 'play' && !fight.on, camera})) {
       if (ev.type === 'wildlifeMeet') {
         friends.add(ev.kind);
-        $(`friend-${ev.kind}`).classList.add('found');
-        toast(ev.kind === 'bird' ? 'Ein kleiner Wiesenvogel!' : 'Ein neugieriges Eichhörnchen!');
         sound.play('ring');
       } else sound.wildlife(ev);
     }

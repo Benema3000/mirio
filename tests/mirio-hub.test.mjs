@@ -46,10 +46,14 @@ test('souvenir interaction areas never overlap a portal entrance or the central 
   }
 });
 
-test('nearby signs name the closest portal in the fan', () => {
-  const visit = createHubVisit();
-  stepHubVisit(visit, .1, {x: -1, z: -11, height: 0, grounded: true});
-  assert.equal(visit.near.level, 'marble');
+test('nearby signs name the gate Mirio stands in front of', () => {
+  for (const portal of HUB_PORTALS) {
+    const visit = createHubVisit();
+    const toSpawn = Math.hypot(HUB.spawn.x - portal.x, HUB.spawn.z - portal.z);
+    const x = portal.x + (HUB.spawn.x - portal.x) * 3 / toSpawn, z = portal.z + (HUB.spawn.z - portal.z) * 3 / toSpawn;
+    stepHubVisit(visit, .1, {x, z, height: 0, grounded: true});
+    assert.equal(visit.near?.level, portal.level);
+  }
 });
 
 test('unknown saved worlds cannot block the chorus; a missing available echo can', () => {

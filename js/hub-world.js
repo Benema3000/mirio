@@ -11,7 +11,8 @@ import {HUB, HUB_PORTALS, HUB_STONES, HUB_STONE_RADIUS, createHubVisit, hubBound
 const UP = new THREE.Vector3(0, 1, 0), FORWARD = new THREE.Vector3(0, 0, -1);
 const CREAM = 0xfff0ce, LEAF = 0x8bc8a2, GOLD = 0xf5c864, INK = 0x435a65;
 const PHYSICS_STEP = 1 / 120, MAX_FRAME = .05;
-const PORTRAIT_DISTANCE = 42;
+// Inside the ring of gates (hub-rules.js), whatever the screen's shape.
+const CAMERA_DISTANCE = 8;
 const NOTE_COLORS = [0xef9ead, 0x9ccfa5, 0x91cbdc];
 const groundY = (x, z) => Math.sqrt(Math.max(0, HUB.radius ** 2 - x * x - z * z)) - HUB.radius;
 const point = (x, z, height = 0) => new THREE.Vector3(x, groundY(x, z) + height, z);
@@ -49,14 +50,15 @@ function starGeometry() {
   shape.closePath();
   return new THREE.ExtrudeGeometry(shape, {depth: .13, bevelEnabled: false});
 }
-function label(text, color = '#435a65', width = 768) {
-  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = 128;
+function label(text, color = '#2f4650', width = 1024) {
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = 200;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff5dd'; ctx.beginPath(); ctx.roundRect(4, 10, width - 8, 105, 30); ctx.fill();
-  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '600 62px sans-serif';
-  ctx.fillText(text, width / 2, 65);
+  ctx.fillStyle = '#fff5dd'; ctx.strokeStyle = '#2f4650'; ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.roundRect(8, 14, width - 16, 172, 60); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '800 112px sans-serif';
+  ctx.fillText(text, width / 2, 104, width - 80);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({map: canvasTexture(canvas), depthWrite: false}));
-  sprite.scale.set(6.2, 1.03, 1);
+  sprite.scale.set(7, 1.37, 1);
   return sprite;
 }
 
@@ -275,9 +277,9 @@ export class HubWorld {
 
   #prepareCamera(camera) {
     if (!this.#rig) this.#rig = new CameraRig(camera, [this.#planet]);
-    this.#rig.distance = camera.aspect < 1 ? PORTRAIT_DISTANCE : 24;
+    this.#rig.distance = CAMERA_DISTANCE;
     if (!this.#snapCamera) return;
-    this.#rig.pitch = .68; this.#rig.snap(this.#player, this.#facing); this.#snapCamera = false;
+    this.#rig.pitch = .42; this.#rig.snap(this.#player, this.#facing); this.#snapCamera = false;
   }
 
   #containPlayer() {
