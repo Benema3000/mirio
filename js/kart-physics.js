@@ -61,14 +61,16 @@ export const DRIVE = {
   maxYaw: 1.1,
   // Drift: needs this speed; the arc turns this fast, plus or minus the
   // stick's share; the body turns this far into it, following this fast.
-  driftSpeed: 9,
-  driftTurn: 1.2,
-  driftSteer: 0.9,
+  driftSpeed: 7,
+  driftTurn: 0.26,
+  driftSteer: 0.78,
   driftAngle: 0.45,
   bodyFollow: 10,
   // Seconds of drifting for a blue and an orange mini-turbo, and their length.
-  charge: [0.6, 1.3],
-  turbo: [0.6, 1.1],
+  charge: [0.5, 1.1],
+  turbo: [0.8, 1.3],
+  turboKick: [2.5, 4.5],
+  releaseGrip: 0.6,
   // Kerbs: faster than this into them bounces; slower scrapes along.
   wallHit: 4,
   wallKeep: 0.72,
@@ -166,6 +168,9 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
     const level = driftLevel(k);
     if (level > 0 && !ctl.hold) {
       k.turbo = DRIVE.turbo[level - 1];
+      k.v = Math.max(k.v, Math.min(DRIVE.boostTop, k.v + DRIVE.turboKick[level - 1]));
+      k.course *= DRIVE.releaseGrip;
+      k.yaw = k.course;
       events.push('turbo');
     }
     k.drift = 0;
@@ -186,8 +191,8 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
   const assist = DRIVE.assist * bend;
   const air = airborne ? DRIVE.airTurn : 1;
   if (k.drift) {
-    // The stick steers the arc; the body turns into it.
-    const carve = k.drift * (DRIVE.driftTurn + DRIVE.driftSteer * k.steer * k.drift);
+    // Follow the bend while the stick tightens or opens the sliding arc.
+    const carve = bend - assist + k.drift * DRIVE.driftTurn + DRIVE.driftSteer * k.steer;
     const offset = k.yaw - k.course;
     k.course = clampYaw(k.course + (carve * air + assist - bend) * dt);
     k.yaw = clampYaw(k.course + offset + (k.drift * DRIVE.driftAngle - offset) * (1 - Math.exp(-DRIVE.bodyFollow * dt)));
@@ -239,4 +244,10 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
 
 function clampYaw(yaw) {
   return Math.max(-DRIVE.maxYaw, Math.min(DRIVE.maxYaw, yaw));
+}
+
+/** Time of crossing a line, using measured progress rather than body speed. */
+export function crossingTime(elapsed, dt, before, after, line) {
+  const fraction = Math.max(0, Math.min(1, (line - before) / Math.max(Number.EPSILON, after - before)));
+  return elapsed - dt + fraction * dt;
 }

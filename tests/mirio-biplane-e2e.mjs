@@ -27,7 +27,7 @@ async function open(options) {
     window.__testPad = {connected: false, mapping: 'standard', axes: [0, 0, 0, 0], buttons: Array.from({length: 16}, () => ({pressed: false, value: 0}))};
     Object.defineProperty(navigator, 'getGamepads', {value: () => [window.__testPad], configurable: true});
   });
-  await page.goto(`${BASE}?test`, {waitUntil: 'domcontentloaded', timeout: 120000});
+  await page.goto(`${BASE}?test&menu`, {waitUntil: 'domcontentloaded', timeout: 120000});
   await until(page, () => window.__mirio && !document.getElementById('start').disabled, null, 120000);
   return {context, page, errors};
 }

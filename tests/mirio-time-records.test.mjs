@@ -58,6 +58,28 @@ test('only a strictly faster time replaces the personal best', async t => {
   assert.equal(storage.writes, 2);
 });
 
+test('Klangkugel saves separately without replacing existing course records', async t => {
+  const storage = store({'mirio-time-best-v2:kart': '42000', 'mirio-time-best-v1:sky': '21000'});
+  const records = await fixture(t, storage);
+  assert.equal(records.savePersonalBest('marble', 61000).isNew, true);
+  assert.equal(records.readPersonalBest('marble'), 61000);
+  assert.equal(records.readPersonalBest('kart'), 42000);
+  assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
+  const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
+  assert.equal(reloaded.readPersonalBest('marble'), 61000);
+});
+
+test('Seifenstern persists its own best while keeping musical and legacy times', async t => {
+  const storage = store({'mirio-time-best-v2:marble': '52380', 'mirio-time-best-v1:sky': '21000'});
+  const records = await fixture(t, storage);
+  assert.equal(records.savePersonalBest('tilt', 66000).isNew, true);
+  assert.equal(records.readPersonalBest('tilt'), 66000);
+  assert.equal(records.readPersonalBest('marble'), 52380);
+  assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
+  const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
+  assert.equal(reloaded.readPersonalBest('tilt'), 66000);
+});
+
 test('unknown levels and invalid durations cannot create or replace records', async t => {
   const storage = store();
   const { readPersonalBest, savePersonalBest } = await fixture(t, storage);
@@ -75,7 +97,7 @@ test('unknown levels and invalid durations cannot create or replace records', as
 
 test('malformed local entries and unrelated legacy scores are ignored', async t => {
   for (const bad of ['', '0', '-3', '3.4', 'NaN', 'Infinity', '86000oops', '86400001', '{}', 'null', ' 30000 ']) {
-    const storage = store({ 'mirio-time-best-v1:sky': bad, 'mirio-best': '1' });
+    const storage = store({ 'mirio-time-best-v2:sky': bad, 'mirio-best': '1' });
     const records = await fixture(t, storage);
     assert.equal(records.readPersonalBest('sky'), null, `damaged value ${JSON.stringify(bad)}`);
     assert.equal(records.savePersonalBest('sky', 40000).isNew, true);
@@ -93,13 +115,13 @@ test('a blocked storage getter still supports bests for the current session', as
 });
 
 test('quota failures retain a new best despite a stale persisted value', async t => {
-  const storage = store({ 'mirio-time-best-v1:ribbon': '15000' });
+  const storage = store({ 'mirio-time-best-v2:ribbon': '15000' });
   storage.setItem = () => { throw new Error('QuotaExceededError'); };
   const { readPersonalBest, savePersonalBest } = await fixture(t, storage);
   assert.equal(readPersonalBest('ribbon'), 15000);
   assert.deepEqual(savePersonalBest('ribbon', 14000), { best: 14000, previous: 15000, isNew: true });
   assert.equal(readPersonalBest('ribbon'), 14000, 'stale storage must not undo the in-memory improvement');
-  storage.entries.set('mirio-time-best-v1:ribbon', '13000');
+  storage.entries.set('mirio-time-best-v2:ribbon', '13000');
   assert.equal(readPersonalBest('ribbon'), 13000, 'a better result from another tab remains visible');
 });
 
@@ -111,4 +133,14 @@ test('missing storage and read failures both keep levels usable', async t => {
   assert.equal(unreadable.savePersonalBest('ribbon', 12000).best, 12000);
   assert.equal(unreadable.readPersonalBest('ribbon'), 12000);
   assert.equal(unreadable.readPersonalBest('sky'), null);
+});
+
+
+test('changed courses preserve old records without ranking them', async t => {
+  const storage = store({'mirio-time-best-v1:sky': '21000'});
+  const records = await fixture(t, storage);
+  assert.equal(records.readPersonalBest('sky'), null);
+  assert.equal(records.savePersonalBest('sky', 74000).previous, null);
+  assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
+  assert.equal(storage.entries.get('mirio-time-best-v2:sky'), '74000');
 });

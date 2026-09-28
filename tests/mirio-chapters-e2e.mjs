@@ -2,6 +2,7 @@
 // direct kart entry. Public submissions go only to the configured local server.
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
+import {CHAPTERS} from '../js/chapters.js';
 const {chromium} = await import(process.env.PLAYWRIGHT ?? 'playwright');
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:8766/';
 const browser = await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
@@ -19,7 +20,7 @@ async function open(options){
     window.__testPad={connected:false,mapping:'standard',axes:[0,0,0,0],buttons:Array.from({length:16},()=>({pressed:false,value:0}))};
     Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>[window.__testPad]});
   });
-  await page.goto(`${BASE}?test`,{waitUntil:'domcontentloaded',timeout:120000});
+  await page.goto(`${BASE}?test&menu`,{waitUntil:'domcontentloaded',timeout:120000});
   await until(page,()=>window.__mirio&&!document.getElementById('start').disabled,null,120000);
   return {context,page,errors};
 }
@@ -32,8 +33,8 @@ async function fits(page,selector){
 }
 try{
   const {context,page,errors}=await open({viewport:{width:1280,height:800}});
-  await check('a real logo and four visual level choices replace the long start-screen copy',async()=>{
-    assert.equal(await page.locator('[data-level]').count(),4);
+  await check('the logo and every journey choice appear without introductory copy',async()=>{
+    assert.equal(await page.locator('[data-level]').count(),Object.keys(CHAPTERS).length);
     assert.ok(await page.locator('#game-logo').evaluate(img=>img.complete&&img.naturalWidth>0));
     assert.equal((await snap(page)).selectedLevel,'adventure');
     assert.equal(await page.locator('#title .intro').count(),0);
@@ -94,13 +95,13 @@ try{
     await until(page,()=>window.__mirio.snapshot().state==='win');
     assert.match(await page.textContent('#win-title'),/Post/);
     assert.match(await page.textContent('#win-time'),/^\d+:\d{2}\.\d{2}$/);
-    assert.ok(await page.evaluate(()=>Number(localStorage.getItem('mirio-time-best-v1:sky'))>0));
-    assert.equal(await page.evaluate(()=>localStorage.getItem('mirio-time-best-v1:ribbon')),null);
+    assert.ok(await page.evaluate(()=>Number(localStorage.getItem('mirio-time-best-v2:sky'))>0));
+    assert.equal(await page.evaluate(()=>localStorage.getItem('mirio-time-best-v2:ribbon')),null);
     await shot(page,'chapter-result');
   });
   await check('a temporary score-server failure permits retry with the same finished run',async()=>{
     let refuse=true;let submitted=null;
-    await page.route('**/api/times.php',async route=>{
+    await page.route('**/api/times.php?*',async route=>{
       if(route.request().method()==='POST'){
         submitted=route.request().postDataJSON();
         if(refuse){refuse=false;return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:'unavailable',message:'Kurz offline'})});}
@@ -118,7 +119,7 @@ try{
     assert.ok(submitted.penaltyMs>=2000);
     assert.match(await page.textContent('#score-status'),/Platz|eingetragen/);
     assert.equal((await page.textContent('#win-board .mine .name'))?.trim(),'Wolkenkind');
-    await page.unroute('**/api/times.php');
+    await page.unroute('**/api/times.php?*');
   });
   await check('replay resets the flight, while menu navigation retains the personal best',async()=>{
     await page.click('#again');const s=await snap(page);assert.equal(s.chapterRun.time,0);assert.equal(s.chapterRun.collectibles,0);
@@ -135,15 +136,16 @@ try{
     assert.equal((await snap(page)).chapterRun.airSpin,false);
     await page.keyboard.up('KeyD');await shot(page,'chapter-ribbon');
   });
-  await check('garden rescue, finish and replay stay within their own level',async()=>{
+  await check('garden rescue preserves its room and replay clears discoveries',async()=>{
     await page.click('#pause-button');await page.click('#rescue');
     assert.equal((await snap(page)).selectedLevel,'ribbon');
-    await gameTime(page,8);
-    await page.evaluate(()=>window.__mirio.chapterSeek(.99));
-    await page.keyboard.down('KeyD');await until(page,()=>window.__mirio.snapshot().state==='win');await page.keyboard.up('KeyD');
-    assert.match(await page.textContent('#win-title'),/Gartentor/);
-    assert.ok(await page.evaluate(()=>Number(localStorage.getItem('mirio-time-best-v1:ribbon'))>0));
-    await page.click('#again');assert.equal((await snap(page)).chapterRun.collectibles,0);
+    const recovered=(await snap(page)).chapterRun;
+    assert.equal(recovered.seeds,0);assert.equal(recovered.status,'playing');
+    assert.ok(recovered.penalties>=2);
+    // Complete seed/door/finish routes are played in mirio-garden-e2e.mjs.
+    await menu(page);await choose(page,'ribbon');
+    assert.equal((await snap(page)).chapterRun.collectibles,0);
+    assert.equal((await snap(page)).chapterRun.seeds,0);
     await menu(page);
   });
   await check('the kart has a direct menu entry and keeps its gas, steering and drift controls',async()=>{
@@ -166,7 +168,8 @@ try{
   });
   await context.close();
   const mobile=await open({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:1});
-  await check('portrait menu shows all four levels and Play without scrolling',async()=>{
+  await check('portrait menu keeps journey choices and Play reachable',async()=>{
+    assert.equal(await mobile.page.locator('[data-level]').count(),Object.keys(CHAPTERS).length);
     for(const id of ['#game-logo','[data-level="ribbon"]','[data-level="kart"]','#start','#show-help'])await fits(mobile.page,id);
     assert.equal(await mobile.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
     await shot(mobile.page,'chapter-menu-phone');

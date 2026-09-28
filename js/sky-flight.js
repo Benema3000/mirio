@@ -1,10 +1,11 @@
-// An original on-rails cloud course. The existing drawing-derived Mirio is
-// used unchanged as its pilot; every sky prop and course shape is new.
+// A postal journey through connected air lanes. Miro’s drawing-derived pilot
+// stays unchanged; the islands, recipients and sky toys are original scenery.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildBiplane } from './biplane-model.js';
 import { buildMirio } from './mirio-model.js';
 import { mulberry32 } from './world.js';
+import { SkyPostScene } from './sky-post-scene.js';
 import { SKY, balloonPosition, createSkyRun, makeSkyCourse, rescueSkyRun, seekSkyRun, skySnapshot, stepSkyRun } from './sky-flight-rules.js';
 
 const Y = new THREE.Vector3(0, 1, 0);
@@ -201,6 +202,7 @@ export class SkyFlight {
     this.streaks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.014, .028, 1, 4).rotateX(Math.PI / 2),
       new THREE.MeshBasicMaterial({color: 0xfff7df, transparent: true, opacity: .3, depthWrite: false}), 22);
     this.streaks.frustumCulled = false; this.streaks.name = 'sky:slipstream'; this.scene.add(this.streaks);
+    this.postScene = new SkyPostScene(this.scene, this.plane.group, this.course, skyFrame);
     this.reset();
   }
 
@@ -229,6 +231,7 @@ export class SkyFlight {
   snapshot() { return skySnapshot(this.run, this.course); }
   layout() {
     return {length: this.course.length, width: SKY.width, height: SKY.height,
+      deliveries: this.course.deliveries.map(d => ({...d})), routes: this.course.routes.map(r => ({...r})), chimes: this.course.chimes.map(c => ({...c})), airSections: this.course.airSections.map(a => ({...a})),
       rings: this.course.rings.map(r => ({...r})), obstacles: this.course.obstacles.map(o => ({...o})), checkpoints: [...this.course.checkpoints]};
   }
 
@@ -284,5 +287,6 @@ export class SkyFlight {
       orient(dummy, frame); dummy.scale.set(1, 1, 2 + r.speed * .06); dummy.updateMatrix(); this.streaks.setMatrixAt(i, dummy.matrix);
     }
     this.streaks.instanceMatrix.needsUpdate = true;
+    this.postScene.update(r, dt, {reducedMotion});
   }
 }

@@ -47,19 +47,10 @@ test('collectibles and checkpoints only award once; cloud rescue retains gems wi
   assert.equal(p.x,8);assert.equal(p.collected.size,1);assert.equal(p.penalties,2);assert.ok(p.time>=before+2);
   run(p,1);assert.equal(p.recovery,0);assert.equal(p.recoveries,1);
 });
-test('all authored main-route gaps can be completed by ordinary held jumps without spin',()=>{
-  const p=new RibbonRules();let jumpHeldUntil=0,events=[],safety=0;
-  while(p.status==='playing'&&p.time<100&&safety++<13000){
-    let jump=false;
-    if(p.grounded){const support=p.course.platforms.find(q=>q.id===p.support);if(support?.kind==='ground'&&support.x+support.w/2-p.x<1.5){jump=true;jumpHeldUntil=p.clock+.82;}}
-    events.push(...p.step(DT,{x:1,jump,jumpHeld:p.clock<jumpHeldUntil}));
-  }
-  assert.equal(p.status,'finished',JSON.stringify(p.snapshot()));assert.equal(p.recoveries,0);assert.ok(p.time>45&&p.time<90);
-  assert.ok(p.collected.size>35);assert.equal(events.filter(e=>e.type==='finish').length,1);
-});
-test('upper-route players activate checkpoints and friendly critters never remove gems',()=>{
-  const p=new RibbonRules();p.x=112;p.y=5;p.grounded=false;p.coyote=0;
+test('reversing through rooms updates checkpoints and friendly critters never remove gems',()=>{
+  const p=new RibbonRules();p.x=49;p.y=0;p.grounded=false;p.coyote=0;
   assert.ok(p.step(DT).some(e=>e.type==='checkpoint'));assert.equal(p.checkpoint,2);
+  p.x=-24;p.y=0;p.step(DT);assert.equal(p.checkpoint,1);
   const c=p.course.critters[0];p.x=c.x+Math.sin(p.clock*c.speed+c.phase)*c.range;p.y=c.y;p.collected.add('kept');p.invulnerable=0;
   const e=p.step(DT);assert.ok(e.some(e=>e.type==='bump'&&e.friendly));assert.ok(p.vy>0);assert.ok(p.collected.has('kept'));assert.equal(p.penalties,0);
 });
@@ -68,5 +59,5 @@ test('30/60/120Hz runs agree and seek cannot grant items or finish a run',()=>{
   for(const dt of [1/30,1/60,1/120]){const p=flat();run(p,2,{x:1,jumpHeld:true},dt);positions.push(p.x);assert.ok(Number.isFinite(p.time));}
   assert.ok(Math.max(...positions)-Math.min(...positions)<.03);
   const p=new RibbonRules();p.seek(1);assert.equal(p.status,'playing');assert.ok(p.x<RIBBON.finishX);assert.equal(p.collected.size,0);assert.equal(p.checkpoint,0);assert.equal(p.time,0);
-  const events=run(p,1,{x:1});assert.equal(events.filter(e=>e.type==='finish').length,1);const time=p.time;run(p,2,{x:1,jump:true});assert.equal(p.time,time);
+  const events=run(p,1,{x:1});assert.equal(events.filter(e=>e.type==='finish').length,0);assert.equal(p.seeds.size,0);
 });

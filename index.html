@@ -17,10 +17,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="icon" href="img/mirio.png">
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
-  <canvas id="game" aria-label="Spielfeld"></canvas>
+  <canvas id="game" tabindex="-1" aria-label="Spielfeld"></canvas>
 
   <div id="hud">
     <div class="pill">
@@ -63,7 +63,7 @@
 
   <div id="race-hud" hidden>
     <span id="race-place">1.</span>
-    <span id="race-time">0:00</span><span><span id="race-speed">0</span> <small>km/h</small></span><progress id="race-progress" max="1" value="0" aria-label="Rennfortschritt"></progress><span id="race-technique" hidden></span>
+    <span id="race-time">0:00</span><span><span id="race-speed">0</span> <small>km/h</small></span><progress id="race-progress" max="1" value="0" aria-label="Rennfortschritt"></progress><span id="race-technique" hidden></span><small id="race-route" hidden></small>
   </div>
 
   <div id="toast" role="status"></div>
@@ -81,40 +81,68 @@
   <section id="title" class="overlay">
     <div class="game-menu">
       <div class="menu-heading"><h1><img id="game-logo" src="assets/mirio-logo.png" alt="Mirio" width="720" height="240"></h1><div class="title-art"><img class="hero" src="img/mirio.png" alt="Mirio, gezeichnet von Miro"></div></div>
-      <div id="chapter-select" class="chapter-select" role="group" aria-label="Abenteuer auswählen">
-        <button class="chapter-card selected" data-level="adventure" aria-pressed="true"><img src="assets/menu-adventure.png" alt=""><strong>Planetenreise</strong><em data-best="adventure"></em></button>
-        <button class="chapter-card" data-level="kart" aria-pressed="false"><img src="assets/menu-kart.png" alt=""><strong>Sternenrennen</strong><em data-best="kart"></em></button>
-        <button class="chapter-card" data-level="sky" aria-pressed="false"><img src="assets/menu-sky.png" alt=""><strong>Wolkenpost</strong><em data-best="sky"></em></button>
-        <button class="chapter-card" data-level="ribbon" aria-pressed="false"><img src="assets/menu-ribbon.png" alt=""><strong>Blütenpfad</strong><em data-best="ribbon"></em></button>
-      </div>
-      <button id="start" class="big" disabled>Lädt …</button>
+      <button id="start" class="big" data-menu-default disabled>Lädt …</button>
       <p id="status" class="status" role="status">Dein kleines Universum entsteht …</p>
       <div class="menu-links"><button id="show-times" class="text-button">Bestzeiten</button><button id="show-help" class="text-button">Hilfe &amp; Credits</button></div>
+      <button id="title-quick" class="text-button quick-link">Reise direkt wählen</button>
     </div>
   </section>
 
+  <dialog id="quick-dialog" class="menu-dialog" aria-labelledby="quick-title">
+    <button class="dialog-close" data-close="quick-dialog" aria-label="Reisewahl schliessen">×</button>
+    <h2 id="quick-title">Direkt zur Reise</h2>
+    <div id="chapter-select" class="chapter-select" role="group" aria-label="Abenteuer auswählen">
+      <button class="chapter-card selected" data-level="adventure" aria-pressed="true"><img src="assets/menu-adventure.png" alt=""><strong>Planetenreise</strong><em data-best="adventure"></em></button>
+      <button class="chapter-card" data-level="kart" aria-pressed="false"><img src="assets/menu-kart.png" alt=""><strong>Sternenrennen</strong><em data-best="kart"></em></button>
+      <button class="chapter-card" data-level="sky" aria-pressed="false"><img src="assets/menu-sky.png" alt=""><strong>Wolkenpost</strong><em data-best="sky"></em></button>
+      <button class="chapter-card" data-level="ribbon" aria-pressed="false"><img src="assets/menu-ribbon.png" alt=""><strong>Blütenpfad</strong><em data-best="ribbon"></em></button>
+      <button class="chapter-card" data-level="marble" aria-pressed="false"><span class="marble-preview" aria-hidden="true"><i></i></span><strong>Klangkugel</strong><em data-best="marble"></em></button>
+      <button class="chapter-card" data-level="tilt" aria-pressed="false"><span class="tilt-preview" aria-hidden="true"><i>✦</i></span><strong>Seifenstern</strong><em data-best="tilt"></em></button>
+    </div>
+    <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
+  </dialog>
+
   <dialog id="scores-dialog" class="menu-dialog" aria-labelledby="title-scores-heading">
     <button class="dialog-close" data-close="scores-dialog" aria-label="Bestzeiten schliessen">×</button>
+    <nav class="level-tabs" aria-label="Bestzeiten auswählen">
+      <button data-scores-level="adventure" aria-pressed="true">Planetenreise</button>
+      <button data-scores-level="kart" aria-pressed="false">Sternenrennen</button>
+      <button data-scores-level="sky" aria-pressed="false">Wolkenpost</button>
+      <button data-scores-level="ribbon" aria-pressed="false">Blütenpfad</button>
+      <button data-scores-level="marble" aria-pressed="false">Klangkugel</button>
+      <button data-scores-level="tilt" aria-pressed="false">Seifenstern</button>
+    </nav>
     <section id="title-scores" class="title-scores"><h2 id="title-scores-heading">Bestzeiten · Planetenreise</h2><ol id="title-board" class="board"></ol><p id="title-board-status" class="status" role="status"></p></section>
+    <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
   </dialog>
   <dialog id="help-dialog" class="menu-dialog" aria-labelledby="help-title">
     <button class="dialog-close" data-close="help-dialog" aria-label="Hilfe schliessen">×</button>
     <h2 id="help-title">So geht’s</h2>
+    <nav class="level-tabs" aria-label="Hilfe auswählen">
+      <button data-help-level="hub" aria-pressed="true">Sternenhof</button>
+      <button data-help-level="adventure" aria-pressed="false">Planetenreise</button>
+      <button data-help-level="kart" aria-pressed="false">Sternenrennen</button>
+      <button data-help-level="sky" aria-pressed="false">Wolkenpost</button>
+      <button data-help-level="ribbon" aria-pressed="false">Blütenpfad</button>
+      <button data-help-level="marble" aria-pressed="false">Klangkugel</button>
+      <button data-help-level="tilt" aria-pressed="false">Seifenstern</button>
+    </nav>
     <p id="chapter-description" class="chapter-description"></p><p id="chapter-keys" class="controls keys"></p><p id="chapter-touch" class="controls touch"></p>
-    <p class="controls">Controller: linker Stick · A springen / rollen · X drehen / Turbo<br>Kart: RT Gas · LT Bremse · A + lenken driften<br>Esc / Start: Pause</p>
+    <p id="chapter-controller" class="controls"></p>
     <p class="credit">Figur und Zeichnungen: <b>Miro</b> · Ein Experiment von <a href="https://goodvantage.ch/">Goodvantage</a></p>
     <p class="credit"><a href="https://github.com/Benema3000/mirio" target="_blank" rel="noopener">Quellcode (MIT)</a> · <a href="audio/CREDITS.md" target="_blank" rel="noopener">Audio &amp; Credits</a></p>
     <p class="legal">Miros Zeichnungen bleiben seine. Ein kostenloses, nicht kommerzielles Spiel. Zusätzliche Klangaufnahmen sind gemeinfrei (CC0).</p>
+    <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
   </dialog>
 
   <section id="pause" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title">
     <div class="card pause-card">
       <p class="eyebrow">ZEIT ZUM DURCHATMEN</p><h2 id="pause-title">Kleine Pause.</h2>
       <p class="pause-objective" id="pause-objective"></p>
-      <button id="resume" class="big">Weiter geht's</button>
+      <button id="resume" class="big" data-menu-default>Weiter geht's</button>
       <div class="settings">
-        <label for="music-volume">Musik <input id="music-volume" type="range" min="0" max="100" value="55"></label>
-        <label for="effects-volume">Geräusche <input id="effects-volume" type="range" min="0" max="100" value="80"></label>
+        <label for="music-volume">Musik <input id="music-volume" type="range" min="0" max="100" step="5" value="55"></label>
+        <label for="effects-volume">Geräusche <input id="effects-volume" type="range" min="0" max="100" step="5" value="80"></label>
         <label class="check-setting"><input id="reduced-motion" type="checkbox"> Ruhiges Bild <small>Ohne Kamerawackeln</small></label>
       </div>
       <div class="field-guide" aria-label="Entdeckte Tierfreunde"><span id="friend-bird">Wiesenvogel</span><span id="friend-squirrel">Eichhörnchen</span><small id="garden-guide">0 / 3 Sprungblüten</small></div>
@@ -122,8 +150,11 @@
       <p class="trail-tip">✦ Entdecke die leuchtenden Ringe! Eine ganze Spur schenkt dir 12 Sekunden Glitzermagnet.<br>❀ Grosse Blüten federn dich hoch. Kleine Wächter: von oben hüpfen oder drehen!</p>
       <p class="plane-guide">✈ <b>Wiesensummer</b> · F / Y: einsteigen und landen<br>Leertaste / A: steigen · C / B: sinken · Shift / X: Turbo<br>Bleibt nah an der Wiese. Zum Mond geht es mit der Rakete!</p>
       <p id="chapter-guide" class="chapter-guide" hidden></p>
+      <div class="menu-links pause-links"><button id="pause-times" class="text-button">Bestzeiten</button><button id="pause-help" class="text-button">Hilfe &amp; Credits</button></div>
       <button id="rescue" class="text-button">Zurück zum Checkpoint</button>
-      <button id="pause-menu" class="text-button">Abenteuer auswählen</button>
+      <button id="pause-menu" class="text-button">Zum Sternenhof</button>
+      <button id="pause-quick" class="text-button">Reise direkt wählen</button>
+      <small class="controller-menu">Steuerkreuz / Stick · A wählen · B zurück</small>
     </div>
   </section>
 
@@ -143,8 +174,9 @@
       </form>
       <p id="score-status" class="status" role="status"></p>
       <ol id="win-board" class="board"></ol>
-      <button id="again" class="big">Nochmal spielen</button>
-      <button id="win-menu" class="text-button">Nächstes Abenteuer auswählen</button>
+      <button id="again" class="big" data-menu-default>Nochmal spielen</button>
+      <button id="win-menu" class="text-button">Zum Sternenhof</button>
+      <small class="controller-menu">Steuerkreuz / Stick · A wählen · B Sternenhof</small>
     </div>
   </section>
 
@@ -164,6 +196,6 @@
     }
   }
   </script>
-  <script type="module" src="js/main.js?v=17"></script>
+  <script type="module" src="js/main.js?v=18"></script>
 </body>
 </html>

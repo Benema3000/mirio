@@ -1,0 +1,52 @@
+// Exercise both public protocol generations against isolated disk storage.
+import assert from 'node:assert/strict';
+import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {spawn} from 'node:child_process';
+import {createServer} from 'node:net';
+import {COURSE_VERSION} from '../js/course-version.js';
+
+const HTTP_OK = 200, HTTP_BAD_REQUEST = 400;
+const directory = await mkdtemp(join(tmpdir(), 'mirio-course-test-'));
+const legacy = {times: {adventure: [], sky: [{id: 1, name: 'Altflug', timeMs: 21000, date: '2026-01-01'}], ribbon: [], kart: []}, used: [], recent: [], nextId: 2};
+const legacyText = JSON.stringify(legacy);
+await writeFile(join(directory, 'times.json'), legacyText);
+const reservation = createServer();
+await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
+const port = reservation.address().port;
+await new Promise(resolve => reservation.close(resolve));
+const server = spawn(process.env.PHP ?? 'php', ['-n', '-S', `127.0.0.1:${port}`], {
+  cwd: new URL('../', import.meta.url), env: {...process.env, MIRIO_TIMES_DIR: directory}, stdio: 'ignore',
+});
+const base = `http://127.0.0.1:${port}/api/times.php`;
+const current = `${base}?course=${COURSE_VERSION}`;
+const post = (url, token) => fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({level: 'sky', token, name: 'Wolkenkind', timeMs: 20000})});
+try {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try { await fetch(base); break; } catch { await new Promise(resolve => setTimeout(resolve, 100)); }
+  }
+  const oldBoard = await (await fetch(`${base}?level=sky`)).json();
+  const newBoard = await (await fetch(`${current}&level=sky`)).json();
+  assert.equal(oldBoard.top[0].name, 'Altflug');
+  assert.deepEqual(newBoard.top, []);
+  assert.equal(newBoard.course, COURSE_VERSION, 'clients must be able to reject an outdated API');
+  assert.equal((await post(current, oldBoard.token)).status, HTTP_BAD_REQUEST);
+  assert.equal((await post(base, newBoard.token)).status, HTTP_BAD_REQUEST);
+  assert.equal((await fetch(`${base}?course=../legacy&level=sky`)).status, HTTP_BAD_REQUEST);
+
+  // The honest elapsed duration must fit the server's token-age allowance.
+  await new Promise(resolve => setTimeout(resolve, 6000));
+  const response = await post(current, newBoard.token);
+  assert.equal(response.status, HTTP_OK);
+  const result = await response.json();
+  assert.equal(result.top[0].name, 'Wolkenkind');
+  assert.equal(result.top[0].timeMs, 20000);
+  assert.equal(await readFile(join(directory, 'times.json'), 'utf8'), legacyText);
+  assert.ok(JSON.parse(await readFile(join(directory, 'courses', COURSE_VERSION, 'times.json'), 'utf8')).times.sky.length);
+  console.log('PASS course records, legacy preservation, token isolation, submission');
+} finally {
+  server.kill();
+  await new Promise(resolve => server.once('exit', resolve));
+  await rm(directory, {recursive: true, force: true});
+}

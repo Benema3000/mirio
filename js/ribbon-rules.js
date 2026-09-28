@@ -1,55 +1,13 @@
-// Blütenpfad: deterministic, rendering-independent rules for a gentle side-scroll.
+// Blütenpfad: deterministic movement, room links, and persistent discoveries.
+import { GARDEN, makeGardenCourse } from './garden-course.js';
 // Coordinates are metres; player y is at the soles and all platforms are one-way.
 export const RIBBON = Object.freeze({ speed: 7.2, acceleration: 40, braking: 54, airAcceleration: 29,
   jumpSpeed: 12.4, gravity: 27, releasedGravity: 43, coyote: .13, jumpBuffer: .15,
-  halfWidth: .28, height: 1.95, finishX: 334, recoveryPenalty: 2, fallY: -8 });
+  halfWidth: .28, height: 1.95, finishX: GARDEN.finishX, recoveryPenalty: 2, fallY: -8 });
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const approach = (v, to, amount) => v < to ? Math.min(to, v + amount) : Math.max(to, v - amount);
 
-export function makeRibbonCourse() {
-  const ground = [
-    [-8,34,0], [37,58,.4], [61,80,0], [83,106,.7], [109,132,.4], [135,157,1.1],
-    [160,184,0], [187,207,.6], [210,232,0], [235,257,.5], [260,281,0], [284,304,.8], [307,344,0],
-  ].map(([left,right,y], i) => ({id:`ground-${i}`,x:(left+right)/2,y,w:right-left,kind:'ground',zone:Math.min(4,Math.floor(i/3))}));
-  const upper = [
-    [21,2.1,5.2], [48,2.8,5], [92,3.7,6], [101,5.2,5], [118,4.1,6],
-    [143,3.7,5], [151,5.2,5], [171,2.45,5], [197,3.2,6], [218,2.3,5],
-    [243,3.5,6], [252,5.1,5], [271,3.2,6], [295,3.6,6], [315,2.5,5],
-  ].map(([x,y,w],i)=>({id:`petal-${i}`,x,y,w,kind:'petal',zone:Math.min(4,Math.floor(x/70))}));
-  const moving = [
-    {x:72,y:2.6,w:4.6,move:{axis:'x',amplitude:1.4,period:4.8,phase:0}},
-    {x:111,y:5.1,w:4.8,move:{axis:'y',amplitude:.8,period:4.6,phase:.5}},
-    {x:179,y:4.2,w:4.8,move:{axis:'x',amplitude:1.5,period:5.2,phase:1}},
-    {x:228,y:4.2,w:4.8,move:{axis:'y',amplitude:.8,period:5,phase:2}},
-    {x:263,y:5.3,w:4.8,move:{axis:'x',amplitude:1.3,period:4.5,phase:2.5}},
-  ].map((p,i)=>({...p,id:`cloud-${i}`,kind:'cloud'}));
-  // A low spring cloud catches the longest early gaps, teaching recovery safely.
-  const catches = [35.5,81.5,158.5,208.5,282.5].map((x,i)=>({id:`catch-${i}`,x,y:-2.5,w:5.4,kind:'catch'}));
-  const platforms=[...ground,...upper,...moving,...catches];
-  const springs = [
-    [88,.7], [139,1.1], [239,.5], [291,.8],
-  ].map(([x,y],i)=>({id:`flower-${i}`,x,y,boost:16.7}));
-  catches.forEach((p,i)=>springs.push({id:`cloud-spring-${i}`,x:p.x,y:p.y,boost:16.7,cloud:true}));
-  const checkpoints = [[5,0],[64,0],[112,.4],[164,0],[214,0],[264,0],[310,0]]
-    .map(([x,y],i)=>({id:`flag-${i}`,x,y,index:i}));
-  const gems=[];
-  // The low ribbon is reachable without any hidden trick. Each gap has a clear arc.
-  for(const p of ground){
-    const left=p.x-p.w/2,right=p.x+p.w/2;
-    for(let x=Math.max(10,left+4);x<Math.min(right-2,329);x+=6.2)
-      gems.push({id:`gem-${gems.length}`,x,y:p.y+1.0,route:'ribbon'});
-  }
-  for(let i=0;i<ground.length-1;i++){
-    const a=ground[i],b=ground[i+1],middle=(a.x+a.w/2+b.x-b.w/2)/2;
-    gems.push({id:`gem-${gems.length}`,x:middle,y:Math.max(a.y,b.y)+2.15,route:'jump'});
-  }
-  for(const p of upper) for(let k=-1;k<=1;k++)
-    gems.push({id:`gem-${gems.length}`,x:p.x+k*1.15,y:p.y+1.05,route:'blossom'});
-  for(const p of moving) gems.push({id:`gem-${gems.length}`,x:p.x,y:p.y+1.1,route:'cloud',platform:p.id});
-  const critters = [[52,.4],[127,.4],[175,0],[224,0],[275,0],[322,0]]
-    .map(([x,y],i)=>({id:`puff-${i}`,x,y,range:1.7,phase:i*1.3,speed:.85+i*.05}));
-  return {name:'Blütenpfad',start:{x:5,y:0},finishX:RIBBON.finishX,platforms,springs,checkpoints,gems,critters};
-}
+export const makeRibbonCourse = makeGardenCourse;
 
 export function platformAt(p, time) {
   const phase=p.move ? Math.sin(time*Math.PI*2/p.move.period+p.move.phase)*p.move.amplitude : 0;
@@ -65,6 +23,8 @@ export class RibbonRules {
     this.coyote=RIBBON.coyote;this.buffer=0;this.airSpin=true;this.spin=0;this.springCooldown=0;
     this.recovery=0;this.invulnerable=0;this.checkpoint=0;this.collected=new Set();this.bumped=new Set();
     this.recoveries=0;this.bestX=this.x;this.lastLanding=0;
+    this.seeds=new Set();this.discovered=new Set(['courtyard']);this.opened=new Set();
+    this.dream=GARDEN.dreamAsleep;this.portalCooldown=0;this.lastDiscovery=0;
     return this.snapshot();
   }
   step(dt,controls={}){
@@ -73,7 +33,8 @@ export class RibbonRules {
     dt=Math.min(dt,.25);
     const events=[];
     if(controls.jump)this.buffer=RIBBON.jumpBuffer;
-    if(controls.action&&!this.grounded&&this.airSpin&&this.recovery<=0){
+    const interacted=controls.action&&this.recovery<=0&&this._interact(events);
+    if(controls.action&&!interacted&&!this.grounded&&this.airSpin&&this.recovery<=0){
       this.airSpin=false;this.spin=.36;this.vy=Math.max(this.vy,4.4);
       this.vx=(Math.abs(controls.x||0)>.1?Math.sign(controls.x):this.facing)*10.2;
       events.push({type:'jump',kind:'spin',x:this.x,y:this.y});
@@ -85,6 +46,7 @@ export class RibbonRules {
   _tick(dt,controls,events){
     const beforeClock=this.clock;
     this.clock+=dt;this.time+=dt;
+    this.portalCooldown=Math.max(0,this.portalCooldown-dt);
     this.buffer=Math.max(0,this.buffer-dt);this.spin=Math.max(0,this.spin-dt);
     this.springCooldown=Math.max(0,this.springCooldown-dt);this.invulnerable=Math.max(0,this.invulnerable-dt);
     if(this.recovery>0){this.recovery=Math.max(0,this.recovery-dt);return;}
@@ -103,12 +65,13 @@ export class RibbonRules {
       events.push({type:'jump',x:this.x,y:this.y});
     }
     const oldY=this.y,oldVy=this.vy;
-    this.x=clamp(this.x+this.vx*dt,-5,this.course.finishX+5);
+    this.x=clamp(this.x+this.vx*dt,GARDEN.minX+1,GARDEN.maxX-1);
     this.vy-=((this.vy>0&&!controls.jumpHeld&&this.springCooldown<=0)?RIBBON.releasedGravity:RIBBON.gravity)*dt;
     this.vy=Math.max(this.vy,-22);this.y+=this.vy*dt;
     let landed=null,highest=-Infinity;
     if(this.vy<=0){
       for(const p of this.course.platforms){
+        if(!this.platformActive(p))continue;
         const a=platformAt(p,beforeClock),b=platformAt(p,this.clock);
         if(this.x+RIBBON.halfWidth>b.x-b.w/2&&this.x-RIBBON.halfWidth<b.x+b.w/2&&oldY>=a.y-.07&&this.y<=b.y+.005&&b.y>highest){landed=b;highest=b.y;}
       }
@@ -147,17 +110,70 @@ export class RibbonRules {
         this.collected.add(gem.id);events.push({type:'bit',id:gem.id,x:gx,y:gy,collectibles:this.collected.size});
       }
     }
+    const room=this.room();
+    if(!this.discovered.has(room.id)){this.discovered.add(room.id);this.lastDiscovery=this.clock;}
     for(const cp of this.course.checkpoints){
-      // Upper blossom routes earn the same safe return points as the low path.
-      if(cp.index>this.checkpoint&&Math.abs(this.x-cp.x)<1.15&&this.y>cp.y-.1){
+      // Reversing through the garden updates recovery to the room just visited.
+      if(cp.index!==this.checkpoint&&Math.abs(this.x-cp.x)<1.15&&this.y>=cp.y-.1){
         this.checkpoint=cp.index;events.push({type:'checkpoint',id:cp.id,index:cp.index,x:cp.x,y:cp.y});
       }
     }
+    for(const seed of this.course.seeds||[]){
+      if(this.seeds.has(seed.id)||Math.hypot(this.x-seed.x,this.y+.95-seed.y)>1.25)continue;
+      this.seeds.add(seed.id);this.lastDiscovery=this.clock;
+      events.push({type:'bit',kind:'seed',id:seed.id,x:seed.x,y:seed.y,seeds:this.seeds.size});
+      if(this.gateOpen())events.push({type:'checkpoint',kind:'gate',x:GARDEN.finishX,y:2});
+    }
     this.bestX=Math.max(this.bestX,this.x);
     if(this.y<RIBBON.fallY)this._recover(events);
-    if(this.x>=this.course.finishX&&this.y>-.5&&this.y<5.5){
+    if(this.gateOpen()&&Math.abs(this.x-this.course.finishX)<2.4&&this.y>=this.course.finishY-.1&&this.grounded){
       this.status='finished';this.vx=0;this.vy=0;events.push({type:'finish',time:this.time,collectibles:this.collected.size});
     }
+  }
+  gateOpen(){return this.seeds.size===(this.course.seeds?.length||GARDEN.seedCount);}
+  platformActive(platform){return (!platform.dream||platform.dream===this.dream)&&(!platform.gate||this.gateOpen());}
+  room(){return this.course.rooms?.find(room=>this.x>=room.min&&this.x<room.max)||{id:'courtyard',name:'Blütenhof',color:0xc0e8ec};}
+  guidance(){
+    const room=this.room().id,missing=this.course.seeds?.filter(item=>!this.seeds.has(item.id))||[];
+    const seed=missing.find(item=>item.room===room)||missing[0];
+    const destination=seed?.room||'courtyard';
+    const route=this.course.guidanceRoutes?.find(item=>item.from===room&&item.to===destination&&this.y>=(item.minY??-Infinity));
+    const door=route&&this.course.doors.find(item=>item.id===route.door);
+    const stair=!seed&&room==='courtyard'&&this.course.platforms.find(p=>p.gate&&p.y>this.y+.2);
+    const finish=stair?{...stair,y:stair.y+.95,icon:'✿'}:{id:'flower-gate',x:GARDEN.finishX,y:GARDEN.finishY,icon:'✿'};
+    const target=door||seed||finish;
+    const dx=target.x-this.x,dy=target.y-this.y-.95;
+    const atDoor=door&&Math.abs(dx)<GARDEN.interactionRadius&&Math.abs(target.y-this.y)<1.6;
+    const direction=atDoor?'↻':Math.abs(dx)<3&&Math.abs(dy)>1.4?(dy>0?'↑':'↓'):(dx<0?'←':'→');
+    return {...target,kind:door?'door':seed?'seed':'finish',direction};
+  }
+  interaction(){
+    const near=item=>Math.abs(this.x-item.x)<GARDEN.interactionRadius&&Math.abs(this.y-item.y)<1.6;
+    const door=this.course.doors?.find(near);
+    if(door)return {kind:'door',item:door,hint:`↻ ${door.icon} ${door.label}`};
+    const flower=this.course.flowers?.find(near);
+    if(flower)return {kind:'song',item:flower,hint:'↻ ♪ ☀ / ☾'};
+    return null;
+  }
+  _interact(events){
+    const target=this.interaction();
+    if(!target||this.portalCooldown>0)return false;
+    this.portalCooldown=GARDEN.portalCooldown;
+    if(target.kind==='song'){
+      this.dream=this.dream===GARDEN.dreamAwake?GARDEN.dreamAsleep:GARDEN.dreamAwake;
+      this.lastDiscovery=this.clock;
+      events.push({type:'spring',kind:'song',x:this.x,y:this.y,dream:this.dream});
+      return true;
+    }
+    const door=target.item,destination=this.course.doors.find(item=>item.id===door.to);
+    this.opened.add(door.id);this.opened.add(destination.id);
+    this.x=destination.x;this.y=destination.y+.04;this.vx=0;this.vy=0;
+    this.grounded=false;this.support=null;this.airSpin=true;this.coyote=RIBBON.coyote;this.buffer=0;
+    this.lastDiscovery=this.clock;
+    const cp=this.course.checkpoints.find(item=>item.room===this.room().id);
+    if(cp)this.checkpoint=cp.index;
+    events.push({type:'checkpoint',kind:'door',id:door.id,x:this.x,y:this.y});
+    return true;
   }
   _recover(events){
     const cp=this.course.checkpoints[this.checkpoint];
@@ -169,16 +185,24 @@ export class RibbonRules {
   }
   rescue(){const events=[];if(this.status==='playing')this._recover(events);return events;}
   seek(progress){
-    // Test staging always chooses authored ground; it never crosses the finish or awards anything.
-    const target=5+clamp(Number.isFinite(progress)?progress:0,0,.995)*(this.course.finishX-5);
-    let p=this.course.platforms.filter(p=>p.kind==='ground').reduce((best,p)=>Math.abs(p.x-target)<Math.abs(best.x-target)?p:best);
-    this.x=clamp(target,p.x-p.w/2+1.2,p.x+p.w/2-1.2);this.y=p.y;
+    // Test staging selects a region floor and never grants its discoveries.
+    const stops=[5,-24,49,125,5],index=Math.min(stops.length-1,Math.floor(clamp(progress,0,1)*stops.length));
+    const target=stops[index];
+    const p=this.course.platforms.find(p=>p.kind==='ground'&&target>=p.x-p.w/2&&target<=p.x+p.w/2);
+    this.x=target;this.y=p.y;
     this.vx=0;this.vy=0;this.grounded=true;this.support=p.id;this.coyote=RIBBON.coyote;
     this.buffer=0;this.recovery=0;this.invulnerable=1;this.airSpin=true;this.spin=0;this.springCooldown=0;
     return this.snapshot();
   }
-  snapshot(){return {status:this.status,time:this.time,progress:clamp((this.x-5)/(this.course.finishX-5),0,1),
-    collectibles:this.collected.size,totalCollectibles:this.course.gems.length,checkpoint:this.checkpoint,
-    recoveries:this.recoveries,penalties:this.penalties,x:this.x,y:this.y,vx:this.vx,vy:this.vy,
-    grounded:this.grounded,airSpin:this.airSpin,recovering:this.recovery>0};}
+  snapshot(){
+    const gate=this.gateOpen(),room=this.room(),interaction=this.interaction();
+    const guide=this.guidance();
+    return {status:this.status,time:this.time,progress:this.status==='finished'?1:this.seeds.size/GARDEN.seedCount*GARDEN.discoveryShare+(gate&&room.id==='courtyard'?clamp(this.y/GARDEN.finishY,0,1)*(1-GARDEN.discoveryShare):0),
+      collectibles:this.collected.size,totalCollectibles:this.course.gems.length,checkpoint:this.checkpoint,
+      recoveries:this.recoveries,penalties:this.penalties,x:this.x,y:this.y,vx:this.vx,vy:this.vy,
+      grounded:this.grounded,airSpin:this.airSpin,recovering:this.recovery>0,
+      seeds:this.seeds.size,totalSeeds:this.course.seeds?.length||0,seedIds:[...this.seeds],gateOpen:gate,
+      room:room.id,roomName:room.name,dream:this.dream,discovered:[...this.discovered],shortcuts:this.opened.size/2,
+      actionHint:interaction?.hint||'',guide,hint:gate||this.clock-this.lastDiscovery>GARDEN.hintDelay?`${guide.icon} ${guide.direction}`:''};
+  }
 }

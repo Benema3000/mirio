@@ -1,5 +1,5 @@
 <?php
-// GET ?level=adventure|sky|ribbon|kart -> {ok, level, top, token}
+// GET ?level=adventure|sky|ribbon|kart|marble|tilt -> {ok, level, top, token}
 // POST {level, token, name, timeMs} -> {ok, level, timeMs, rank, top}
 require __DIR__ . '/times.inc';
 
@@ -16,6 +16,16 @@ function mirio_times_respond(int $status, array $body): void
 // The production default stays outside the deployed web root. File names
 // times.json/times.lock are separate from legacy scores.json/scores.lock.
 $dir = getenv('MIRIO_TIMES_DIR') ?: (getenv('MIRIO_SCORES_DIR') ?: dirname($_SERVER['DOCUMENT_ROOT']) . '/data/mirio');
+// Legacy clients keep their original boards and tokens. New layouts use a
+// separate directory (and secret), so neither records nor tokens cross courses.
+const MIRIO_CURRENT_COURSE = 'playground-v2';
+$course = $_GET['course'] ?? null;
+if ($course !== null && $course !== MIRIO_CURRENT_COURSE) {
+    mirio_times_respond(400, ['ok' => false, 'error' => 'course', 'message' => 'Diese Strecke gibt es nicht.']);
+}
+if ($course === MIRIO_CURRENT_COURSE) {
+    $dir .= '/courses/' . MIRIO_CURRENT_COURSE;
+}
 $now = time();
 
 try {
@@ -31,6 +41,10 @@ try {
     } else {
         header('Allow: GET, POST');
         $result = mirio_times_fail(405, 'method', 'Nur GET und POST.');
+    }
+    // A new client can detect an old endpoint during a staggered deployment.
+    if ($course === MIRIO_CURRENT_COURSE) {
+        $result['body']['course'] = MIRIO_CURRENT_COURSE;
     }
     mirio_times_respond($result['status'], $result['body']);
 } catch (Throwable $e) {

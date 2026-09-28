@@ -297,8 +297,11 @@ export class Player {
   }
 
   /** Springs off a creature, or a blossom with its own rising arc. */
-  bounce({ speed = this.jumpHeld ? BOUNCE_HELD_SPEED : BOUNCE_SPEED, gravityScale = null } = {}) {
+  bounce({ speed = this.jumpHeld ? BOUNCE_HELD_SPEED : BOUNCE_SPEED, gravityScale = null, direction = null, horizontalSpeed = 0 } = {}) {
     const vUp = this.body.vel.dot(this.body.up);
+    // Directional flowers provide a safe first arc; air steering remains available.
+    const launch = direction ? tangentDir(direction, this.body.up) : null;
+    if (launch) this.body.vel.copy(launch).multiplyScalar(horizontalSpeed).addScaledVector(this.body.up, vUp);
     this.body.vel.addScaledVector(this.body.up, speed - vUp);
     this.launchGravity = gravityScale;
     this.body.onGround = false;
