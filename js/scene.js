@@ -189,6 +189,9 @@ const LOOKS = {
   floor: { tex: 'floor', size: 2.2, glow: 0xb9c6ff, rim: 0xc9b8ff, deco: 'moon' },
   // The Zielplanet: a warm golden meadow with flowers and stones.
   gold: { tex: 'gold', size: 4.5, glow: 0xffc86b, rim: 0xffe6a8, deco: 'gold' },
+  // The Vulkanreise: the Glutwelt's red earth and the Aschemond's dark ash.
+  ember: { tex: 'ember', size: 5, glow: 0xff9a6b, rim: 0xffc79a, deco: 'ember' },
+  ash: { tex: 'ash', size: 3.5, glow: 0xff6a3d, rim: 0xff9f7a, deco: 'ash' },
 };
 const lookOf = (planet) => LOOKS[planet.look] ?? LOOKS.grass;
 
@@ -986,6 +989,16 @@ const DECO = {
     pebbles: { density: 0.02, colors: [0xc49467, 0xd8b384, 0x9c7048] },
     mushrooms: { density: 0.0018 },
     butterflies: { density: 0.003, colors: [0xffffb9, 0xffaabd, 0xc6b6ff] },
+  },
+  ember: {
+    tufts: { density: 0.1, colors: [0xe8a04a, 0xd98a3a, 0xb8b04a] },
+    flowers: { density: 0.035, colors: [0xffd23f, 0xfff2c0, 0xff7a3a] },
+    pebbles: { density: 0.03, colors: [0x7a5a50, 0x9a7060, 0x5a4648] },
+    butterflies: { density: 0.002, colors: [0xffe28a, 0xffb07a] },
+  },
+  ash: {
+    pebbles: { density: 0.05, colors: [0x4a4250, 0x6a5e68, 0x3a343e] },
+    crystals: { density: 0.008, colors: [0xff7a3d, 0xffb640, 0xff4a2d] },
   },
 };
 

@@ -662,7 +662,7 @@ body.flying #toast { top: max(130px, 18%); }
 #chapter-best { font-size: 9px; align-self: center; color: #bde5d8; text-align: right; white-space: pre-line; }
 #chapter-progress, #chapter-ability { grid-column: 1 / -1; width: 100%; }
 #chapter-ability { font-size: 10px; color: #c4dedc; }
-body.chapter-mode #btn-pound { display: none; }
+body.chapter-mode:not(.chapter-volcano) #btn-pound { display: none; }
 body.hub-mode #hud > .pill { display: none; }
 body.hub-mode #hud { justify-content: flex-end; }
 /* What Mirio can do right here (a gate's name, a parcel to throw): big, in the hint's place. */
@@ -687,7 +687,7 @@ body.paused #chapter-hud { display: none; }
   #quick-dialog .chapter-select { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .game-menu { padding: 0; }
   .chapter-select { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-bottom: 20px; }
-  .chapter-card { aspect-ratio: 1.35; padding: 8px 5px; border-radius: 14px; }
+  .chapter-card { aspect-ratio: 1.55; padding: 8px 5px; border-radius: 14px; }
   .chapter-card strong { font-size: 17px; }
   .chapter-card em { font-size: 10px; margin-top: 2px; }
   .chapter-card.selected { transform: translateY(-3px); }
@@ -695,11 +695,13 @@ body.paused #chapter-hud { display: none; }
   .menu-links { margin-top: 14px; gap: 12px; }
   .menu-links .text-button { font-size: 11px; padding: 9px 15px; }
   body.chapter-mode #hint { bottom: 175px; font-size: 11px; max-width: 88vw; }
+  /* The test menu puts every journey card on the title: no room for the drawing and the list too. */
+  body.test-menu #title .title-art, body.test-menu #title-top { display: none; }
 }
 @media (max-height: 560px) and (orientation: landscape) {
   .game-menu { padding: 0 10px; }
   .chapter-select { gap: 12px; margin-bottom: 14px; }
-  .chapter-card { aspect-ratio: 1.85; padding: 7px 3px; border-radius: 12px; }
+  .chapter-card { aspect-ratio: 2.2; padding: 7px 3px; border-radius: 12px; }
   .chapter-card strong { font-size: 15px; }
   .chapter-card em { font-size: 9px; min-height: 10px; margin-top: 2px; }
   #title #start { padding: 11px 42px; font-size: 18px; min-width: 200px; }

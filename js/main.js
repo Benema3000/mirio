@@ -13,6 +13,7 @@ import { SkyFlight } from './sky-flight.js';
 import { RibbonRun } from './ribbon-run.js';
 import { MarbleRun } from './marble-run.js';
 import { TiltRun } from './tilt-run.js';
+import { VolcanoRun } from './volcano-run.js';
 import { CHAPTERS, medalFor, MEDALS } from './chapters.js';
 import { MenuNavigation } from './menu-navigation.js';
 import { formatRunTime, readPersonalBest, savePersonalBest } from './time-records.js';
@@ -43,7 +44,7 @@ const MAX_FRAME = 1 / 15;
 const TEST_MODE = new URLSearchParams(location.search).has('test');
 // Focused level suites keep their old navigation fixture; real play starts in the hub.
 const TEST_MENU = TEST_MODE && new URLSearchParams(location.search).has('menu');
-const CHAPTER_TYPES = Object.freeze({sky: SkyFlight, ribbon: RibbonRun, marble: MarbleRun, tilt: TiltRun});
+const CHAPTER_TYPES = Object.freeze({sky: SkyFlight, ribbon: RibbonRun, marble: MarbleRun, tilt: TiltRun, volcano: VolcanoRun});
 const SINGLE_ACTION_CLASS = 'chapter-single-action';
 const CHAPTER_MODE_CLASSES = [...Object.keys(CHAPTER_TYPES).map(id => `chapter-${id}`), SINGLE_ACTION_CLASS];
 
@@ -607,10 +608,13 @@ async function main() {
     }
     if (chapterGame && (state === 'chapter' || state === 'win')) {
       const run = chapterGame.snapshot();
-      $('hearts').hidden = true;
+      // The Vulkanreise has hearts: they show in the fight or once one is lost.
+      $('hearts').hidden = selectedLevel !== 'volcano' || state !== 'chapter' || (!run.fight && run.hearts >= run.maxHearts);
+      if (selectedLevel === 'volcano') [...$('hearts').children].forEach((el, i) => el.classList.toggle('lost', i >= run.hearts));
       $('bits').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} / ${run.totalDeliveries}`
         : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} / ${run.totalCheckpoints}`
-        : selectedLevel === 'marble' ? `♪ ${run.notes} / ${run.totalNotes}` : `✧ ${run.seeds} / ${run.totalSeeds}`;
+        : selectedLevel === 'marble' ? `♪ ${run.notes} / ${run.totalNotes}`
+        : selectedLevel === 'volcano' ? `${run.collectibles} / ${run.totalCollectibles}` : `✧ ${run.seeds} / ${run.totalSeeds}`;
       for (const id of ['ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud']) $(id).hidden = true;
       $('chapter-hud').hidden = state !== 'chapter';
       $('chapter-timer').textContent = formatRunTime(Math.round(run.time * 1000));
@@ -1139,10 +1143,11 @@ async function main() {
     hint('', 0);
     const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
     $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Das Sternenkonzert!'
-      : selectedLevel === 'tilt' ? 'Weich gelandet!' : 'Der Blütenhof leuchtet!';
+      : selectedLevel === 'tilt' ? 'Weich gelandet!' : selectedLevel === 'volcano' ? 'Glutzahn ist besiegt!' : 'Der Blütenhof leuchtet!';
     $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ◇ ${run.collectibles} Ringe`
       : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} Inseln · ↗ ${run.shortcuts} Abkürzungen · ↺ ${run.recoveries} Landungen`
       : selectedLevel === 'marble' ? `♪ ${run.notes} Noten · ${run.bumps} Bumper · ↺ ${run.recoveries} Rettungen`
+      : selectedLevel === 'volcano' ? `◇ ${run.collectibles} Glitzersteine · ✦ ${run.defeated} Grummel und Schnappblumen`
       : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
     $('win-extra').textContent = selectedLevel === 'marble' ? 'Die drei Spieluhren singen zusammen.' : '';
     $('win-badges').replaceChildren();
@@ -1163,6 +1168,9 @@ async function main() {
       else if (event.type === 'bit' && event.kind === 'seed') toast(`✧ ${event.seeds} / ${chapterGame.snapshot().totalSeeds}`);
       else if (event.type === 'checkpoint' && selectedLevel === 'marble') toast(`♫ ${chapterGame.snapshot().roomName}`);
       else if (event.type === 'checkpoint') toast('Checkpoint!');
+      else if (event.type === 'star' && event.kind === 'grow') toast('Glutbeere! Mirio wird groß!');
+      else if (event.type === 'bossHit') toast(event.hp > 0 ? `Treffer! Noch ${event.hp}` : 'Geschafft!');
+      else if (event.type === 'bossDown') hint('Hol dir den Kristall!', 5);
     }
   }
 
@@ -1366,7 +1374,7 @@ async function main() {
     selectLevel(button.dataset.level);
     if (!TEST_MENU) { $('quick-dialog').close(); startLevel(); }
   });
-  if (TEST_MENU) $('start').before($('chapter-select'));
+  if (TEST_MENU) { $('start').before($('chapter-select')); document.body.classList.add('test-menu'); }
   const showQuick = () => { updatePersonalBests(); $('quick-dialog').showModal(); };
   $('pause-quick').addEventListener('click', showQuick);
   selectLevel('adventure');
@@ -1537,7 +1545,7 @@ async function main() {
   function chapterFrame(dt, raw) {
     const runBefore = chapterGame.snapshot();
     if (state === 'chapter') {
-      sound.setScene(selectedLevel === 'sky' ? 'moon' : 'explore');
+      sound.setScene(selectedLevel === 'sky' ? 'moon' : selectedLevel === 'volcano' && runBefore.fight ? 'boss' : 'explore');
       if (chapterCountdown > 0) {
         const number = Math.ceil(chapterCountdown);
         if (number !== countdownNumber) { countdownNumber = number; bigToast(String(number)); sound.play('beep'); }
@@ -1545,8 +1553,9 @@ async function main() {
         input.consumeJump(); input.consumeSpin(); input.consumePound();
         if (chapterCountdown === 0) { bigToast('Los!'); sound.play('go'); }
       } else {
-        const events = chapterGame.step(dt, {x: input.move.x, y: input.move.y, jump: input.consumeJump(), jumpHeld: input.jumpHeld, action: input.consumeSpin(), flipperLeft: input.pinball.left, flipperRight: input.pinball.right});
-        input.consumePound(); input.consumeRide();
+        // The raw input goes along for journeys with a free camera (the Vulkanreise).
+        const events = chapterGame.step(dt, {x: input.move.x, y: input.move.y, jump: input.consumeJump(), jumpHeld: input.jumpHeld, action: input.consumeSpin(), pound: input.consumePound(), flipperLeft: input.pinball.left, flipperRight: input.pinball.right}, input);
+        input.consumeRide();
         handleChapterEvents(events);
         if (chapterGame.snapshot().status === 'finished') finishChapter();
       }

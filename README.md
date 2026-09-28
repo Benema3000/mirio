@@ -93,6 +93,7 @@ Pause provides help and separate time boards without leaving the current run.
 | **Blütenpfad** | One run through courtyard, tree house, glass house and cellar garden to a flower tower; three lantern seeds wait up high on the way | A/D or ←/→/stick move; Space/A jump; Shift/X air spin |
 | **Klangkugel** | Three connected pinball tables: pudding garden, cuckoo clock and moon concert; light note targets and shoot the bell lift | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
 | **Seifenstern** | Tilt floating paths beneath a soap bubble; balance over rainbow ribbons, inflate a foam bridge and reach the towel | WASD/arrows/stick tilt; hold Space/A/◎ to level and brake, or inflate the marked soap basin |
+| **Vulkanreise** | Miro's second world: the Glutwelt with Grummel, Schnappblumen and the Glutbeere, a rocket to the Aschemond and Glutzahn on the arena | Platformer controls; stomp tired Glutzahn three times |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
 keyboard/controller/touch controls and no game-over screen. Recovery adds a
@@ -121,6 +122,19 @@ are documented in `assets/README.md`.
   lit targets and cleared tables survive recovery (+2 seconds). Early misses
   use a free ball saver. Separate touch flippers support simultaneous presses.
   The whole table stays in view, including with reduced motion.
+- **Vulkanreise:** built from Miro's second set of drawings, in the style of
+  the Planetenreise (`js/volcano-level.js`, `js/volcano-run.js`,
+  `js/volcano-creatures.js`, fight rules in `js/glutzahn-rules.js`). Walk down
+  the red Glutwelt past grumpy Grummel (stomp or spin them), the Glutbeere
+  that turns Mirio into Miro's big Mirio (a hit then only shrinks him back),
+  and a pass of Schnappblumen that bite when you come close (stomp them from
+  above). Miro's rocket flies to the dark Aschemond; up a staircase of ash
+  waits Glutzahn. He breathes fire (announced, dodge sideways or jump) or spins
+  a Stachelkreisel across the arena (jump it); after either he is out of
+  breath, the moment to jump on his head. Three hits free the crystal. The
+  creatures keep Miro's shapes, colours and faces with a few details of our
+  own: Mirio's curl badge on the cap, no spots on the plant, a purple shell
+  and an orange crest on Glutzahn, an orange spiky top.
 - **Seifenstern:** a bath-time world of soap paths over the bath water, soap
   bubbles drifting past. The stick tilts the whole world and gravity rolls the
   bubble; a steady camera watches from low behind. Broad bends reconnect with
@@ -397,6 +411,9 @@ The playground update adds:
   movement, paused clocks and returns; supports `BROWSER=webkit`.
 - `tests/mirio-kart-native-e2e.mjs`: a complete race through ordinary keyboard
   input, including a charged drift and its release.
+- `tests/mirio-volcano.test.mjs` (unit) and `tests/mirio-volcano-e2e.mjs`:
+  Glutzahn's fight rules, the level's layout, and in the browser the walk, the
+  Glutbeere, the rocket to the Aschemond and the fight starting.
 - `tests/mirio-sky-post-e2e.mjs`: complete keyboard flight, all recipients,
   arrival and replay.
 - `tests/mirio-sky-post-devices-e2e.mjs`: genuine touch events, controller

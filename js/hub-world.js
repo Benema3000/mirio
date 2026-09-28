@@ -329,6 +329,10 @@ export class HubWorld {
         parts.push(ball(x, y, 0, .24, color, .17), rod(x + .18, y + .45, 0, .045, .9, color));
       }
     }
+    if (spec.level === 'volcano') {
+      // The Glutbeere on a little heap of ash.
+      parts.push(ball(0, .35, 0, .5, 0x6a5e68, .3), ball(0, .95, 0, .36, 0xff5a2a), ball(.14, 1.32, 0, .16, 0x5fae4a, .06));
+    }
     if (spec.level === 'tilt') {
       parts.push(paint(new THREE.TorusGeometry(.58, .075, 6, 24).translate(.18, 1.55, 0), spec.color),
         paint(new THREE.BoxGeometry(1.6, .12, .25).rotateZ(.16).translate(0, .8, 0), 0xe9a7c3), cone(0, .55, 0, .22, .4, GOLD, 3));
@@ -427,6 +431,11 @@ export class HubWorld {
           .rotateY(-a).translate(Math.cos(a) * (R + .9), 0, Math.sin(a) * (R + .9)).rotateZ(.25));
       }
       add(box(0, R + .5, 0, .12, 1.1, .12, INK), box(.45, R + .85, 0, .8, .45, .06, CREAM));
+    }
+    if (spec.level === 'volcano') {
+      // A little volcano with a glowing top and a puff of smoke.
+      add(cone(0, R + .45, 0, 1.1, 1.2, 0x7a4a3e, 12), ball(0, R + 1.05, 0, .38, 0xff6a2a, .12));
+      for (const [x, y, r] of [[.1, R + 1.5, .3], [-.15, R + 1.9, .38], [.2, R + 2.35, .45]]) add(ball(x, y, 0, r, 0xd9d2d8));
     }
     if (spec.level === 'marble') {
       add(paint(new THREE.TorusGeometry(R + .8, .18, 8, 48).rotateX(Math.PI / 2 - .35), CREAM));
