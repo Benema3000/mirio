@@ -82,8 +82,8 @@ Pause provides help and separate time boards without leaving the current run.
 
 | Level | What you play | Main controls |
 | --- | --- | --- |
-| **Planetenreise** | Meadow wind toys, boat rescue, kite towing, moon islands and arena drums along the original rocket → boss → kart journey | Existing platformer and kart controls; F/Y board or land |
-| **Sternenrennen** | Three drifting laps with windmill, orchard and cloud forks, rolling fruit, splits and a rival using the same roads | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
+| **Planetenreise** | The original journey: meadow, ring lake, rocket to the moon, boss fight, kart race to the Zielplanet | Platformer and kart controls |
+| **Sternenrennen** | Three laps round the Zielplanet against Finster-Mirio: ramp, dash panels, blocks, drifts and mini-turbos | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
 | **Wolkenpost** | Three parcel deliveries, upper currents, windmills, cloud arches and a singing cloud whale | WASD/arrows/stick steer; Space/A roll; Shift/X toss near baskets, turbo elsewhere |
 | **Blütenpfad** | Connected courtyard, orchard, musical conservatory and cellar; three lantern seeds open the final ascent | A/D or ←/→/stick move; Space/A jump; Shift/X air spin, song or door |
 | **Klangkugel** | A rolling musical bubble, pudding floors, bumpers and a raised shortcut; carry three bell notes home to the drum | WASD/arrows/stick roll; hold Space/A/◎ to brake; Shift/X/♪ rings nearby bells |
@@ -99,19 +99,6 @@ are documented in `assets/README.md`.
 
 ## Playground routes edition
 
-- **Planetenreise:** the low plane powers a windmill, unfolding a real petal
-  bridge. Tow the toy boat home and guide a kite through wind beacons; then land
-  and follow a squirrel to its lookout and spring. Completed toys stay active
-  and the treehouse hosts a picnic. These errands are optional. On the moon,
-  drifting lantern islands offer an alternate climb; a sleepy guardian launches
-  Mirio toward the arena. The boss commits to a marked landing, and its waves
-  charge spring drums. The rocket and kart finale remain the main journey.
-- **Sternenrennen:** three physically separate forks share a route network for
-  rendering, steering, rivals, collisions and progress. Charge a drift before
-  the windmill fork; release to take its upper road. An uncharged attempt keeps
-  racing below. The orchard offers a narrow inside line; cloud cushions launch
-  playful jumps. Two split times and distinct charge tones support replay.
-  On touch, accelerate, then hold ↑ while steering: the drift maintains gas.
 - **Wolkenpost:** match the visible parcels to flower, bread and kite signs.
   Shift / X / ✦ tosses inside generous delivery areas; a bird returns a miss.
   Recipients change later currents. Roll through three chimes on different air
@@ -145,14 +132,7 @@ and fir trees, butterflies, contact shadows, reflective gems and a moving lake
 surface with caustics. The original floor scribble is still the moon, blocks,
 stepping stones and race road.
 
-- **Sternenspuren:** optional six-ring trails on the meadow and moon. Touch the
-  first glowing ring to start an 18-second challenge; finish in order to earn a
-  badge and a 12-second Glitzermagnet. It collects nearby existing gems, without
-  changing the public score rules. A missed trail is free to retry; a completed
-  trail reopens after 25 seconds. Trials stop quietly during story sequences.
-- **Wayfinding:** a surface-relative compass points toward the next checkpoint,
-  rocket, or moon collectable; the HUD explains the current objective. The race
-  shows speed and progress as well as place and time.
+- **Race display:** the race shows speed and progress as well as place and time.
 - **Pause:** Esc, the pause button, or controller Start freezes the whole game,
   including race countdowns and sound. Hidden tabs pause automatically. Resume
   explicitly when ready. The menu offers music/effects sliders, a calmer camera,
@@ -172,20 +152,10 @@ stepping stones and race road.
 
 ## A living little world
 
-The meadow has birds that peck, perch and take wing, and squirrels that forage,
-nibble acorns, twitch their tails and scurry away when Mirio approaches. These
-are original articulated 3D animals, with shared geometry and instanced parts.
-Nearby birdsong, rustling leaves and a quiet breeze complete the meadow. Meeting
-both species fills in the pause menu's little field guide and earns a Tierfreund
-badge at the end. The wildlife is harmless.
-
-Seven optional little guardians live in clear patches away from the main path:
-five **Mooskrabbler** with glossy sprout shells and two hopping **Mondkiesel**.
-They patrol, visibly wind up a short attack, then recover and return home. A jump
-onto their head or a ground pound defeats them; spinning stuns them, and a second
-spin after releasing the first finishes the encounter. A defeat restores one
-heart. New checkpoints also restore health. Fainting returns Mirio to the last
-checkpoint, while already defeated guardians stay defeated until a new run.
+A few birds peck, perch and take wing when Mirio comes close. They are original
+articulated 3D animals, with shared geometry and instanced parts. Nearby
+birdsong, rustling leaves and a quiet breeze complete the meadow. Meeting a bird
+earns a Tierfreund badge at the end. The wildlife is harmless.
 
 Three giant spring blossoms are optional toys. Walk or land on their centres to
 bounce high, or ground-pound them for an extra lift. Trying all three earns the
@@ -196,31 +166,6 @@ materials, detailed bark and cut wood, composed fern and flowering shrub beds,
 lakeside reeds, falling petals and soft cloud wisps. Decorative batches are
 horizon-culled and reduced on slower devices. Miro's original images, sampled
 textures, character, rocket, and floor construction remain unchanged.
-
-## Ride the Wiesensummer
-
-A little turquoise-and-cream biplane waits beside the starting meadow. Press
-**F**, controller **Y**, or its on-screen boarding button to hop in. Mirio's
-original model sits in the cockpit; the aircraft is original procedural geometry.
-
-- **Steer:** WASD / arrows, the left stick, or the touch joystick. Releasing the
-  controls slows the plane into a gentle low hover.
-- **Climb:** hold Space / A / ↑. The wheels never rise above 4.5 metres over the
-  planet's surface. Release to return towards a low hover; the rocket remains
-  the way to the moon.
-- **Descend:** hold C / B / ↓ to brake and settle. Over the lake, the plane keeps
-  safe clearance above the water. Trees, hills and blocks cause soft bumps.
-- **Boost:** Shift / X / ✦ gives a one-second propeller burst, followed by a
-  short cooldown. The flight display shows height, speed and boost readiness.
-- **Step out:** F / Y / the landing button automatically lands in a clear, dry
-  spot before Mirio steps out. Press again to cancel. Unsafe landing attempts
-  explain that a meadow clearing is needed. The plane stays where it was parked
-  and can be boarded again; checkpoint rescue also brings it back to its home.
-
-Flying can collect the existing gems. Checkpoints and story encounters still
-require Mirio on foot, and a 150-metre flight earns the optional **Wiesenpilot**
-badge. The score rules and gem total are unchanged. Pause freezes the aircraft,
-releases held controls and silences its propeller; replay resets the ride.
 
 ## Layout
 
@@ -239,8 +184,7 @@ three.js and loads `js/main.js`.
 | `js/water.js` | The ring lake: waves, fresnel, sparkles, foam along both shores and round every stepping stone, one draw call |
 | `js/quality.js` | Renderer colour settings, and a governor that lowers the resolution (then drops the extras) to hold the frame rate on phones |
 | `js/mirio-model.js`, `js/props.js` | The 3D models built from the drawings: Mirio; the rocket and the checkpoint flag |
-| `js/wildlife.js`, `js/wildlife-models.js` | Reactive birds and squirrels, shared articulated geometry, discovery and culling |
-| `js/enemies.js`, `js/enemy-rules.js` | Original optional guardians, safe placements, readable attacks and renderer-independent rules |
+| `js/wildlife.js`, `js/wildlife-models.js` | Reactive birds, shared articulated geometry, discovery and culling |
 | `js/garden.js`, `js/scenery.js` | Spring blossoms; batched plants, petals and cloud wisps |
 | `js/chapters.js`, `js/time-records.js` | Level metadata, medals and storage-safe personal best times |
 | `js/sky-flight.js`, `js/sky-flight-rules.js` | Wolkenpost scene and deterministic flight course rules |
@@ -249,8 +193,7 @@ three.js and loads `js/main.js`.
 | `js/tilt-run.js`, `js/tilt-rules.js`, `js/tilt-course.js` | Seifenstern scene, tilt physics and shared branching course |
 | `js/menu-navigation.js` | Controller focus, dialogs and settings navigation |
 | `api/times.php`, `api/times.inc` | Separate public time boards for every level |
-| `js/biplane.js`, `js/biplane-physics.js`, `js/biplane-model.js` | Boarding and safe landing; bounded spherical flight; the original Wiesensummer model |
-| `js/adventure.js` | Optional ring-trail rules, gates, badges and magnet effect |
+| `js/biplane-model.js` | The little plane Wolkenpost flies |
 | `js/environment-art.js` | Original seamless environment textures and gem reflection maps; no child artwork |
 | `js/art.js`, `js/materials.js` | Canvas helpers (crop, sticker border, filled face, scribble textures) and the shared toon and outline materials |
 | `js/player.js`, `js/camera.js`, `js/input.js`, `js/audio.js` | Mirio's movement and animation, the camera rig, keyboard/mouse/touch, WebAudio sound and an original adaptive sixteen-bar score and CC0 foley |
@@ -306,7 +249,7 @@ optional and only happens when the player submits a nickname.
 
 ## Tests
 
-- `npm install && npm test` (the same pinned three.js, from npm): ring-trail rules, controller/input cleanup, camera clearance, buffered jumps, and physics (walking
+- `npm install && npm test` (the same pinned three.js, from npm): controller/input cleanup, camera clearance, buffered jumps, and physics (walking
   round the world, momentum, skid and air momentum, the fall-speed cap, the
   jump chain, the moon's higher jump, box tops and head bumps, walking onto a
   hill, the lake) and level design (every glitter stone reachable and not buried,
@@ -339,17 +282,12 @@ optional and only happens when the player submits a nickname.
   node tests/mirio-e2e.mjs
   ```
 - `node tests/mirio-polish-e2e.mjs` covers the pause menu, frozen timers,
-  controller pause/resume, ring trails and magnet rewards, replay reset,
+  controller pause/resume, replay reset,
   checkpoint rescue, settings and phone layout. It uses the same server and
   `PLAYWRIGHT` / `BASE_URL` environment variables as the main browser suite.
 
-- `node tests/mirio-living-e2e.mjs` checks spring launches, wildlife discoveries
-  and reactions, enemy stomps/contact/spin combat, health restoration, pause and
-  replay resets, and browser/shader errors. It uses the same server and variables.
-
-- `node tests/mirio-biplane-e2e.mjs` checks keyboard/controller/touch boarding,
-  the flight ceiling, boost, safe landings and water crossings, pause, rescue,
-  replay and phone layouts. It uses the same server and variables.
+- `node tests/mirio-living-e2e.mjs` checks spring launches, the birds and their
+  reactions, pause and replay resets, and browser/shader errors. It uses the same server and variables.
 
 - `node tests/mirio-audio-e2e.mjs` verifies all eleven sample decodes, mixer
   persistence, pause/resume cleanup, every soundtrack arrangement and sound
@@ -394,14 +332,8 @@ The playground update adds:
   and phone dialogs through normal hub navigation.
 - `tests/mirio-browser-smoke-e2e.mjs`: every mode through normal navigation,
   movement, paused clocks and returns; supports `BROWSER=webkit`.
-- `tests/mirio-meadow-e2e.mjs`: flight errands, landing, bridge exploration,
-  squirrel guide, picnic, recovery and replay.
-- `tests/mirio-moon-e2e.mjs`: moving-island jump, guardian launch, fixed boss
-  warning, charged drum and return route during a fight.
 - `tests/mirio-kart-native-e2e.mjs`: a complete race through ordinary keyboard
-  input, including drift release and branch selection.
-- `tests/mirio-kart-routes-e2e.mjs`: keyboard/controller/touch drifting, every
-  branch through production physics, split times, finish, replay and fallback.
+  input, including a charged drift and its release.
 - `tests/mirio-sky-post-e2e.mjs`: complete keyboard flight, all recipients,
   air routes, chimes, arrival and replay.
 - `tests/mirio-sky-post-devices-e2e.mjs`: genuine touch events, controller

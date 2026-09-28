@@ -461,14 +461,10 @@ kbd { display: inline-block; padding: 0 5px; margin: 0 2px; border: 1px solid #d
 .icon:hover { background: #29445c; }
 .compass { border: 1px solid #fff4; background: #0c1c32a8; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; }
 .compass svg { width: 21px; height: 21px; fill: #ffdc87; }
-#trail-hud, #magnet-hud { position: fixed; left: 50%; transform: translateX(-50%); top: 24px; z-index: 2; padding: 12px 18px; border: 1px solid #ffdb8366; border-radius: 14px; background: #102336e8; font-size: 13px; }
-#trail-time { margin-left: 15px; color: var(--gold); font-variant-numeric: tabular-nums; }
 progress { height: 4px; border: 0; border-radius: 9px; overflow: hidden; background: #ffffff25; accent-color: #ffda83; }
 progress::-webkit-progress-bar { background: #ffffff25; }
 progress::-webkit-progress-value { background: #ffda83; border-radius: 9px; }
 progress::-moz-progress-bar { background: #ffda83; }
-#trail-progress { display: block; width: 100%; margin-top: 8px; }
-#magnet-hud { top: 100px; color: #94f4e5; border-color: #94f4e550; }
 #race-hud { flex-wrap: wrap; justify-content: center; width: 250px; border-radius: 18px; background: #0c1c32dd; border-width: 1px; top: 18px; gap: 4px 18px; padding: 10px 20px; }
 #race-place { -webkit-text-stroke: 0; font-size: 27px; }
 #race-time { font-size: 16px; }
@@ -516,7 +512,6 @@ body.paused #hud button { pointer-events: none; }
   .controls { font-size: 10px; margin-top: 16px; } .portrait-tip { font-size: 10px; margin: 8px 0; }
   #hud { padding: 12px; } .corner { gap: 5px; } .icon { width: 39px; height: 39px; }
   .pill { font-size: 13px; padding: 10px; }
-  #trail-hud { top: 122px; min-width: 190px; } #magnet-hud { top: 172px; font-size: 11px; }
   #race-hud { top: 66px; width: 200px; } #boss-bar { top: 120px; }
   .pause-card, #win .card { padding: 24px 18px; } h2 { font-size: 32px; }
 }
@@ -543,7 +538,6 @@ body.reduced-motion .hero { animation: none; }
 #race-technique[data-charge="1"], #race-technique[data-charge="boost"] { color: #8ae5ff; }
 #race-technique[data-charge="2"] { color: #ffba6b; }
 /* Keep the fork choice readable while the charge indicator is active. */
-#race-route { width: 100%; text-align: center; }
 body.playing #hearts svg { width: 18px; height: 18px; }
 body.playing .pill { gap: 10px; }
 @media (max-width: 360px) {
@@ -554,30 +548,9 @@ body.playing .pill { gap: 10px; }
 }
 
 /* The optional meadow ride reuses familiar movement buttons. */
-#ride-action { position: fixed; z-index: 4; left: 50%; bottom: max(86px, calc(env(safe-area-inset-bottom) + 72px)); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; border: 1px solid #ffe3a2a8; border-radius: 26px; padding: 11px 17px; color: #fff1ca; background: #153b43ed; box-shadow: 0 6px 24px #001c264a; font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; touch-action: manipulation; }
-#ride-action:hover { background: #24575d; }
-#ride-action:focus-visible { outline: 3px solid #fff1ba; outline-offset: 4px; }
-#ride-action[hidden], #plane-hud[hidden] { display: none; }
-body.touch #ride-key { display: none; }
-body.paused #ride-action, body.paused #plane-hud { display: none; }
-#plane-hud { position: fixed; z-index: 2; top: 18px; left: 50%; transform: translateX(-50%); width: 228px; display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; padding: 11px 15px; border: 1px solid #b0e8df66; border-radius: 15px; color: #d6f6eb; background: #102e3aeb; font-size: 11px; }
-.plane-name { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: #ffe4a2; }
-#plane-height { width: 100%; height: 6px; align-self: center; accent-color: #96e2d3; }
-#plane-speed { text-align: right; }
-#plane-boost { grid-column: 1 / -1; font-size: 10px; color: #c3dbd6; }
-#plane-hud.boosting { border-color: #ffe095; box-shadow: 0 0 18px #ffd48822; }
-#plane-hud.boosting #plane-boost { color: #ffe095; }
-body.flying #btn-jump { border-color: #a3ecdc; }
-body.flying #btn-spin { color: #ffdf91; }
-body.flying #toast { top: max(130px, 18%); }
 @media (max-width: 700px) {
-  #plane-hud { top: 122px; width: 218px; }
-  body.flying #toast { top: max(230px, 26%); }
 }
 @media (orientation: portrait) {
-  body.touch #ride-action { left: 18px; transform: none; bottom: max(32px, calc(env(safe-area-inset-bottom) + 24px)); max-width: 155px; padding: 11px 13px; font-size: 11px; white-space: normal; text-align: left; }
-  body.touch #ride-action > span:first-child { display: none; }
-  body.flying.touch #hint { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 195px); }
 }
 
 /* A compact game menu: artwork first, details one button away. */

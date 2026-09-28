@@ -5,7 +5,7 @@ export const CHAPTERS = Object.freeze({
     description: 'Wiesen erkunden, zum Mond reisen und ins Kart steigen.',
     keys: 'WASD laufen · Leertaste springen · Shift drehen · C stampfen',
     touch: 'Links laufen · ↑ springen · ⟳ drehen · ⤓ stampfen',
-    controller: 'Linker Stick laufen · A springen · X drehen · B stampfen · Y Flugzeug',
+    controller: 'Linker Stick laufen · A springen · X drehen · B stampfen',
     goal: 'Hol dir den Kristall!', medal: [240000, 420000, 720000]},
   sky: {name: 'Wolkenpost', short: 'Wolkenpost', eyebrow: '02 / HIMMELSEXPRESS',
     jumpIcon: '↻', jumpLabel: 'Schutzrolle', actionIcon: '✦', actionLabel: 'Paket / Turbo',

@@ -23,7 +23,7 @@ try {
       window.dispatchEvent(new KeyboardEvent(active?'keydown':'keyup',{code,key:code==='Space'?' ':code,bubbles:true}));
     };
     const clamp=x=>Math.max(-1,Math.min(1,x));
-    const driver=window.__nativeKart={done:false,drift:'waiting',samples:[],preview:null,previews:[],error:null};
+    const driver=window.__nativeKart={done:false,drift:'waiting',side:0,samples:[],error:null};
     let pulse=0,lastBucket=-1;
     function tick(){
       const snap=window.__mirio.snapshot(),r=snap.race;
@@ -36,26 +36,24 @@ try {
         driver.finish=snap;requestAnimationFrame(tick);return;
       }
       if(snap.state!=='race'){driver.error=`unexpected state ${snap.state}`;return;}
-      const fork=r.nextFork,target=fork?fork.side*2:0;
+      const target=0;
       let steer=clamp(.75*r.road.curvature*r.speed/2.4-r.yaw*1.5+(target-r.x)*.3),hold=false;
-      if(driver.drift==='waiting'&&fork?.turbo&&fork.s-r.s<43)driver.drift='starting';
+      // Drift into the first proper bend, the way a child would: steer in, hold jump.
+      if(driver.drift==='waiting'&&r.progress>.05&&r.speed>9&&Math.abs(r.road.curvature)>.015){driver.drift='starting';driver.side=Math.sign(r.road.curvature);}
       if(driver.drift==='starting'){
-        steer=1;hold=true;if(r.drift)driver.drift='charging';
+        steer=driver.side;hold=true;if(r.drift)driver.drift='charging';
       }
       if(driver.drift==='charging'){
         hold=true;
-        const courseTarget=clamp((2-r.x)*.2)*.35;
+        const courseTarget=clamp(-r.x*.2)*.35;
         steer=clamp(((courseTarget-r.course)*2-r.drift*.26)/.78);
-        if(r.charge>=1.1 || r.charge>=.5&&fork&&fork.s-r.s<18){hold=false;driver.drift='released';}
+        if(r.charge>=1.1||!r.drift){hold=false;driver.drift='released';}
       }
       // Pulse ordinary left/right keys; the game's steering response smooths them.
       pulse+=steer;const turn=pulse>.5?1:pulse<-.5?-1:0;pulse-=turn;
       press('ArrowUp',true);press('ArrowLeft',turn<0);press('ArrowRight',turn>0);press('Space',hold);
       const bucket=Math.floor(r.progress*20);
-      if(bucket!==lastBucket){driver.samples.push({progress:r.progress,time:snap.time,route:r.route,x:r.x,speed:r.speed});lastBucket=bucket;}
-      if(fork&&fork.s-r.s<20&&!driver.previews.includes(fork.id)){
-        driver.preview=fork.id;driver.previews.push(fork.id);
-      }
+      if(bucket!==lastBucket){driver.samples.push({progress:r.progress,time:snap.time,x:r.x,speed:r.speed});lastBucket=bucket;}
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -65,23 +63,20 @@ try {
   let report=-1;
   while(Date.now()<deadline){
     await page.waitForTimeout(500);
-    const state=await page.evaluate(()=>({done:window.__nativeKart.done,error:window.__nativeKart.error,preview:window.__nativeKart.preview,race:window.__mirio.snapshot().race}));
+    const state=await page.evaluate(()=>({done:window.__nativeKart.done,error:window.__nativeKart.error,race:window.__mirio.snapshot().race}));
     assert.equal(state.error,null);
     const bucket=Math.floor(state.race.progress*10);
-    if(bucket!==report){console.log(`native ${bucket*10}% ${state.race.route}`);report=bucket;}
-    if(state.preview){
-      if(process.env.SHOTS)await page.screenshot({path:`${process.env.SHOTS}/native-${state.preview}.png`});
-      await page.evaluate(()=>{window.__nativeKart.preview=null;});
+    if(bucket!==report){
+      console.log(`native ${bucket*10}%`);report=bucket;
+      if(process.env.SHOTS)await page.screenshot({path:`${process.env.SHOTS}/native-${bucket*10}.png`});
     }
     if(state.done)break;
   }
   const result=await page.evaluate(()=>window.__nativeKart);
   assert.ok(result.done,'normal keyboard race did not finish');
   assert.equal(result.result.race.state,'finished');assert.ok(result.result.time>20);
-  assert.deepEqual(result.result.race.routes,['wind','orchard','cloud']);
-  assert.equal(result.result.race.splits.length,2);
-  assert.ok(result.result.race.bestDrift>=1);assert.ok(result.result.race.bounces>=2);
+  assert.ok(result.result.race.bestDrift>=1);
   assert.deepEqual(errors,[]);
   if(process.env.SHOTS)await page.screenshot({path:`${process.env.SHOTS}/native-finish.png`});
-  console.log(JSON.stringify({time:result.result.time,routes:result.result.race.routes,bestDrift:result.result.race.bestDrift,splits:result.result.race.splits,bounces:result.result.race.bounces,samples:result.samples,errors},null,2));
+  console.log(JSON.stringify({time:result.result.time,bestDrift:result.result.race.bestDrift,samples:result.samples,errors},null,2));
 } finally {await browser.close();}

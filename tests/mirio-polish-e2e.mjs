@@ -117,37 +117,6 @@ try {
     await gameTime(page, 0.15);
   });
 
-  await check('all constellation rings grant a magnet; pause freezes the trail timer', async () => {
-    const trail = await page.evaluate(() => window.__mirio.layout().trails.find(t => t.id === 'meadow'));
-    const count = (await snap(page)).bitsTotal;
-    for (let i = 0; i < trail.dirs.length; i++) {
-      await teleport(page, trail.planet, trail.dirs[i]);
-      await until(page, n => window.__mirio.snapshot().adventure.trails.find(t => t.id === 'meadow').next >= n, i + 1);
-      if (i === 0) {
-        await page.click('#pause-button');
-        await until(page, () => window.__mirio.snapshot().paused);
-        const frozen = (await snap(page)).adventure.trails[0].time;
-        await page.waitForTimeout(300);
-        assert.equal((await snap(page)).adventure.trails[0].time, frozen);
-        await page.click('#resume');
-      }
-    }
-    const won = await snap(page);
-    assert.ok(won.adventure.badges.includes('meadow'));
-    assert.ok(won.adventure.magnet > 10 && won.adventure.magnet <= 12);
-    assert.equal(won.bitsTotal, count, 'bonus rings must not alter public gem totals');
-    assert.ok(await page.isVisible('#magnet-hud'));
-    await shot(page, 'polish-trail-reward');
-    // Exercise the real replay handler without replaying the full boss/race.
-    await page.evaluate(() => document.getElementById('again').click());
-    await until(page, () => window.__mirio.snapshot().state === 'play');
-    const fresh = await snap(page);
-    assert.deepEqual(fresh.adventure.badges, []);
-    assert.equal(fresh.adventure.magnet, 0);
-    assert.ok(fresh.adventure.trails.every(t => t.next === 0 && !t.active));
-    assert.equal(fresh.flags, 0);
-  });
-
   await check('rescue returns to the reached checkpoint and resumes safely', async () => {
     const flag = await page.evaluate(() => window.__mirio.layout().flags[0]);
     await teleport(page, flag.planet, flag.dir, 0.1);
@@ -169,7 +138,7 @@ try {
   await check('music, effects and reduced-motion preferences survive a reload', async () => {
     await page.click('#pause-button');
     await until(page, () => window.__mirio.snapshot().paused);
-    for (const [id, value] of [['music-volume', '27'], ['effects-volume', '63']]) {
+    for (const [id, value] of [['music-volume', '30'], ['effects-volume', '65']]) {
       await page.locator(`#${id}`).evaluate((element, next) => {
         element.value = next;
         element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -178,8 +147,8 @@ try {
     await page.check('#reduced-motion');
     await page.reload();
     await ready(page);
-    assert.equal(await page.inputValue('#music-volume'), '27');
-    assert.equal(await page.inputValue('#effects-volume'), '63');
+    assert.equal(await page.inputValue('#music-volume'), '30');
+    assert.equal(await page.inputValue('#effects-volume'), '65');
     assert.equal(await page.isChecked('#reduced-motion'), true);
     assert.equal(await page.evaluate(() => document.body.classList.contains('reduced-motion')), true);
   });

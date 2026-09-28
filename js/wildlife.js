@@ -8,7 +8,8 @@ import { WildlifeModels } from './wildlife-models.js';
 const TAU = Math.PI * 2;
 const EAST = new THREE.Vector3(1, 0, 0);
 const Z = new THREE.Vector3(0, 0, 1);
-const LIMITS = [{ bird: 7, squirrel: 3 }, { bird: 12, squirrel: 5 }, { bird: 18, squirrel: 7 }];
+// A few birds, not a crowd: the meadow is Miro's, the animals only liven it up.
+const LIMITS = [{ bird: 3, squirrel: 0 }, { bird: 4, squirrel: 0 }, { bird: 5, squirrel: 0 }];
 const scratch = new THREE.Vector3();
 const forward = new THREE.Vector3();
 const side = new THREE.Vector3();
@@ -100,7 +101,6 @@ export class Wildlife {
     // Springflower landings are reserved for the player, even when another
     // scenery implementation has not added them to the level data yet.
     for (const [lat, lon] of [[81, 35], [24, 43], [-14, -28]]) add(dirFromLatLon(lat, lon), 1.0);
-    if (this.level.biplaneHome?.planet === this.planet) add(this.level.biplaneHome.dir, 1.65);
   }
 
   /** Conservatively avoids shores, trunks and the footprints of solid props. */
@@ -140,19 +140,14 @@ export class Wildlife {
         visible: false, state, height: 0, age: 0, wait: 0, alert: 0,
       });
     };
-    // The first animals are ahead and beside the starting camera, making the
-    // world feel inhabited before the player reaches the first tree.
-    for (const [lat, lon] of [[83, -24], [79, 23], [66, 120], [69, 130], [64, -75], [30, -36], [21, 40], [-7, -28]]) add('bird', dirFromLatLon(lat, lon));
-    for (const [lat, lon] of [[83, 66], [74, -57], [67, 163], [30, -45], [22, 46], [-5, 27], [-24, 174]]) add('squirrel', dirFromLatLon(lat, lon));
-    const perches = [0, 8, 12, 17];
-    for (const i of perches) {
+    // Two on the ground away from the start, two in trees, one circling.
+    for (const [lat, lon] of [[66, 120], [30, -36]]) add('bird', dirFromLatLon(lat, lon));
+    for (const i of [0, 12]) {
       const tree = this.trees[i % this.trees.length];
       if (tree) add('bird', tree.dir, 'perch', tree);
     }
-    for (let i = 0; i < 6; i++) {
-      const tree = this.trees[[4, 10, 18][Math.floor(i / 2)] % this.trees.length];
-      if (tree) add('bird', tree.dir, 'circle', tree);
-    }
+    const circling = this.trees[10 % this.trees.length];
+    if (circling) add('bird', circling.dir, 'circle', circling);
   }
 
   reset() {

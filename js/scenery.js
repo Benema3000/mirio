@@ -159,7 +159,6 @@ function gardenClear(level, planet, dir) {
   const close = (other, radius) => other && dir.dot(other) > Math.cos(radius / planet.radius);
   if (level.spawn.planet === planet && close(level.spawn.dir, 2.2)) return false;
   // Plant centres need a little extra room for spreading fern/flower leaves.
-  if (level.biplaneHome?.planet === planet && close(level.biplaneHome.dir, 3.2)) return false;
   if (level.plateau.planet === planet && close(level.plateau.dir, level.plateau.radius + 1.1)) return false;
   for (const item of [...level.stumps, ...level.stones, ...level.flags, ...level.blocks]) {
     if (item.planet !== planet || item.bottom > 1) continue;
@@ -241,9 +240,11 @@ export function buildScenery(scene, level, art, { tier = 2, time, makeCull }) {
   const rnd = mulberry32(924);
   const batches = { fern: [], shrub: [], blossom0: [], blossom1: [], blossom2: [], reed: [] };
   const anchors = [];
-  for (const tree of level.trees) if (tree.planet.look !== 'floor') anchors.push({ planet: tree.planet, dir: tree.dir, radius: tree.scale * 1.2, plants: [5, 8, 12][tier] });
-  for (const [lat, lon] of [[83, 90], [83, -90], [76, 65], [73, -58], [29, -34], [11, 39], [-8, 43], [-19, -40]]) {
-    anchors.push({ planet: level.planets[0], dir: dirFromLatLon(lat, lon), radius: .5, plants: [7, 11, 17][tier] });
+  // A few plants round each tree and in six meadow patches, none at the start:
+  // the meadow should read as Miro's, with room to run.
+  for (const tree of level.trees) if (tree.planet.look !== 'floor') anchors.push({ planet: tree.planet, dir: tree.dir, radius: tree.scale * 1.2, plants: [2, 3, 4][tier] });
+  for (const [lat, lon] of [[76, 65], [73, -58], [29, -34], [11, 39], [-8, 43], [-19, -40]]) {
+    anchors.push({ planet: level.planets[0], dir: dirFromLatLon(lat, lon), radius: .5, plants: [3, 4, 6][tier] });
   }
   const offset = (anchor, angle, distance) => {
     const east = tangentDir(new THREE.Vector3(.3, .1, .9), anchor.dir);

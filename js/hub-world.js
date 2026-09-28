@@ -253,7 +253,6 @@ export class HubWorld {
     this.#prepareCamera(camera);
     if (this.#launch) this.clearIntent();
     else this.#player.readInput(input, this.#rig);
-    input.consumeRide?.();
     const steps = Math.max(1, Math.ceil(dt / PHYSICS_STEP)), h = dt / steps;
     for (let i = 0; i < steps; i++) this.#player.step(h);
     this.#elapsed += dt;

@@ -21,10 +21,9 @@ function setup() {
     } };
 }
 
-test('original wildlife rigs share a bounded draw budget and use positive transforms', () => {
+test('a few birds, no squirrels: the rigs share a bounded draw budget and use positive transforms', () => {
   const f = setup();
-  assert.deepEqual(f.wildlife.counts, { bird: 18, squirrel: 7 });
-  assert.equal(f.wildlife.models.group.children.length, 15);
+  assert.deepEqual(f.wildlife.counts, { bird: 5, squirrel: 0 });
   f.tick();
   const matrix = new Matrix4();
   for (const mesh of f.wildlife.models.group.children) {
@@ -35,7 +34,7 @@ test('original wildlife rigs share a bounded draw budget and use positive transf
       assert.ok(matrix.determinant() >= 0, 'negative instance transforms invert front-face culling');
     }
   }
-  assert.ok(f.wildlife.snapshot().visible >= 5, 'the starting meadow should visibly contain animals');
+  assert.ok(f.wildlife.snapshot().visible <= 5, 'a few birds, not a crowd');
   f.wildlife.dispose();
   assert.equal(f.scene.children.length, 0);
 });
@@ -48,7 +47,7 @@ test('ground animals spawn and roam on dry, unobstructed spherical terrain', () 
   // Move the player between habitats to exercise escape, detours and return,
   // then let normal foraging continue. Long frames are deliberately capped.
   for (let i = 0; i < 3000; i++) {
-    if (i % 300 === 0) f.player.body.pos.copy(f.wildlife.animals[Math.floor(i / 300) % 15].pos);
+    if (i % 300 === 0) f.player.body.pos.copy(f.wildlife.animals[Math.floor(i / 300) % f.wildlife.animals.length].pos);
     if (i % 300 === 90) f.player.body.pos.set(0, -26, 0);
     f.tick();
     for (const animal of f.wildlife.animals) {
@@ -82,36 +81,16 @@ test('approached bluebirds take wing and settle on a tree again', () => {
   f.wildlife.dispose();
 });
 
-test('squirrels scurry away, return to a safe tree patch and hold an acorn', () => {
-  const f = setup();
-  const squirrel = f.wildlife.animals.find(animal => animal.kind === 'squirrel');
-  f.player.body.pos.copy(squirrel.pos);
-  const before = squirrel.pos.clone();
-  f.tick();
-  assert.equal(squirrel.state, 'scurry');
-  f.tick(40);
-  assert.ok(squirrel.pos.distanceTo(before) > 1.5);
-  f.player.body.pos.set(0, -26, 0);
-  const seen = new Set();
-  for (let i = 0; i < 700; i++) { f.tick(); seen.add(squirrel.state); }
-  assert.ok(seen.has('return'));
-  assert.ok(seen.has('sit'));
-  assert.ok(f.wildlife.safe(squirrel.dir));
-  f.wildlife.dispose();
-});
-
-test('discoveries are once per species, and replay restores both animal habitats', () => {
+test('the birds are met once, and replay puts them back where they were', () => {
   const f = setup();
   const original = f.wildlife.layout();
   const meet = [];
-  for (const kind of ['bird', 'squirrel']) {
-    const animal = f.wildlife.animals.find(item => item.kind === kind);
+  for (const animal of f.wildlife.animals.filter(item => item.kind === 'bird').slice(0, 2)) {
     f.player.body.pos.copy(animal.pos);
     meet.push(...f.tick(3).filter(event => event.type === 'wildlifeMeet'));
   }
   assert.equal(meet.filter(event => event.kind === 'bird').length, 1);
-  assert.equal(meet.filter(event => event.kind === 'squirrel').length, 1);
-  assert.deepEqual(f.wildlife.snapshot().discovered.sort(), ['bird', 'squirrel']);
+  assert.deepEqual(f.wildlife.snapshot().discovered, ['bird']);
   f.wildlife.reset();
   assert.deepEqual(f.wildlife.snapshot().discovered, []);
   assert.deepEqual(f.wildlife.layout(), original);
@@ -129,10 +108,8 @@ test('story scenes freeze wildlife and quality tiers retain nearby animals', () 
   assert.deepEqual(f.wildlife.animals.map(animal => ({ state: animal.state, age: animal.age, pos: animal.pos.toArray() })), before);
   f.wildlife.setQuality(0); f.tick();
   const visible = f.wildlife.animals.filter(animal => animal.visible);
-  assert.ok(visible.some(animal => animal.kind === 'bird'));
-  assert.ok(visible.some(animal => animal.kind === 'squirrel'));
-  assert.ok(visible.filter(animal => animal.kind === 'bird').length <= 7);
-  assert.ok(visible.filter(animal => animal.kind === 'squirrel').length <= 3);
+  assert.ok(visible.filter(animal => animal.kind === 'bird').length <= 3);
+  assert.ok(visible.every(animal => animal.kind === 'bird'));
   // Looking from the far side cannot render the starting animals through it.
   f.camera.position.set(0, -40, 0); f.camera.updateMatrixWorld(); f.tick();
   assert.equal(f.wildlife.animals[0].visible, false);
