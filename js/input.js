@@ -31,6 +31,7 @@ const KEYS = {
   jump: ['Space', 'KeyK'],
   spin: ['ShiftLeft', 'ShiftRight', 'KeyJ', 'KeyX'],
   pound: ['KeyC', 'ControlLeft', 'ControlRight', 'KeyL'],
+  ride: ['KeyF'],
   camLeft: ['KeyQ'],
   camRight: ['KeyE'],
 };
@@ -51,6 +52,7 @@ export class Input {
     this.jumpQueued = false;
     this.spinQueued = false;
     this.poundQueued = false;
+    this.rideQueued = false;
     this.poundHeld = false;
     this.buttonPoundHeld = false;
     this.turn = { x: 0, y: 0 };
@@ -122,7 +124,7 @@ export class Input {
     this.releaseStick();
     this.dragPointer = null;
     this.buttonJumpHeld = this.buttonPoundHeld = this.buttonGas = this.buttonBrake = this.jumpHeld = this.poundHeld = false;
-    this.jumpQueued = this.spinQueued = this.poundQueued = false;
+    this.jumpQueued = this.spinQueued = this.poundQueued = this.rideQueued = false;
     this.turn.x = this.turn.y = this.move.x = this.move.y = 0;
     this.drive.steer = this.drive.gas = this.drive.brake = 0;
     Object.assign(this.menu, {x: 0, y: 0, confirm: false, back: false});
@@ -166,6 +168,7 @@ export class Input {
       if (KEYS.jump.includes(e.code)) this.jumpQueued = true;
       if (KEYS.spin.includes(e.code)) this.spinQueued = true;
       if (KEYS.pound.includes(e.code)) this.poundQueued = true;
+      if (KEYS.ride.includes(e.code)) this.rideQueued = true;
     }
     if (isDown) this.down.add(e.code);
     else this.down.delete(e.code);
@@ -233,7 +236,7 @@ export class Input {
     this.knob.style.transform = '';
   }
 
-  /** Standard mapping: A jump, X spin, B pound; RT/LT drive; Start pauses. */
+  /** Standard mapping: A jump, X spin, B pound, Y ride; RT/LT drive; Start pauses. */
   sampleGamepad() {
     let pad = null;
     // The API can be unavailable in an embedded page or browser policy.
@@ -242,11 +245,12 @@ export class Input {
     } catch { /* Keyboard and touch remain available. */ }
     this.gamepadConnected = Boolean(pad);
     const value = (i) => pad?.buttons[i]?.value ?? 0;
-    const buttons = [0, 2, 1, 9].map((i) => Boolean(pad?.buttons[i]?.pressed));
+    const buttons = [0, 2, 1, 9, 3].map((i) => Boolean(pad?.buttons[i]?.pressed));
     if (this.enabled) {
       if (buttons[0] && !this.padButtons[0]) this.jumpQueued = true;
       if (buttons[1] && !this.padButtons[1]) this.spinQueued = true;
       if (buttons[2] && !this.padButtons[2]) this.poundQueued = true;
+      if (buttons[4] && !this.padButtons[4]) this.rideQueued = true;
     }
     const pause = buttons[3] && !this.padButtons[3];
     this.padButtons = buttons;
@@ -309,6 +313,12 @@ export class Input {
     const v = this.poundQueued;
     this.poundQueued = false;
     return v;
+  }
+
+  consumeRide() {
+    const value = this.rideQueued;
+    this.rideQueued = false;
+    return value;
   }
 
   consumeCamera() {

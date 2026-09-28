@@ -488,6 +488,7 @@ export class HubWorld {
     // Up a beam or across to the moon, Mirio flies where he was flung.
     if (this.#launch || (this.#hop && this.#hop.landed === undefined)) this.clearIntent();
     else this.#player.readInput(input, this.#rig);
+    input.consumeRide?.();
     const steps = Math.max(1, Math.ceil(dt / PHYSICS_STEP)), h = dt / steps;
     for (let i = 0; i < steps; i++) this.#player.step(h);
     this.#elapsed += dt;

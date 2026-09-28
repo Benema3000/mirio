@@ -164,6 +164,23 @@ articulated 3D animals, with shared geometry and instanced parts. Nearby
 birdsong, rustling leaves and a quiet breeze complete the meadow. Meeting a bird
 earns a Tierfreund badge at the end. The wildlife is harmless.
 
+Three little guardians live in quiet corners away from the path: two
+**Mooskrabbler** on the far meadow and a hopping **Mondkiesel** on the moon.
+They patrol, visibly wind up a short attack, then recover and return home. A
+jump onto their head or a ground pound defeats them; spinning stuns them. A
+defeat restores one heart; the hearts show only in the boss fight or once a
+guardian has taken one. Two squirrels forage and scurry off when Mirio comes
+close.
+
+The moon hides one optional **Mondspur**: six glowing rings. Touch the first to
+start an 18-second run; finish in order for a badge and a 12-second
+Glitzermagnet that pulls in nearby gems, without changing the gem total.
+
+On the far side of the start planet a little turquoise biplane, the
+**Wiesensummer**, waits to be found. F, controller Y or its on-screen button
+boards it; it flies low round the planet (never above 4.5 metres) and lands
+itself in a clear, dry spot when you get out.
+
 Three giant spring blossoms are optional toys. Walk or land on their centres to
 bounce high, or ground-pound them for an extra lift. Trying all three earns the
 Blütenflieger badge. These additions reuse the existing gem total and score rules.
