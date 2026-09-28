@@ -151,6 +151,11 @@ function creature(kind, art) {
   shadow.rotation.x = -Math.PI / 2;
   shadow.position.y = 0.035;
   group.add(shadow);
+  return { group, body, shell, eyes, feet, ornament, shadow, ...telegraphs(group) };
+}
+
+/** The ring that warns of a charge and the stars of a stunned creature, added to `group`. */
+export function telegraphs(group) {
   const warning = new THREE.Mesh(new THREE.RingGeometry(0.94, 1.025, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffce68, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide }));
   warning.position.y = 0.05;
   group.add(warning);
@@ -158,17 +163,18 @@ function creature(kind, art) {
   stars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   stars.frustumCulled = false;
   group.add(stars);
-  return { group, body, shell, eyes, feet, ornament, shadow, warning, stars };
+  return { warning, stars };
 }
 
 export class EnemySystem {
-  constructor(scene, level, art) {
+  /** `layouts` and `build(kind, art)` let another journey bring its own creatures. */
+  constructor(scene, level, art, { layouts = enemyLayouts(level), build = creature } = {}) {
     this.group = new THREE.Group();
     scene.add(this.group);
     this.tier = 2;
     this.active = true;
-    this.enemies = enemyLayouts(level).map((layout, i) => {
-      const model = creature(layout.kind, art);
+    this.enemies = layouts.map((layout, i) => {
+      const model = build(layout.kind, art);
       this.group.add(model.group);
       const forward = tangentDir(new THREE.Vector3(0, 0, 1), layout.dir) ?? tangentDir(new THREE.Vector3(1, 0, 0), layout.dir);
       return { ...layout, model, brain: new EnemyBrain(layout.kind, i * 1.73),
@@ -250,13 +256,18 @@ export class EnemySystem {
         model.body.scale.setScalar(Math.max(0.001, 1 - progress ** 2));
         model.body.rotation.y = progress * Math.PI * 2;
       }
-      model.eyes.scale.y = stunned ? 0.45 : (time + brain.phase) % 4.2 < 0.13 ? 0.12 : 1;
-      model.ornament.rotation.z = Math.sin(time * 3 + brain.phase) * 0.15;
-      model.feet.forEach((foot, i) => { foot.position.y = gait ? Math.max(0, Math.sin(beat + i * Math.PI)) * 0.11 : 0; });
-      model.shell.material.emissive.set(warning ? 0xa45011 : stunned ? 0x455477 : 0x000000);
-      model.shell.material.emissiveIntensity = warning ? 0.24 + Math.sin(time * 18) * 0.08 : 0.14;
-      model.shadow.scale.setScalar(1 - brain.hop * 0.22);
-      model.shadow.material.opacity = brain.mode === 'defeated' ? 0.55 * Math.max(0, 1 - brain.timer / ENEMY_RULES.vanish) : 0.55 - brain.hop * 0.15;
+      // Other journeys' creatures (volcano-creatures.js) bring only some of these parts.
+      if (model.eyes) model.eyes.scale.y = stunned ? 0.45 : (time + brain.phase) % 4.2 < 0.13 ? 0.12 : 1;
+      if (model.ornament) model.ornament.rotation.z = Math.sin(time * 3 + brain.phase) * 0.15;
+      model.feet?.forEach((foot, i) => { foot.position.y = gait ? Math.max(0, Math.sin(beat + i * Math.PI)) * 0.11 : 0; });
+      if (model.shell) {
+        model.shell.material.emissive.set(warning ? 0xa45011 : stunned ? 0x455477 : 0x000000);
+        model.shell.material.emissiveIntensity = warning ? 0.24 + Math.sin(time * 18) * 0.08 : 0.14;
+      }
+      if (model.shadow) {
+        model.shadow.scale.setScalar(1 - brain.hop * 0.22);
+        model.shadow.material.opacity = brain.mode === 'defeated' ? 0.55 * Math.max(0, 1 - brain.timer / ENEMY_RULES.vanish) : 0.55 - brain.hop * 0.15;
+      }
       model.warning.visible = warning;
       model.warning.scale.setScalar(1.2 - Math.min(1, brain.timer / ENEMY_RULES.windup) * 0.28);
       model.stars.visible = stunned;

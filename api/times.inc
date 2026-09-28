@@ -4,8 +4,8 @@
 // the HMAC domain below includes both this protocol and the requested level.
 require_once __DIR__ . '/scores.inc';
 
-const MIRIO_TIMES_LEVELS = ['adventure' => 30000, 'sky' => 20000, 'ribbon' => 8000, 'kart' => 10000, 'marble' => 8000, 'tilt' => 8000];
-const MIRIO_TIMES_ADDED_LEVELS = ['marble', 'tilt'];
+const MIRIO_TIMES_LEVELS = ['adventure' => 30000, 'sky' => 20000, 'ribbon' => 8000, 'kart' => 10000, 'marble' => 8000, 'tilt' => 8000, 'volcano' => 30000];
+const MIRIO_TIMES_ADDED_LEVELS = ['marble', 'tilt', 'volcano'];
 const MIRIO_TIMES_MAX = 86400000;
 const MIRIO_TIMES_TOKEN_AGE = 86400;
 const MIRIO_TIMES_SLACK_MS = 15000;

@@ -155,6 +155,9 @@ export function makeEnvironmentArt() {
   return {
     meadow: surface({ base: [111, 164, 73], light: [164, 196, 105], dark: [66, 123, 65], seed: 91, grass: true }),
     gold: surface({ base: [202, 155, 71], light: [237, 204, 117], dark: [167, 116, 56], seed: 71, grass: true }),
+    // The Vulkanreise: warm red earth, and dark ash with a glow in its cracks.
+    ember: surface({ base: [196, 104, 66], light: [232, 150, 92], dark: [150, 70, 52], seed: 57, grass: true }),
+    ash: surface({ base: [98, 84, 96], light: [146, 122, 128], dark: [60, 52, 66], seed: 29 }),
     grain: surface({ base: [228, 229, 220], light: [255, 253, 237], dark: [189, 204, 176], seed: 43 }),
     water: surface({ base: [153, 159, 161], light: [209, 212, 211], dark: [112, 126, 134], seed: 123 }),
     jewel: jewelEnvironment(),

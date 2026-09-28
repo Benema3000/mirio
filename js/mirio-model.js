@@ -51,6 +51,29 @@ const OVAL = [
 const EMBLEM = [192, 46, 48, 74];
 const EMBLEM_OVAL = { x: 216, y: 84, rx: 20, ry: 33 };
 
+/**
+ * Which drawing dresses the toy, and where its parts are on the paper. The
+ * body is the same toy for every look; only the marker colours, the face
+ * and the skin change. `facePx` scales face pixels to model units and
+ * `faceY` centres the face on the head.
+ */
+export const MIRIO_LOOK = Object.freeze({
+  image: 'mirio', shirt: SHIRT, band: BAND, trousers: TROUSERS, shoes: SHOES, hair: HAIR, cap: CAP, skin: null,
+  face: FACE, faceScale: FACE_SCALE, oval: OVAL, facePx: PX, faceY: (SOLE_Y - (FACE[1] + FACE[3] / 2)) * PX - NECK_Y - HEAD.y,
+});
+/**
+ * Miro's second drawing (img/mirio-gross.jpg, 600x800): Mirio grown up, in
+ * a red shirt and blue dungarees. The cap keeps Mirio's own curl badge from
+ * the first drawing.
+ */
+export const BIG_MIRIO_LOOK = Object.freeze({
+  image: 'mirioGross', shirt: [245, 340, 90, 45], band: [255, 440, 70, 30], trousers: [220, 460, 110, 110],
+  shoes: [160, 728, 50, 26], hair: [355, 235, 30, 30], cap: [215, 120, 35, 30], skin: [205, 215, 30, 25],
+  face: [190, 176, 215, 158], faceScale: 2, oval: [], facePx: 0.00403, faceY: 0.03,
+  // A photo on grey paper: keep only the dark marker of eyes and mouth.
+  ink: { light: 140, range: 60 },
+});
+
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = Math.ceil(w);
@@ -110,7 +133,7 @@ function marker(tex, u, v) {
  * and trouser blue turn transparent. Light pencil is darkened and every line
  * thickened a little, or the face would fade out at game distance.
  */
-function pencilCanvas(img, rect, k) {
+function pencilCanvas(img, rect, k, { light = 225, range = 100 } = {}) {
   const c = cut(img, rect, k);
   const ctx = c.getContext('2d', { willReadFrequently: true });
   const px = ctx.getImageData(0, 0, c.width, c.height);
@@ -119,7 +142,7 @@ function pencilCanvas(img, rect, k) {
     const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
     const grey = Math.max(r, g, b) - Math.min(r, g, b) < 45 && r - b < 12;
     const lum = 0.3 * r + 0.59 * g + 0.11 * b;
-    const ink = grey ? THREE.MathUtils.clamp((225 - lum) / 100, 0, 1) : 0;
+    const ink = grey ? THREE.MathUtils.clamp((light - lum) / range, 0, 1) : 0;
     [d[i], d[i + 1], d[i + 2]] = PENCIL;
     d[i + 3] *= ink;
   }
@@ -131,15 +154,16 @@ function pencilCanvas(img, rect, k) {
   return out;
 }
 
-function faceCanvas(img) {
-  const c = pencilCanvas(img, FACE, FACE_SCALE);
+function faceCanvas(img, look) {
+  const { face, faceScale: k } = look;
+  const c = pencilCanvas(img, face, k, look.ink);
   const ctx = c.getContext('2d');
   ctx.globalCompositeOperation = 'destination-out';
-  ctx.lineWidth = 18 * FACE_SCALE;
+  ctx.lineWidth = 18 * k;
   ctx.lineCap = ctx.lineJoin = 'round';
-  for (const line of OVAL) {
+  for (const line of look.oval) {
     ctx.beginPath();
-    for (const [x, y] of line) ctx.lineTo((x - FACE[0]) * FACE_SCALE, (y - FACE[1]) * FACE_SCALE);
+    for (const [x, y] of line) ctx.lineTo((x - face[0]) * k, (y - face[1]) * k);
     ctx.stroke();
   }
   // A clear frame: UVs are clamped, so the edge texels spread over the rest of the decal.
@@ -168,13 +192,13 @@ function emblemCanvas(img) {
  * it looks exactly like the paper, wherever the surface curves away. The
  * rectangle's centre lands on (cx, cy) of the geometry.
  */
-function projectUV(geom, rect, cx, cy) {
+function projectUV(geom, rect, cx, cy, px = PX) {
   const [, , w, h] = rect;
   const pos = geom.attributes.position;
   const uv = geom.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
-    const u = (pos.getX(i) - cx) / (w * PX) + 0.5;
-    const v = (pos.getY(i) - cy) / (h * PX) + 0.5;
+    const u = (pos.getX(i) - cx) / (w * px) + 0.5;
+    const v = (pos.getY(i) - cy) / (h * px) + 0.5;
     uv.setXY(i, THREE.MathUtils.clamp(u, 0, 1), THREE.MathUtils.clamp(v, 0, 1));
   }
   uv.needsUpdate = true;
@@ -327,18 +351,17 @@ function hairGeometry() {
   return geom;
 }
 
-function buildHead(head, img, tex, mats) {
+function buildHead(head, img, tex, mats, look, badgeImg) {
   const skull = new THREE.Group();
   skull.position.y = HEAD.y;
   head.add(skull);
   const { rx, ry, rz } = HEAD;
-  skull.add(mesh(ellipsoid(rx, ry, rz, 28, 18), toon(PAPER), mats.thick));
+  skull.add(mesh(ellipsoid(rx, ry, rz, 28, 18), tex.skin ? marker(tex.skin, 4, 2) : toon(PAPER), mats.thick));
 
   // The front half of a slightly larger shell carries the pencil face.
   const lift = 1.012;
   const front = new THREE.SphereGeometry(1, 20, 16, 0, Math.PI, 0.2, 2.5).scale(rx * lift, ry * lift, rz * lift);
-  const faceY = (SOLE_Y - (FACE[1] + FACE[3] / 2)) * PX - NECK_Y - HEAD.y;
-  skull.add(new THREE.Mesh(projectUV(front, FACE, 0, faceY), decal(faceCanvas(img))));
+  skull.add(new THREE.Mesh(projectUV(front, look.face, 0, look.faceY, look.facePx), decal(faceCanvas(img, look))));
 
   skull.add(mesh(hairGeometry(), marker(tex.hair, 4, 1), mats.thin));
 
@@ -356,18 +379,19 @@ function buildHead(head, img, tex, mats) {
 
   // The badge in the middle of the cap front.
   const badge = lathe(capProfile.map(([r, y]) => [r * 1.015 + 0.002, y]), 0.9, 14, -1.1, 2.2);
-  cap.add(new THREE.Mesh(projectUV(badge, EMBLEM, 0, 0.28), decal(emblemCanvas(img))));
+  cap.add(new THREE.Mesh(projectUV(badge, EMBLEM, 0, 0.28), decal(emblemCanvas(badgeImg))));
 }
 
-export function buildMirio(art) {
-  const img = art.images.mirio;
+export function buildMirio(art, look = MIRIO_LOOK) {
+  const img = art.images[look.image];
   const tex = {
-    shirt: swatch(img, SHIRT),
-    band: swatch(img, BAND),
-    trousers: swatch(img, TROUSERS),
-    shoes: swatch(img, SHOES),
-    hair: swatch(img, HAIR),
-    cap: swatch(img, CAP),
+    shirt: swatch(img, look.shirt),
+    band: swatch(img, look.band),
+    trousers: swatch(img, look.trousers),
+    shoes: swatch(img, look.shoes),
+    hair: swatch(img, look.hair),
+    cap: swatch(img, look.cap),
+    skin: look.skin ? swatch(img, look.skin) : null,
   };
   const mats = {
     thick: outlineMaterial(0.028),
@@ -396,7 +420,7 @@ export function buildMirio(art) {
   const head = new THREE.Group();
   head.position.y = NECK_Y;
   body.add(head);
-  buildHead(head, img, tex, mats);
+  buildHead(head, img, tex, mats, look, art.images.mirio);
 
   const arms = {};
   const elbows = {};
@@ -438,3 +462,6 @@ export function buildMirio(art) {
     height,
   };
 }
+
+// Shared with volcano-creatures.js, whose creatures are dressed the same way.
+export { swatch, marker, pencilCanvas, projectUV, decal };

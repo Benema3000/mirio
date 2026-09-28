@@ -14,8 +14,8 @@ function toward(from, to, distance, radius = HUB.radius) {
 /** Somewhere on the same body as `p`, away from it: the spawn at home, the landing spot beside the race on the moon. */
 const away = (p) => (p.planet === 'moon' ? hubReturn('kart').dir : HUB_SPAWN);
 
-test('the Sternenhof has a pad for each of the six journeys, the race on the moon, and the spawn is on none', () => {
-  assert.deepEqual(new Set(HUB_PADS.map(p => p.level)), new Set(['adventure', 'sky', 'kart', 'marble', 'ribbon', 'tilt']));
+test('the Sternenhof has a pad for each of the seven journeys, the race on the moon, and the spawn is on none', () => {
+  assert.deepEqual(new Set(HUB_PADS.map(p => p.level)), new Set(['adventure', 'sky', 'kart', 'marble', 'ribbon', 'tilt', 'volcano']));
   assert.equal(HUB_PADS.find(p => p.level === 'kart').planet, 'moon');
   const visit = createHubVisit();
   assert.deepEqual(stepHubVisit(visit, 5, {planet: 'home', dir: HUB_SPAWN, grounded: true}), []);

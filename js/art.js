@@ -332,13 +332,15 @@ export function raysCanvas(size = 256, rays = 12) {
 
 /** Loads Miro's drawings and prepares the shared textures. */
 export async function loadArt(base = 'img/') {
-  const [mirio, floor, rocket] = await Promise.all(
-    ['mirio.png', 'floor.png', 'rakete.png'].map((f) => loadImage(base + f)),
+  const [mirio, floor, rocket, mirioGross, grummel, grummelKlein, kreisel, schnappblume, glutzahn] = await Promise.all(
+    ['mirio.png', 'floor.png', 'rakete.png', 'mirio-gross.jpg', 'grummel.jpg', 'grummel-klein.jpg', 'kreisel.jpg', 'schnappblume.jpg', 'glutzahn.jpg']
+      .map((f) => loadImage(base + f)),
   );
   const mirioInk = cropToInk(mirio);
   return {
     // rakete.png is jump_btn.png of the 2D game: Miro's rocket, upright.
-    images: { mirio, floor, rocket },
+    // The rest are Miro's second set of drawings, for the Vulkanreise.
+    images: { mirio, floor, rocket, mirioGross, grummel, grummelKlein, kreisel, schnappblume, glutzahn },
     mirioSticker: fillHoles(sticker(mirioInk, Math.round(mirioInk.height * 0.022))),
     floor: canvasTexture(floorCanvas(floor), { repeat: true }),
     grass: canvasTexture(scribbleCanvas({

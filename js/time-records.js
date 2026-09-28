@@ -2,7 +2,7 @@
 // the player. No placeholder scores or cross-level comparisons are invented.
 import { COURSE, courseFor, personalBestKey } from './course-version.js';
 
-const LEVEL_IDS = new Set(['adventure', 'sky', 'ribbon', 'kart', 'marble', 'tilt']);
+const LEVEL_IDS = new Set(['adventure', 'sky', 'ribbon', 'kart', 'marble', 'tilt', 'volcano']);
 const MAX_TIME_MS = 24 * 60 * 60 * 1000;
 const memory = new Map();
 

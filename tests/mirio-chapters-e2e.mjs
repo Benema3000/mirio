@@ -88,7 +88,7 @@ try{
     await page.click('#pause-button');const before=(await snap(page)).chapterRun;
     await page.click('#rescue');const after=await snap(page);
     assert.equal(after.paused,false);assert.ok(after.chapterRun.time>=before.time);
-    assert.ok(after.chapterRun.penalty>before.penalty);assert.match(await page.textContent('#hint'),/\+2 s/);
+    assert.ok(after.chapterRun.penalty>before.penalty);assert.match(await page.textContent('#toast'),/\+2 s/);
   });
   await check('finishing flight saves an isolated personal best and shows a time-only result',async()=>{
     await until(page,()=>window.__mirio.snapshot().chapterRun.elapsed>=22);
@@ -162,9 +162,9 @@ try{
     assert.deepEqual((await snap(page)).cameraUp,[0,1,0]);
     await menu(page);
   });
-  await check('the full original adventure still starts with the parked ride and original gem total',async()=>{
+  await check('the full original adventure still starts with its gem total, the plane parked out of sight',async()=>{
     await choose(page,'adventure');assert.equal((await snap(page)).state,'play');assert.equal((await snap(page)).chapterRun,null);
-    assert.match(await page.textContent('#bits'),/\/ 153$/);assert.ok(await page.isVisible('#ride-action'));
+    assert.match(await page.textContent('#bits'),/\/ 174$/);assert.equal(await page.isVisible('#ride-action'),false);
     await menu(page);assert.deepEqual(errors,[]);
   });
   await context.close();

@@ -41,6 +41,13 @@ export const CHAPTERS = Object.freeze({
     touch: 'Links kippen · ◎ halten: bremsen / Schaumsteg',
     controller: 'Linker Stick kippen · A halten: bremsen / Schaumsteg',
     goal: '⚑ Über drei Inseln zum Handtuch', medal: [50000, 75000, 110000]},
+  volcano: {name: 'Die Vulkanreise', short: 'Vulkanreise', eyebrow: '07 / VULKANREISE',
+    jumpIcon: '↑', jumpLabel: 'Springen', actionIcon: '⟳', actionLabel: 'Drehen',
+    description: 'Über die Glutwelt zur Rakete, auf dem Aschemond zu Glutzahn. Die Glutbeere macht Mirio groß.',
+    keys: 'WASD laufen · Leertaste springen · Shift drehen · C stampfen',
+    touch: 'Links laufen · ↑ springen · ⟳ drehen · ⤓ stampfen',
+    controller: 'Linker Stick laufen · A springen · X drehen · B stampfen',
+    goal: 'Hol dir den Kristall!', medal: [240000, 420000, 720000]},
 });
 
 export function medalFor(level, milliseconds) {
