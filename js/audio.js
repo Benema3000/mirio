@@ -30,6 +30,10 @@ const CHORDS = [
   [45, 60, 64, 69], [41, 60, 65, 69], [43, 59, 62, 67], [48, 60, 64, 67],
 ];
 const PENTATONIC = [84, 86, 88, 91, 93, 96];
+const PINBALL_IMPACTS = ['pinballJelly', 'pinballGear', 'pinballStar'];
+const PINBALL_NOTES = ['pinballBloom', 'pinballCuckoo', 'pinballConstellation'];
+const PINBALL_COOLDOWNS = Object.freeze({pinballJelly: .075, pinballGear: .075,
+  pinballStar: .075, pinballRail: .1, pinballFlipper: .06, pinballStroke: .08});
 
 function readSaved(key, fallback) {
   try { return JSON.parse(globalThis.localStorage?.getItem(key) ?? 'null') ?? fallback; }
@@ -342,14 +346,66 @@ export class Sound {
     gain.linearRampToValueAtTime(1, t + duration + 0.45);
   }
 
+  // Table materials have distinct voices; short impacts leave the next shot audible.
+  playPinball(event) {
+    const table = event.table ?? 0;
+    if (event.type === 'marble-bumper') return this.play(PINBALL_IMPACTS[table]);
+    if (event.type === 'note') return this.play(PINBALL_NOTES[table]);
+    if (event.type === 'pinball-toy') return this.play(event.stage === 'start' ? 'pinballRamp' : PINBALL_NOTES[table]);
+    const name = {flipper: 'pinballFlipper', 'flipper-hit': 'pinballStroke',
+      'pinball-wall': 'pinballRail', 'pinball-combo': 'pinballCombo', 'pinball-ready': 'pinballReady',
+      'pinball-cradle': 'pinballFlipper',
+      'ball-save': 'pinballCuckoo', rescue: 'pinballCuckoo', spring: 'pinballLaunch',
+      checkpoint: 'flag', chime: 'ring', ring: 'ring'}[event.type];
+    if (name) this.play(name);
+  }
+
   play(name) {
     if (!this.audible || this.muted) return;
     const now = this.ctx.currentTime;
-    const cooldown = { skid: 0.2, bump: 0.12, land: 0.08, bit: 0.035, ring: 0.08, planeBump: 0.2, planeBoost: 0.25 }[name] ?? 0;
+    const cooldown = PINBALL_COOLDOWNS[name] ?? { skid: 0.2, bump: 0.12, land: 0.08, bit: 0.035, ring: 0.08, planeBump: 0.2, planeBoost: 0.25 }[name] ?? 0;
     if (now - (this.cooldowns.get(name) ?? -10) < cooldown) return;
     this.cooldowns.set(name, now);
     const variation = 0.96 + Math.random() * 0.08;
     switch (name) {
+      case 'pinballJelly':
+        this.tone(260, .17, {type: 'sine', to: 95, vol: .14});
+        this.tone(520, .09, {to: 210, vol: .035});
+        break;
+      case 'pinballGear':
+        this.sample('tap', {vol: .2, rate: 1.5});
+        this.tone(740, .1, {type: 'triangle', to: 480, vol: .08});
+        break;
+      case 'pinballStar':
+        this.chime([88, 95], {gap: .035, vol: .1});
+        break;
+      case 'pinballFlipper':
+      case 'pinballRail':
+        this.sample('tap', {vol: .1, rate: name === 'pinballRail' ? 1.8 : .9});
+        break;
+      case 'pinballStroke':
+        this.sample('tap', {vol: .2, rate: 1.2});
+        this.tone(190, .075, {to: 440, vol: .055});
+        break;
+      case 'pinballLaunch':
+      case 'pinballRamp':
+        this.sample('swish', {vol: .12, rate: 1.2});
+        this.tone(240, .4, {type: 'triangle', to: 960, vol: .08});
+        break;
+      case 'pinballBloom':
+        this.chime([72, 76, 79], {gap: .055, vol: .12});
+        break;
+      case 'pinballCuckoo':
+        this.tone(660, .14, {type: 'sine', to: 620, vol: .1});
+        this.tone(520, .19, {type: 'sine', to: 490, vol: .1, at: .18});
+        break;
+      case 'pinballConstellation':
+        this.chime([84, 91, 96, 100], {gap: .06, vol: .1});
+        break;
+      case 'pinballCombo':
+      case 'pinballReady':
+        this.chime(name === 'pinballCombo' ? [79, 84, 88] : [76, 79], {gap: .065, vol: .1});
+        break;
       case 'jump':
       case 'jump2': {
         const high = name === 'jump2';

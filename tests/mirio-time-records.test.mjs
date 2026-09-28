@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {personalBestKey} from '../js/course-version.js';
+import {COURSE, courseFor, personalBestKey} from '../js/course-version.js';
 
 let moduleId = 0;
 const fixtureContexts = new WeakSet();
@@ -69,6 +69,21 @@ test('Klangkugel saves separately without replacing existing course records', as
   assert.equal(storage.entries.get('mirio-time-best-v1:sky'), '21000');
   const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
   assert.equal(reloaded.readPersonalBest('marble'), 61000);
+});
+
+test('new pinball cabinets preserve readable v3 records without ranking them', async t => {
+  const archiveKey = personalBestKey('marble', COURSE.PINBALL), archiveTime = 61000;
+  const storage = store({[archiveKey]: String(archiveTime)}), records = await fixture(t, storage);
+  assert.equal(courseFor('marble'), 'pinball-v4');
+  assert.equal(COURSE.PINBALL_CABINET, courseFor('marble'));
+  assert.equal(records.readPersonalBest('marble'), null);
+  assert.equal(records.readPersonalBest('marble', {course: COURSE.PINBALL}), archiveTime);
+  assert.deepEqual(records.savePersonalBest('marble', 74000), {best: 74000, previous: null, isNew: true});
+  assert.equal(storage.entries.get(archiveKey), String(archiveTime));
+  assert.equal(storage.entries.get(personalBestKey('marble')), '74000');
+  const reloaded = await import(`../js/time-records.js?test=${++moduleId}`);
+  assert.equal(reloaded.readPersonalBest('marble'), 74000);
+  assert.equal(reloaded.readPersonalBest('marble', {course: COURSE.PINBALL}), archiveTime);
 });
 
 test('Seifenstern persists its own best while keeping musical and legacy times', async t => {
@@ -179,4 +194,16 @@ test('revised postal and garden journeys preserve but exclude their earlier time
   }
   assert.equal(records.readPersonalBest('tilt'), 66000, 'unchanged gameplay keeps its record');
   for (const [key, value] of Object.entries(old)) assert.equal(storage.entries.get(key), value);
+});
+
+test('archived completions keep souvenirs without entering current rankings', async t => {
+  const old = {'mirio-time-best:pinball-v3:marble': '72000', 'mirio-time-best:branches-v3:kart': '46000'};
+  const storage = store(old), records = await fixture(t, storage);
+  for (const level of ['marble', 'kart']) {
+    assert.equal(records.hasCompletedLevel(level), true);
+    assert.equal(records.readPersonalBest(level), null);
+  }
+  assert.equal(records.hasCompletedLevel('sky'), false);
+  assert.equal(records.hasCompletedLevel('unknown'), false);
+  assert.deepEqual(Object.fromEntries(storage.entries), old);
 });

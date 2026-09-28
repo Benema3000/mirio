@@ -719,6 +719,13 @@ body.touch.chapter-marble:not(.paused) #pinball-controls { display: flex; positi
 #pinball-controls #pinball-plunger { width: 65px; height: 58px; margin-bottom: 9px; color: #9ef3de; border-color: #9ef3de; }
 #pinball-controls button.pressed { background: #537b87; transform: translateY(4px); box-shadow: none; }
 body.chapter-marble #touch-controls { display: none !important; }
+/* Keep shot feedback outside the ball's route. */
+body.chapter-marble #toast { top: 98px; width: auto; max-width: 80vw; padding: 6px 14px; border-radius: 18px; background: #102a3be8; font-size: 16px; text-shadow: none; }
+body.chapter-marble #toast.big { font-size: 24px; }
+@media (max-width: 600px) {
+  body.chapter-marble #chapter-hud { top: 70px; padding: 7px 12px; }
+  body.chapter-marble #toast { top: 150px; font-size: 13px; }
+}
 @media (orientation: portrait) {
   body.touch #discovery-action { bottom: 190px; max-width: calc(100% - 30px); white-space: nowrap; }
   body.touch #bonus-hud { top: 74px; max-width: 190px; font-size: 11px; }

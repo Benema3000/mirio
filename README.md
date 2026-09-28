@@ -91,7 +91,7 @@ Pause provides help and separate time boards without leaving the current run.
 | **Sternenrennen** | Three laps round the Zielplanet against Finster-Mirio: ramp, dash panels, blocks, drifts and mini-turbos | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
 | **Wolkenpost** | Fly through golden rings past floating islands, dodge balloons and throw three parcels to the islands' catchers | WASD/arrows/stick steer; Space/A roll; Shift/X throw at a catcher, turbo elsewhere |
 | **Blütenpfad** | One run through courtyard, tree house, glass house and cellar garden to a flower tower; three lantern seeds wait up high on the way | A/D or ←/→/stick move; Space/A jump; Shift/X air spin |
-| **Klangkugel** | Three connected pinball tables: pudding garden, cuckoo clock and moon concert; light note targets and shoot the bell lift | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
+| **Klangkugel** | Grow a garden ramp, wake a cuckoo machine and ride a comet orbit across three pinball tables | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
 | **Seifenstern** | Tilt floating paths beneath a soap bubble; balance over rainbow ribbons, inflate a foam bridge and reach the towel | WASD/arrows/stick tilt; hold Space/A/◎ to level and brake, or inflate the marked soap basin |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
@@ -116,11 +116,14 @@ are documented in `assets/README.md`.
   the Blütentor is always open.
 - **Klangkugel:** gravity drives the ball; movement keys operate the flippers,
   never steer it. A charged side plunger launches into three themed tables.
-  Hit three note targets to open each bell lift. Bumpers, slingshots, a moving
-  clock hand and a low-gravity finale vary the shots. A cuckoo catches drains;
-  lit targets and cleared tables survive recovery (+2 seconds). Early misses
-  use a free ball saver. Separate touch flippers support simultaneous presses.
-  The whole table stays in view, including with reduced motion.
+  Notes grow a raised vine ramp, lower clock targets beside a timed cuckoo
+  scoop, and illuminate a lunar orbit. These shots earn notes and ball saves;
+  three notes also open the direct bell lift. Single-flipper catches allow
+  release-and-flip aiming; holding both remains forgiving. Linked targets
+  extend the ball saver. A cuckoo returns drains (+2 seconds), preserving
+  discoveries. Tilted cabinets have distinct scenery, painted playfields,
+  impact sounds, lights and trails. Reduced motion quiets decoration while
+  retaining readable moving mechanisms. Touch flippers work simultaneously.
 - **Seifenstern:** a bath-time world of soap paths over the bath water, soap
   bubbles drifting past. The stick tilts the whole world and gravity rolls the
   bubble; a steady camera watches from low behind. Broad bends reconnect with
@@ -131,7 +134,7 @@ are documented in `assets/README.md`.
 All scenery is procedural. Original drawings, derived models and floor textures
 are unchanged by these additions. Changed courses have separate records:
 `discovery-v3` (Planetenreise), `classic-v3` (single-track Sternenrennen),
-`branches-v3` (Sternenwege), `pinball-v3` (Klangkugel), and `journey-v3`
+`branches-v3` (Sternenwege), `pinball-v4` (Klangkugel), and `journey-v3`
 (Wolkenpost/Blütenpfad). Seifenstern keeps `playground-v2`. Earlier records and tokens
 remain stored under their original keys and directories.
 

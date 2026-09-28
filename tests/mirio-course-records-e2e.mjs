@@ -9,6 +9,7 @@ import {COURSE_VERSION, COURSE} from '../js/course-version.js';
 
 const HTTP_OK = 200, HTTP_BAD_REQUEST = 400;
 const TOKEN_AGE_WAIT_MS = 6000, POSTAL_RUN_MS = 20000, SHORT_RUN_MS = 10000;
+const CABINET_COURSE = 'pinball-v4';
 const directory = await mkdtemp(join(tmpdir(), 'mirio-course-test-'));
 const legacy = {times: {adventure: [], sky: [{id: 1, name: 'Altflug', timeMs: 21000, date: '2026-01-01'}], ribbon: [], kart: []}, used: [], recent: [], nextId: 2};
 const legacyText = JSON.stringify(legacy);
@@ -67,9 +68,30 @@ try {
       assert.equal((await result.json()).top[0].timeMs, timeMs);
     }
   }
+  // Both pinball clients remain usable while deployment versions overlap.
+  const pinballArchivePath = join(directory, 'courses', COURSE.PINBALL, 'times.json');
+  const pinballArchive = await readFile(pinballArchivePath, 'utf8');
+  const oldPinballUrl = `${base}?course=${COURSE.PINBALL}`;
+  const cabinetUrl = `${base}?course=${CABINET_COURSE}`;
+  const oldPinball = await (await fetch(`${oldPinballUrl}&level=marble`)).json();
+  assert.equal(oldPinball.top[0].timeMs, SHORT_RUN_MS);
+  const cabinetResponse = await fetch(`${cabinetUrl}&level=marble`);
+  assert.equal(cabinetResponse.status, HTTP_OK, 'new pinball cabinets have their own board');
+  const cabinet = await cabinetResponse.json();
+  assert.equal(cabinet.course, CABINET_COURSE);
+  assert.deepEqual(cabinet.top, []);
+  const submitPinball = (url, token) => fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({level: 'marble', token, name: 'Klangkind', timeMs: SHORT_RUN_MS})});
+  assert.equal((await submitPinball(cabinetUrl, oldPinball.token)).status, HTTP_BAD_REQUEST);
+  assert.equal((await submitPinball(oldPinballUrl, cabinet.token)).status, HTTP_BAD_REQUEST);
+  const cabinetResult = await submitPinball(cabinetUrl, cabinet.token);
+  assert.equal(cabinetResult.status, HTTP_OK);
+  assert.equal((await cabinetResult.json()).top[0].name, 'Klangkind');
+  assert.equal(await readFile(pinballArchivePath, 'utf8'), pinballArchive, 'v3 pinball rows and tokens stay byte-for-byte intact');
+  assert.equal((await (await fetch(`${oldPinballUrl}&level=marble`)).json()).top[0].name, oldPinball.top[0].name);
   assert.equal(await readFile(archivePath, 'utf8'), archive, 'v2 rows and used tokens stay byte-for-byte intact');
   assert.equal(await readFile(join(directory, 'times.json'), 'utf8'), legacyText);
-  console.log('PASS course records, v2 archive, five revision scopes, token isolation, submission');
+  console.log('PASS course records, v2/v3 archives, six revision scopes, token isolation, submission');
 } finally {
   server.kill();
   await new Promise(resolve => server.once('exit', resolve));

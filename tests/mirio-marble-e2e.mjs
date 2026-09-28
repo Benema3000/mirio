@@ -2,15 +2,16 @@
 import assert from 'node:assert/strict';
 import {readFile,mkdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {PERSONAL_BEST_PREFIX,personalBestKey} from '../js/course-version.js';
+import {COURSE,PERSONAL_BEST_PREFIX,personalBestKey} from '../js/course-version.js';
 const {chromium}=await import(process.env.PLAYWRIGHT??'playwright');
 const browser=await chromium.launch({executablePath:process.env.CHROMIUM,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const PINBALL_MIN_MS=8000;
 const errors=[],wait=(page,fn,arg)=>page.waitForFunction(fn,arg,{timeout:180000});
 const snap=page=>page.evaluate(()=>window.__mirio.snapshot());
 async function shot(page,name){if(!process.env.SHOTS)return;await mkdir(process.env.SHOTS,{recursive:true});await page.screenshot({path:`${process.env.SHOTS}/${name}.png`});}
 async function load(context){
-  await context.addInitScript(({legacy,tilt})=>{localStorage.setItem(legacy,'52380');localStorage.setItem(tilt,'61000');},
-    {legacy:PERSONAL_BEST_PREFIX+'marble',tilt:personalBestKey('tilt')});
+  await context.addInitScript(({legacy,archive,tilt})=>{localStorage.setItem(legacy,'52380');localStorage.setItem(archive,'72000');localStorage.setItem(tilt,'61000');},
+    {legacy:PERSONAL_BEST_PREFIX+'marble',archive:personalBestKey('marble',COURSE.PINBALL),tilt:personalBestKey('tilt')});
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   await page.route('https://cdn.jsdelivr.net/npm/three@0.186.0/**',async route=>{
     const name=route.request().url().split('three@0.186.0/')[1];
@@ -61,10 +62,10 @@ try{
     if(!process.env.DEVICES_ONLY){
       await play(page);const finish=await snap(page);
       assert.equal(finish.chapterRun.notes,9);assert.equal(finish.chapterRun.table,2);assert.ok(finish.chapterRun.bumps>6);
-      assert.ok(finish.time>40&&finish.time<240);await shot(page,'pinball-finish');
-      const records=await page.evaluate(({current,legacy,tilt})=>({current:localStorage.getItem(current),legacy:localStorage.getItem(legacy),tilt:localStorage.getItem(tilt)}),
-        {current:personalBestKey('marble'),legacy:PERSONAL_BEST_PREFIX+'marble',tilt:personalBestKey('tilt')});
-      assert.ok(Number(records.current)>40000);assert.equal(records.legacy,'52380');assert.equal(records.tilt,'61000');
+      assert.ok(finish.time*1000>=PINBALL_MIN_MS&&finish.time<240);await shot(page,'pinball-finish');
+      const records=await page.evaluate(({current,legacy,archive,tilt})=>({current:localStorage.getItem(current),legacy:localStorage.getItem(legacy),archive:localStorage.getItem(archive),tilt:localStorage.getItem(tilt)}),
+        {current:personalBestKey('marble'),legacy:PERSONAL_BEST_PREFIX+'marble',archive:personalBestKey('marble',COURSE.PINBALL),tilt:personalBestKey('tilt')});
+      assert.ok(Number(records.current)>=PINBALL_MIN_MS);assert.equal(records.legacy,'52380');assert.equal(records.archive,'72000');assert.equal(records.tilt,'61000');
       console.log(`ok complete keyboard pinball ${finish.time.toFixed(2)}s;9 notes,${finish.chapterRun.recoveries} catches;versioned record preserves archives`);
       await page.click('#again');await wait(page,()=>window.__mirio.snapshot().chapterRun?.countdown===0);
       assert.equal((await snap(page)).chapterRun.notes,0);
