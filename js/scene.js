@@ -189,7 +189,7 @@ const LOOKS = {
   floor: { tex: 'floor', size: 2.2, glow: 0xb9c6ff, rim: 0xc9b8ff, deco: 'moon' },
   // The Zielplanet: a warm golden meadow with flowers and stones.
   gold: { tex: 'gold', size: 4.5, glow: 0xffc86b, rim: 0xffe6a8, deco: 'gold' },
-  // The Vulkanreise: the Glutwelt's red earth and the Aschemond's dark ash.
+  // The Vulkanreise: the Festland's red earth, and dark ash (kept as a planet look).
   ember: { tex: 'ember', size: 5, glow: 0xff9a6b, rim: 0xffc79a, deco: 'ember' },
   ash: { tex: 'ash', size: 3.5, glow: 0xff6a3d, rim: 0xff9f7a, deco: 'ash' },
 };

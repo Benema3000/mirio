@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GLUT, GlutzahnRules } from '../js/glutzahn-rules.js';
-import { makeVolcanoLevel, volcanoFlightPoint } from '../js/volcano-level.js';
+import { RAVINES, ZONES, landPoint, makeVolcanoLevel, volcanoFlightPoint } from '../js/volcano-level.js';
 import { collidersFor } from '../js/level.js';
 import { surfacePoint } from '../js/world.js';
 
@@ -52,50 +52,76 @@ test('a Kreisel rolls and bounces off the rim, hurts on the ground and can be ju
   assert.equal(boss.step(DT, { ...on, x: k.x, z: k.z, height: GLUT.kreiselJump + 0.1 }).filter(e => e.type === 'hurt' && e.x === k.x).length, 0);
 });
 
-test('only a tired Glutzahn can be stomped; three stomps beat him', () => {
+test('only a tired Glutzahn can be stomped; three stages of two stomps beat him', () => {
   const fresh = until('walk');
   const head = (b) => ({ x: b.x, z: b.z, height: (GLUT.headLow + GLUT.headHigh) / 2, vy: -3 });
   assert.ok(fresh.step(DT, head(fresh)).some(e => e.type === 'bossBounce'), 'bounces off while he is fresh');
   assert.equal(fresh.hp, GLUT.hp);
   const boss = until('tired');
+  const stages = [];
   for (let hit = 1; hit <= GLUT.hp; hit++) {
     const events = boss.step(DT, head(boss));
     assert.ok(events.some(e => e.type === 'bossHit' && e.hp === GLUT.hp - hit));
+    stages.push(...events.filter(e => e.type === 'bossStage').map(e => e.stage));
     if (hit < GLUT.hp) {
       for (let t = 0; t < 30 && boss.mode !== 'tired'; t += DT) boss.step(DT, far);
       assert.equal(boss.mode, 'tired');
     } else assert.ok(events.some(e => e.type === 'bossDefeat'));
   }
+  assert.deepEqual(stages, [2, 3], 'two hits per stage');
   run(boss, GLUT.hurt + 0.1, far);
   assert.equal(boss.defeated, true);
   assert.deepEqual(boss.step(DT, head(boss)), [], 'nothing more once he is beaten');
 });
 
-test('the Vulkanreise: two planets apart, a clear rocket flight, the arena on the Aschemond', () => {
-  const level = makeVolcanoLevel();
-  const [welt, mond] = level.planets;
-  const gap = welt.center.distanceTo(mond.center) - welt.radius - mond.radius;
-  assert.ok(gap > 15, `planets ${gap.toFixed(1)} apart`);
-  for (let t = 0.08; t < 0.95; t += 0.01) {
-    const p = volcanoFlightPoint(level, t);
-    for (const planet of level.planets) assert.ok(p.distanceTo(planet.center) > planet.radius + 1, `the flight touches ${planet.id} at ${t.toFixed(2)}`);
-  }
-  assert.equal(level.arena.planet, mond);
-  assert.equal(level.goal.planet, mond);
-  assert.ok(level.goal.height > level.arena.top + 4, 'the crystal floats above Glutzahn');
-  assert.ok(collidersFor(level)(mond).length > 5);
+test('each stage he walks faster and rests less', () => {
+  const boss = new GlutzahnRules(); boss.start();
+  const timeToAttack = () => { let t = 0; boss.change('walk'); while (boss.mode === 'walk' && t < 10) { boss.step(DT, { x: boss.x + 2.5, z: boss.z, height: 0, vy: 0 }); t += DT; } return t; };
+  const first = timeToAttack();
+  boss.hp = GLUT.hp - 2 * GLUT.hitsPerStage;
+  assert.equal(boss.stage, 3);
+  assert.ok(timeToAttack() < first * 0.8);
 });
 
-test('the route: steps up to the arena are jumpable, and creatures and the Glutbeere sit on the path', () => {
+test('the Vulkanreise: a tiny Startstern above a flat Festland, a clear rocket flight down', () => {
   const level = makeVolcanoLevel();
-  const [, mond] = level.planets;
-  const steps = level.blocks.filter(b => b.planet === mond).map(b => b.top).sort((a, b) => a - b);
-  for (let i = 1; i < steps.length; i++) assert.ok(steps[i] - steps[i - 1] <= 1.6, 'each step is one jump');
-  assert.ok(level.arena.top - steps.at(-1) <= 1.6, 'the last step reaches the arena');
-  assert.ok(level.walkers.length >= 4 && level.plants.length >= 4 && level.powerups.length === 1);
-  for (const w of level.walkers) assert.ok(level.planets.includes(w.planet));
+  const { start, land } = level;
+  assert.ok(land.radius >= 10000, 'the Festland is flat to the eye');
+  // Flat to the eye: over any 100 m stretch the ground bends less than 30 cm from a straight line.
+  for (let z = 0; z > ZONES.arena; z -= 50) {
+    const a = landPoint(0, z), b = landPoint(0, z - 100), mid = landPoint(0, z - 50);
+    assert.ok(mid.distanceTo(a.clone().add(b).multiplyScalar(0.5)) < 0.3);
+  }
+  assert.ok(start.radius < 10 && start.center.y > 30, 'the Startstern floats in the sky');
+  for (let t = 0.06; t < 0.95; t += 0.01) {
+    const p = volcanoFlightPoint(level, t);
+    assert.ok(p.distanceTo(start.center) > start.radius + 0.5, `the flight touches the Startstern at ${t.toFixed(2)}`);
+    assert.ok(landPoint(p.x, p.z).y < p.y - 0.5, `the flight touches the Festland at ${t.toFixed(2)}`);
+  }
+  assert.equal(level.arena.planet, land);
+  assert.ok(level.goal.height > level.arena.top + 4, 'the crystal floats above Glutzahn');
+  assert.ok(collidersFor(level)(land).length > 5);
+});
+
+test('the forest: every ravine has platforms one jump apart, Damai hops each, the Glutbeere is reachable', () => {
+  const level = makeVolcanoLevel();
+  for (const r of RAVINES) {
+    const tops = level.blocks.filter(b => b.planet === level.land && b.dir.z / b.dir.y * level.land.radius < r.z0 && b.dir.z / b.dir.y * level.land.radius > r.z1)
+      .map(b => ({ z: b.dir.z / b.dir.y * level.land.radius, top: b.top })).sort((a, b) => b.z - a.z);
+    assert.ok(tops.length >= 2, 'platforms across each ravine');
+    const edges = [{ z: r.z0, top: 0 }, ...tops, { z: r.z1, top: 0 }];
+    for (let i = 1; i < edges.length; i++) {
+      assert.ok(edges[i - 1].z - edges[i].z <= 5.5, 'each gap is one jump wide');
+      assert.ok(edges[i].top - edges[i - 1].top <= 2.6, 'each step up is one jump high');
+    }
+  }
+  assert.equal(level.route.filter(p => p.hop).length, RAVINES.length);
+  const zs = level.route.map(p => p.z);
+  assert.ok(zs.every((z, i) => !i || z < zs[i - 1]), 'the route only goes forward');
   const berry = level.powerups[0];
   const block = level.blocks.find(b => b.dir.angleTo(berry.dir) < 1e-6);
-  assert.ok(block && berry.height > block.top, 'the Glutbeere sits on top of its block');
+  assert.ok(block && berry.height > block.top && block.top < 4, 'the Glutbeere sits on a block a spring or a jump reaches');
+  assert.ok(level.springs.length >= 3 && level.walkers.length >= 4 && level.plants.length >= 4);
+  assert.ok(level.arenaWalkers.length >= 3 && level.arenaPlants.length >= 3, 'stages two and three bring company');
   assert.ok(surfacePoint(berry.planet, berry.dir, berry.height).length() > 0);
 });

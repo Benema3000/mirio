@@ -1,17 +1,23 @@
-// Glutzahn's fight on the Aschemond arena, without a screen. Positions are
+// Glutzahn's fight in the Glutkessel crater, without a screen. Positions are
 // in the arena's flat top: x right, z forward, metres from its centre; the
 // player's `height` is above the arena top.
 //
 // A round: he stomps towards Mirio, then either rears back (the fire is
 // announced for most of a second) and breathes a cone of fire, or spins a
 // Stachelkreisel across the arena that bounces off the rim. After either he
-// is out of breath for a while: that is the moment to jump on his head. Three
-// hits and he is beaten. Every attack is announced; the fire can be dodged
-// sideways and a Kreisel jumped over.
+// is out of breath for a while: that is the moment to jump on his head. Every
+// attack is announced; the fire can be dodged sideways and a Kreisel jumped
+// over.
+//
+// Three stages of two hits each: first Glutzahn alone, then Grummel join in,
+// then Grummel and Schnappblumen (the run brings them; see volcano-run.js).
+// Each stage he walks a little faster and rests a little less.
 
 export const GLUT = Object.freeze({
-  hp: 3,
-  arena: 6.2,
+  hp: 6,
+  hitsPerStage: 2,
+  stageSpeed: 0.2,
+  arena: 14,
   radius: 1.3,
   headLow: 3.1,
   headHigh: 4.8,
@@ -34,7 +40,8 @@ export const GLUT = Object.freeze({
 
 
 export class GlutzahnRules {
-  constructor() { this.reset(); }
+  /** `arena` is the radius of the flat ground he fights on. */
+  constructor({ arena = GLUT.arena } = {}) { this.arena = arena; this.reset(); }
 
   reset() {
     Object.assign(this, {
@@ -44,6 +51,11 @@ export class GlutzahnRules {
   }
 
   get defeated() { return this.mode === 'defeated'; }
+
+  /** 1, 2 or 3: two hits per stage. */
+  get stage() { return Math.min(3, 1 + Math.floor((GLUT.hp - this.hp) / GLUT.hitsPerStage)); }
+
+  #pace() { return 1 + (this.stage - 1) * GLUT.stageSpeed; }
 
   /** The fight begins when Mirio reaches the arena. */
   start() {
@@ -89,13 +101,13 @@ export class GlutzahnRules {
       case 'walk': {
         const d = this.#face(player);
         if (d > GLUT.radius + 1.4) {
-          const step = Math.min(d - GLUT.radius - 1.4, GLUT.walkSpeed * dt);
+          const step = Math.min(d - GLUT.radius - 1.4, GLUT.walkSpeed * this.#pace() * dt);
           this.x += this.facingX * step;
           this.z += this.facingZ * step;
-          const r = Math.hypot(this.x, this.z), max = GLUT.arena - GLUT.radius;
+          const r = Math.hypot(this.x, this.z), max = this.arena - GLUT.radius;
           if (r > max) { this.x *= max / r; this.z *= max / r; }
         }
-        if (this.timer >= GLUT.walk) {
+        if (this.timer >= GLUT.walk / this.#pace()) {
           // Fire and Kreisel take turns, fire first.
           this.change(this.attacks++ % 2 === 0 ? 'aim' : 'wind');
           events.push({ type: this.mode === 'aim' ? 'bossAim' : 'bossWind' });
@@ -121,7 +133,7 @@ export class GlutzahnRules {
         }
         break;
       case 'tired':
-        if (this.timer >= GLUT.tired) this.change('walk');
+        if (this.timer >= GLUT.tired / this.#pace()) this.change('walk');
         break;
       case 'hurt':
         if (this.timer >= GLUT.hurt) this.change(this.hp > 0 ? 'walk' : 'defeated');
@@ -133,7 +145,7 @@ export class GlutzahnRules {
       k.age += dt;
       k.x += k.vx * dt;
       k.z += k.vz * dt;
-      const r = Math.hypot(k.x, k.z), max = GLUT.arena - 0.4;
+      const r = Math.hypot(k.x, k.z), max = this.arena - 0.4;
       if (r > max) {
         const nx = k.x / r, nz = k.z / r, inward = k.vx * nx + k.vz * nz;
         k.vx -= 2 * inward * nx;
@@ -148,11 +160,13 @@ export class GlutzahnRules {
     const onHead = distance < GLUT.radius + 0.4 && player.height > GLUT.headLow && player.height < GLUT.headHigh && player.vy <= 0;
     if (onHead) {
       if (this.mode === 'tired') {
+        const stage = this.stage;
         this.hp -= 1;
         this.hits += 1;
         this.change('hurt');
         events.push({ type: 'bossHit', hp: this.hp });
         if (this.hp <= 0) events.push({ type: 'bossDefeat' });
+        else if (this.stage !== stage) events.push({ type: 'bossStage', stage: this.stage });
       } else if (this.mode !== 'hurt' && this.mode !== 'defeated') {
         events.push({ type: 'bossBounce' });
       }
@@ -169,7 +183,7 @@ export class GlutzahnRules {
   }
 
   snapshot() {
-    return { mode: this.mode, hp: this.hp, x: this.x, z: this.z, facing: [this.facingX, this.facingZ],
+    return { mode: this.mode, hp: this.hp, stage: this.stage, x: this.x, z: this.z, facing: [this.facingX, this.facingZ],
       kreisels: this.kreisels.map(k => ({ id: k.id, x: k.x, z: k.z })) };
   }
 }
