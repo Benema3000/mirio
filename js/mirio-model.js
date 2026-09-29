@@ -70,8 +70,10 @@ export const MIRIO_LOOK = Object.freeze({
  */
 export const BIG_MIRIO_LOOK = Object.freeze({
   image: 'mirioGross', tall: true,
-  shirt: [250, 345, 70, 55], trousers: [230, 460, 110, 90], shoes: [165, 728, 45, 25], cap: [215, 120, 35, 30],
-  skin: [336, 284, 16, 16], hair: [197, 240, 16, 28], button: [239, 430, 11, 9],
+  shirt: [250, 345, 70, 55], trousers: [230, 460, 110, 90], shoes: [165, 728, 45, 25],
+  // Solid red beside the letter: a swatch with paper in it tiles into pale diamonds.
+  cap: [307, 143, 36, 30],
+  skin: [336, 284, 16, 16], button: [239, 430, 11, 9],
   // The painted face (eyes, moustache, mouth, brown sideburns), cut out on
   // the oval of the face: centre and radii in drawing pixels.
   face: [184, 172, 216, 152], faceOval: { x: 294, y: 252, rx: 102, ry: 80 },
@@ -416,9 +418,19 @@ function paintedFaceCanvas(img, look, skin, k = 3) {
   const { face, faceOval: o } = look;
   const paint = cut(img, face, k);
   const ctx = paint.getContext('2d', { willReadFrequently: true });
-  // The cap's red reaches into the oval at the sides; the 3D cap sits higher.
   const px = ctx.getImageData(0, 0, paint.width, paint.height);
-  for (let i = 0; i < px.data.length; i += 4) if (px.data[i + 1] < px.data[i] * 0.35) px.data[i + 3] = 0;
+  const d = px.data;
+  const base = skin.match(/\d+/g).map(Number);
+  for (let i = 0; i < d.length; i += 4) {
+    // The cap's red reaches into the oval at the sides; the 3D cap sits higher.
+    if (d[i + 1] < d[i] * 0.35) { d[i + 3] = 0; continue; }
+    // Plain skin, as light as the mean skin or lighter, is smoothed toward
+    // it, so the marker's streaks calm down. Eyes, moustache and mouth are
+    // darker and pushed a little further: a photo is flatter than the marker.
+    const lum = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    const pull = 0.7 * THREE.MathUtils.clamp((lum - 112) / 30, 0, 1) - 0.25 * THREE.MathUtils.clamp((112 - lum) / 30, 0, 1);
+    for (let c = 0; c < 3; c++) d[i + c] += (base[c] - d[i + c]) * pull;
+  }
   ctx.putImageData(px, 0, 0);
   ctx.globalCompositeOperation = 'destination-in';
   ctx.translate((o.x - face[0]) * k, (o.y - face[1]) * k);
@@ -433,8 +445,6 @@ function paintedFaceCanvas(img, look, skin, k = 3) {
   const out = c.getContext('2d');
   out.fillStyle = skin;
   out.fillRect(0, 0, c.width, c.height);
-  // A photo of marker on paper is flatter than the marker was: lift it back up.
-  out.filter = 'contrast(1.4) saturate(1.2)';
   out.drawImage(paint, 0, 0);
   return c;
 }
@@ -505,7 +515,6 @@ function buildTallMirio(art, look) {
     trousers: swatch(img, look.trousers),
     shoes: swatch(img, look.shoes),
     cap: swatch(img, look.cap),
-    hair: swatch(img, look.hair),
     button: swatch(img, look.button),
   };
   const skin = meanColour(img, look.skin);
@@ -555,25 +564,22 @@ function buildTallMirio(art, look) {
 
   // The painted face, laid over the front half of a slightly larger shell;
   // round its oval the shell is plain skin, like the skull underneath.
-  const lift = 1.012;
+  const lift = 1.02;
   const [fx, fy, fw, fh] = look.face;
   const front = new THREE.SphereGeometry(1, 24, 18, 0, Math.PI, 0.2, 2.6).scale(rx * lift, ry * lift, rz * lift);
   // A little higher than on paper: the mouth by the chin would turn under.
   const faceCentre = [tallX(fx + fw / 2), tallY(fy + fh / 2) - TALL.head.y + 0.05];
   skull.add(new THREE.Mesh(projectUV(front, look.face, ...faceCentre, TALL.px), toon(0xffffff, { map: canvasTexture(paintedFaceCanvas(img, look, skin)) })));
 
-  // Brown hair round the back, below the cap.
-  const hairBack = new THREE.SphereGeometry(1, 20, 6, Math.PI, Math.PI, 1.2, 1.05).scale(rx * 1.03, ry * 1.03, rz * 1.03);
-  skull.add(mesh(hairBack, marker(tex.hair, 4, 1), mats.thin));
-
   // The cap: a round dome down to the eyebrows in front (y 177), over the
-  // ears at the sides (y 222), and low at the back.
+  // ears at the sides (y 222), and down to the nape at the back. The drawing
+  // shows no hair but the sideburns, which are in the painted face.
   const capShape = { rx: 0.448, ry: 0.5, rz: 0.43 };
-  const capRim = (a) => 1.57 - 0.36 * Math.cos(a);
+  const capRim = (a) => 1.6 - 0.495 * Math.cos(a) + 0.105 * Math.cos(a) ** 2;
   const cap = new THREE.Group();
   cap.position.y = 0.02;
   skull.add(cap);
-  cap.add(mesh(rimmedShell(capShape, 0.001, capRim, 32, 12), marker(tex.cap, 4, 2), mats.thick));
+  cap.add(mesh(rimmedShell(capShape, 0.001, capRim, 32, 12), marker(tex.cap, 2, 1), mats.thick));
 
   // The curl badge, up on the front of the cap where the drawing has a letter.
   // Only a patch round it: stretched over the whole dome, the clamped
