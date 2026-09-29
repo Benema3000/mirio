@@ -2,7 +2,10 @@
 //
 // Every planet is a sphere with its own gravity field. A body falls toward
 // the planet whose *surface* is nearest, among the planets whose field reaches
-// it. On a planet, solid things are simple shapes standing on the surface:
+// it. A planet may carry terrain: `planet.heightAt(dir)` gives the ground's
+// height above its sphere along unit `dir` (the Festland's hills). Ground
+// contact, surfacePoint and heightAbove all follow it; terrain too steep to
+// walk up is a wall. Planets without it are plain spheres. On a planet, solid things are simple shapes standing on the surface:
 // cylinders (tree stumps, trees, stepping stones, the rocket plateau), boxes
 // (Miro's floor blocks, floating or standing) and bumps (hills).
 //
@@ -53,6 +56,8 @@ const HEAD_LIP = 0.5;
 const SNAP_HEIGHT = 0.25;
 // Hills steeper than this are walls.
 const WALKABLE = 0.55;
+// Terrain rising more than this per metre stops a body like a wall (about 50°).
+const STEEP = 1.2;
 
 const tmp = new Vector3();
 const tmpRadial = new Vector3();
@@ -62,6 +67,10 @@ const tmpAir = new Vector3();
 const tmpUp = new Vector3();
 const tmpWish = new Vector3();
 const tmpPrevious = new Vector3();
+const tmpGround = new Vector3();
+const tmpSlope = new Vector3();
+const tmpSide = new Vector3();
+const tmpCross = new Vector3();
 const identity = new Quaternion();
 const tmpQ = new Quaternion();
 
@@ -107,14 +116,40 @@ export function latitudeOf(pos, planet) {
   return (Math.asin(Math.max(-1, Math.min(1, rel.y / rel.length()))) * 180) / Math.PI;
 }
 
-/** Point `height` above the surface of `planet` in direction `dir`. */
-export function surfacePoint(planet, dir, height = 0, out = new Vector3()) {
-  return out.copy(planet.center).addScaledVector(dir, planet.radius + height);
+/** Distance from the centre of `planet` to its ground along unit `dir`, terrain included. */
+export function groundRadius(planet, dir) {
+  return planet.heightAt ? planet.radius + planet.heightAt(dir) : planet.radius;
 }
 
-/** Height of `pos` above the surface of `planet`. */
+/** Point `height` above the ground of `planet` in direction `dir`. */
+export function surfacePoint(planet, dir, height = 0, out = new Vector3()) {
+  return out.copy(planet.center).addScaledVector(dir, groundRadius(planet, dir) + height);
+}
+
+/** Height of `pos` above the ground of `planet`. */
 export function heightAbove(pos, planet) {
-  return pos.distanceTo(planet.center) - planet.radius;
+  if (!planet.heightAt) return pos.distanceTo(planet.center) - planet.radius;
+  const rel = tmpGround.subVectors(pos, planet.center), d = rel.length();
+  return d - groundRadius(planet, rel.divideScalar(d));
+}
+
+/**
+ * Uphill direction of the terrain at unit `dir`, on the tangent plane, scaled
+ * by the slope (metres up per metre across); zero on a plain sphere.
+ */
+export function terrainSlope(planet, dir, out = new Vector3()) {
+  out.set(0, 0, 0);
+  if (!planet.heightAt) return out;
+  const e = 0.2;
+  const a = tangentDir(Math.abs(dir.y) < 0.9 ? tmpSide.set(0, 1, 0) : tmpSide.set(1, 0, 0), dir, tmpSlope);
+  const b = tmpCross.crossVectors(dir, a);
+  for (const t of [a, b]) {
+    const p = tmpGround.copy(dir).multiplyScalar(planet.radius).addScaledVector(t, e).normalize();
+    const hi = planet.heightAt(p);
+    p.copy(dir).multiplyScalar(planet.radius).addScaledVector(t, -e).normalize();
+    out.addScaledVector(t, (hi - planet.heightAt(p)) / (2 * e));
+  }
+  return out;
 }
 
 /** True when `pos` is on the water ring of `planet` (lake surface level). */
@@ -126,11 +161,11 @@ export function inWater(pos, planet) {
 
 /** Keeps `pos` out of the planet; true when it touched the ground. */
 export function resolvePlanet(pos, vel, planet) {
-  const d = pos.distanceTo(planet.center);
-  if (d > planet.radius) return false;
-
   const up = upAt(pos, planet, tmp);
-  pos.copy(planet.center).addScaledVector(up, planet.radius);
+  const ground = groundRadius(planet, up);
+  if (pos.distanceTo(planet.center) > ground) return false;
+
+  pos.copy(planet.center).addScaledVector(up, ground);
   const vUp = vel.dot(up);
   if (vUp < 0) vel.addScaledVector(up, -vUp);
   return true;
@@ -337,13 +372,14 @@ export function stepBody(body, wish, wishSpeed, planets, collidersOf, dt, opts =
   body.onGround = false;
   body.bumpedHead = false;
   if (!src) return body;
+  if (src.heightAt) blockSteep(body, src);
 
   if (resolvePlanet(body.pos, body.vel, src)) {
     body.onGround = true;
   } else if (wasOnGround && heightAbove(body.pos, src) < SNAP_HEIGHT) {
     const nowUp = upAt(body.pos, src, tmpRadial);
     if (body.vel.dot(nowUp) <= 0.5) {
-      body.pos.copy(src.center).addScaledVector(nowUp, src.radius);
+      body.pos.copy(src.center).addScaledVector(nowUp, groundRadius(src, nowUp));
       body.vel.addScaledVector(nowUp, -body.vel.dot(nowUp));
       body.onGround = true;
     }
@@ -357,6 +393,29 @@ export function stepBody(body, wish, wishSpeed, planets, collidersOf, dt, opts =
   }
   upAt(body.pos, src, body.up);
   return body;
+}
+
+/**
+ * Terrain too steep to walk up is a wall: a step that would put the body
+ * inside a rise steeper than STEEP is taken back sideways, and the part of
+ * the velocity going uphill is dropped, so the body slides along the foot of
+ * the slope (or down its face) instead of being lifted up it.
+ */
+function blockSteep(body, planet) {
+  const rel = tmpGround.subVectors(body.pos, planet.center), d = rel.length();
+  const now = tmpRadial.copy(rel).divideScalar(d);
+  const ground = groundRadius(planet, now);
+  if (d >= ground) return;
+  const before = tmpTarget.subVectors(tmpPrevious, planet.center).normalize();
+  const run = now.distanceTo(before) * planet.radius;
+  if (run < 1e-5 || ground - groundRadius(planet, before) <= STEEP * run) return;
+  const uphill = terrainSlope(planet, before, tmpAir);
+  body.pos.copy(planet.center).addScaledVector(before, d);
+  const len = uphill.length();
+  if (len < 1e-6) return;
+  uphill.divideScalar(len);
+  const into = body.vel.dot(uphill);
+  if (into > 0) body.vel.addScaledVector(uphill, -into);
 }
 
 /**

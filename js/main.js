@@ -1561,7 +1561,7 @@ async function main() {
       }
       stats.time = chapterGame.snapshot().time;
       sound.biplane(state === 'chapter' && selectedLevel === 'sky' ? {active: true, speed: runBefore.speed ?? 20, throttle: .6, boost: runBefore.boost > 0} : null);
-      sound.ambience({active: state === 'chapter' && selectedLevel === 'ribbon', dt});
+      sound.ambience({active: state === 'chapter' && (selectedLevel === 'ribbon' || runBefore.woods === true), dt});
     } else { sound.biplane(null); sound.ambience({active: false}); }
     if (hintTimer > 0) { hintTimer -= dt; if (hintTimer <= 0) $('hint').classList.remove('show'); }
     chapterGame.render(camera, dt, {reducedMotion});

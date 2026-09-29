@@ -18,7 +18,9 @@ async function walkTo(page,target,stop=1,limit=40,jump=false){
     const held=new Set(),press=(c,on)=>{if(held.has(c)===on)return;on?held.add(c):held.delete(c);window.dispatchEvent(new KeyboardEvent(on?'keydown':'keyup',{code:c,key:c,bubbles:true}));};
     const r0=window.__mirio.snapshot().chapterRun,pilot=window.__walk={done:false},dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
     (function tick(){
-      const r=window.__mirio.snapshot().chapterRun,d=target.map((v,i)=>v-r.pos[i]),dist=Math.hypot(...d);
+      // A target without a height (land()) counts the distance across the ground only.
+      const r=window.__mirio.snapshot().chapterRun,d=target.map((v,i)=>v===null?0:v-r.pos[i]),flat=target[1]===null;
+      const dist=flat?Math.hypot(dot(d,r.right),dot(d,r.forward)):Math.hypot(...d);
       pilot.reason=dist<stop?'arrived':r.phase!==r0.phase?'phase':r.penalty!==r0.penalty?'penalty':r.time-r0.time>limit?'limit':'';
       if(pilot.reason){for(const c of [...held])press(c,false);pilot.done=true;return;}
       press('Space',jump);
@@ -30,8 +32,8 @@ async function walkTo(page,target,stop=1,limit=40,jump=false){
   await page.waitForFunction(()=>window.__walk.done,null,{timeout:240000});
   return page.evaluate(()=>window.__walk.reason);
 }
-// The Festland is flat to the eye: local (x, z) is world (x, ~0, z) near the route.
-const land=(x,z)=>[x,-(x*x+z*z)/40000,z];
+// Local (x, z) on the Festland is world (x, ·, z) near the route; the hills set the height, so land() leaves it out.
+const land=(x,z)=>[x,null,z];
 try{
   const page=await browser.newPage({viewport:{width:960,height:600}});page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${process.env.BASE_URL??'http://127.0.0.1:8766/'}?test&menu`,{timeout:90000});
@@ -44,7 +46,7 @@ try{
     assert.equal(r.phase,'start');assert.equal(r.planet,'startstern');
     assert.match(await page.textContent('#bits'),/^0 \/ \d+$/);
   });
-  await check('walking into the rocket flies Mirio down to the flat Festland',async()=>{
+  await check('walking into the rocket flies Mirio down to the Festland',async()=>{
     await walkTo(page,(await course(page)).rocket,.5);
     await page.waitForFunction(()=>window.__mirio.snapshot().chapterRun.phase==='rocket',null,{timeout:60000});
     await page.waitForFunction(()=>{const r=window.__mirio.snapshot().chapterRun;return r.phase==='land'&&r.planet==='festland';},null,{timeout:120000});

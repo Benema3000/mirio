@@ -7,8 +7,8 @@ import * as THREE from 'three';
 import { buildMirio } from './mirio-model.js';
 import { makeShadow } from './scene.js';
 import {
-  FALL_GRAVITY, HOLD_GRAVITY, inWater, jumpFor, partialTurn, RELEASE_GRAVITY, RUN_SPEED, stepBody, surfacePoint,
-  tangentDir,
+  FALL_GRAVITY, groundRadius, HOLD_GRAVITY, inWater, jumpFor, partialTurn, RELEASE_GRAVITY, RUN_SPEED, stepBody, surfacePoint,
+  tangentDir, terrainSlope,
 } from './world.js';
 
 const SPIN_FALL_GRAVITY = 0.45;
@@ -36,6 +36,7 @@ const WRIST_REST = 0.12;
 const Y = new THREE.Vector3(0, 1, 0);
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
+const tmp3 = new THREE.Vector3();
 const basis = new THREE.Matrix4();
 const q = new THREE.Quaternion();
 
@@ -477,7 +478,7 @@ export class Player {
     if (!this.shadow.visible) return;
 
     const up = tmp.subVectors(body.pos, planet.center).normalize();
-    let ground = planet.radius;
+    let ground = groundRadius(planet, up), onProp = false;
     const dist = body.pos.distanceTo(planet.center);
     // Over a block, stump or stone the shadow belongs on top of it.
     for (const c of this.collidersOf(planet)) {
@@ -488,11 +489,14 @@ export class Player {
       const inside = c.kind === 'box'
         ? Math.abs(rel.dot(c.right)) < c.halfW && Math.abs(rel.dot(c.forward)) < c.halfD
         : rel.addScaledVector(c.axis, -along).length() < c.radius;
-      if (inside) ground = Math.max(ground, c.base.distanceTo(planet.center) + c.height);
+      const top = c.base.distanceTo(planet.center) + c.height;
+      if (inside && top > ground) { ground = top; onProp = true; }
     }
     const height = Math.max(0, dist - ground);
     this.shadow.position.copy(planet.center).addScaledVector(up, ground + 0.04);
-    this.shadow.quaternion.setFromUnitVectors(Y, up);
+    // On hills it lies along the slope.
+    const normal = onProp || !planet.heightAt ? up : tmp2.copy(up).sub(terrainSlope(planet, up, tmp3)).normalize();
+    this.shadow.quaternion.setFromUnitVectors(Y, normal);
     this.shadow.scale.setScalar(THREE.MathUtils.clamp(1 - height / 9, 0.35, 1));
   }
 }

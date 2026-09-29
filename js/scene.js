@@ -132,6 +132,37 @@ const FEATURES = {
         #endif`);
   },
 
+  /**
+   * A window for the camera: fragments near the line from the camera to
+   * `focus` (a Vector3 uniform, the player) are dithered away, and so is
+   * anything right in front of the lens, so trunks and crowns never hide
+   * Mirio or fill the screen. Works on instanced meshes.
+   */
+  seeThrough(shader, { focus, radius = 1.8 }) {
+    Object.assign(shader.uniforms, { seeFocus: focus, seeRadius: { value: radius } });
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSeeWorld;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vec4 seeWorld = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          seeWorld = instanceMatrix * seeWorld;
+        #endif
+        vSeeWorld = (modelMatrix * seeWorld).xyz;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 seeFocus;\nuniform float seeRadius;\nvarying vec3 vSeeWorld;')
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        {
+          vec3 seeLine = seeFocus - cameraPosition;
+          vec3 seeRel = vSeeWorld - cameraPosition;
+          float seeT = dot(seeRel, seeLine) / max(dot(seeLine, seeLine), 1e-4);
+          float seeR = length(seeRel - seeLine * clamp(seeT, 0.0, 1.0));
+          float seeFade = (1.0 - smoothstep(seeRadius * 0.5, seeRadius, seeR)) * step(seeT, 0.92);
+          seeFade = max(seeFade, 1.0 - smoothstep(1.5, 3.5, length(seeRel)));
+          vec2 seeCell = mod(floor(gl_FragCoord.xy), 2.0);
+          if (seeFade > (2.0 * seeCell.x + 3.0 * seeCell.y - 4.0 * seeCell.x * seeCell.y) / 4.0 + 0.125) discard;
+        }`);
+  },
+
   /** Glows in its own (instance) colour. */
   glow(shader, { amount }) {
     shader.uniforms.glowAmount = { value: amount };
@@ -158,7 +189,7 @@ const FEATURES = {
 };
 
 /** toon() plus shader features from FEATURES, e.g. { rim: { color } }. */
-function withFeatures(m, features) {
+export function withFeatures(m, features) {
   const names = Object.keys(FEATURES).filter((k) => features[k]);
   m.onBeforeCompile = (shader) => {
     for (const name of names) FEATURES[name](shader, features[name] === true ? {} : features[name]);
@@ -1111,6 +1142,8 @@ const occA = new THREE.Vector3();
 const occB = new THREE.Vector3();
 /** True when `planet` (shrunk by `shrink`) hides `point` from `eye`. */
 function hiddenBehind(planet, eye, point, shrink = 0) {
+  // A planet with terrain is too big to hide anything behind its curve, and its valleys dip below the sphere.
+  if (planet.heightAt) return false;
   const d = occA.subVectors(point, eye);
   const len = d.length();
   d.divideScalar(len);

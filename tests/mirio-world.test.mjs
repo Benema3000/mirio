@@ -11,6 +11,7 @@ import {
   collide,
   FALL_GRAVITY,
   GRAVITY,
+  heightAbove,
   HOLD_GRAVITY,
   inWater,
   JUMP_CHAIN,
@@ -757,4 +758,28 @@ test('the kart can safely coast with empty controls and only charges drift on th
   assert.equal(k.charge, 0.4);
   driveFor(k, 0.1, { steer: 0.2, hold: true, throttle: 1 }, wideRoad);
   assert.ok(k.charge > 0.49);
+});
+
+test('a planet with terrain: bodies stand on its hills, walk up gentle slopes and stop at steep ones', () => {
+  // A big planet with, along +x from its north pole, a gentle ramp up to 3 m and then a cliff.
+  const R = 5000, planet = { id: 'hilly', center: new Vector3(0, -R, 0), radius: R, gravityRadius: R + 200 };
+  const ground = (x) => (x < 10 ? 0 : x < 40 ? (x - 10) * 0.1 : x < 44 ? 3 + (x - 40) * 4 : 19);
+  planet.heightAt = (dir) => ground(dir.x / dir.y * R);
+  const dirAt = (x) => new Vector3(x, R, 0).normalize();
+  assert.ok(Math.abs(surfacePoint(planet, dirAt(30)).y - (2 - 900 / (2 * R))) < 0.01, 'surfacePoint stands on the terrain');
+  assert.ok(Math.abs(heightAbove(surfacePoint(planet, dirAt(30), 1.5), planet) - 1.5) < 1e-6, 'heightAbove counts from the terrain');
+  const body = bodyOn(planet, dirAt(2));
+  let lowest = Infinity, x = 2;
+  for (let i = 0; i < 1200; i++) {
+    stepBody(body, tangentDir(new Vector3(1, 0, 0), body.up, new Vector3()), RUN_SPEED, [planet], noColliders, DT);
+    lowest = Math.min(lowest, heightAbove(body.pos, planet));
+    x = body.pos.clone().sub(planet.center).normalize();
+    x = x.x / x.y * R;
+  }
+  assert.ok(lowest > -0.01, 'never sinks into the ramp');
+  assert.ok(x > 39 && x < 41, `stopped at the foot of the cliff, not at ${x.toFixed(2)}`);
+  assert.ok(body.onGround, 'standing on the ground');
+  // Without terrain nothing changes: a plain sphere still reports sphere heights.
+  const plain = { ...planet, heightAt: undefined };
+  assert.equal(heightAbove(surfacePoint(plain, dirAt(30), 1.5), plain).toFixed(6), '1.500000');
 });

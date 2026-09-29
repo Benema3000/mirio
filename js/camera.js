@@ -4,7 +4,7 @@
 // wildly near every pole.
 
 import * as THREE from 'three';
-import { partialTurn, tangentDir } from './world.js';
+import { groundRadius, partialTurn, tangentDir } from './world.js';
 
 const MIN_PITCH = 0.08;
 const MAX_PITCH = 1.25;
@@ -107,10 +107,11 @@ export class CameraRig {
     for (const planet of this.planets) {
       tmp.subVectors(position, planet.center);
       const distance = tmp.length();
-      const clearance = planet.radius + CAMERA_CLEARANCE;
-      if (distance >= clearance) continue;
       if (distance < 1e-6) tmp.copy(this.up);
       else tmp.divideScalar(distance);
+      // Over terrain the clearance follows the hills (world.js groundRadius).
+      const clearance = groundRadius(planet, tmp) + CAMERA_CLEARANCE;
+      if (distance >= clearance) continue;
       position.copy(planet.center).addScaledVector(tmp, clearance);
     }
   }

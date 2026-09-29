@@ -21,11 +21,15 @@ import { outlineMaterial, toon, withOutline } from './materials.js';
 import { BIG_MIRIO_LOOK, buildMirio } from './mirio-model.js';
 import { MAX_HEARTS, Player } from './player.js';
 import { createRiverRun, makeRiverCourse, riverSnapshot, stepRiverRun } from './river-rules.js';
-import { RIVER_SCENE, RiverScene } from './river-scene.js';
+import { RiverScene } from './river-scene.js';
+import { deviceTier } from './quality.js';
 import { Particles, buildScene, placeOn } from './scene.js';
 import { buildGlutzahn, buildGrummel, buildSchnappblume, buildStachelkreisel } from './volcano-creatures.js';
-import { RAVINES, ZONES, landDir, landPoint, makeVolcanoLevel, volcanoFlightPoint } from './volcano-level.js';
-import { partialTurn, surfacePoint, tangentDir } from './world.js';
+import { buildBoulders, buildForest, buildGround } from './volcano-land.js';
+import {
+  RAVINES, ZONES, festlandColliders, festlandHeight, landDir, landLevel, landPoint, landXZ, makeVolcanoLevel, plantedDepth, rimHeight, volcanoFlightPoint,
+} from './volcano-level.js';
+import { heightAbove, partialTurn, surfacePoint, tangentDir } from './world.js';
 
 const PHYSICS_STEP = 1 / 120;
 const BIT_RADIUS = 1.3;
@@ -41,6 +45,11 @@ const DARK = Object.freeze({ fade: 0.8, hold: 1.4 });
 const BIG_SCALE = 1.25;
 const CAMERA_DISTANCE = 11;
 const DAY = { top: 0x5fa8e8, horizon: 0xf6dcae };
+// Under the trees: a greener, dimmer, closer haze and softer light.
+const WOOD = { fog: 0x6b8a58, near: 18, far: 165, sky: 0xcfe6bf, ambient: 0.62, sun: 1.55 };
+const WOOD_FOG = new THREE.Color(WOOD.fog), WOOD_SKY = new THREE.Color(WOOD.sky);
+// Falling this far below a ravine's rim is a fall.
+const RAVINE_FALL = 2;
 const Y = new THREE.Vector3(0, 1, 0), DOWNSTREAM = new THREE.Vector3(0, 0, -1);
 const smooth = (t) => t * t * (3 - 2 * t);
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), basis = new THREE.Matrix4();
@@ -58,33 +67,6 @@ function intent(controls) {
   };
 }
 
-const noise = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.31 + z * 0.17) * Math.sin(z * 0.23 - x * 0.11);
-/** The Festland's ground colour at local (x, z): sand, forest floor, ravines, bank, ash. */
-function groundColour(x, z, c) {
-  const k = noise(x, z);
-  if (z < ZONES.arena + 60) return c.setHex(0x3d3440).lerp(new THREE.Color(0x5a4650), k);
-  if (RAVINES.some(r => z < r.z0 && z > r.z1)) return c.setHex(0x1e1512);
-  if (z < ZONES.forestEnd) return c.setHex(0x9c9272).lerp(new THREE.Color(0x7a8a5c), k);
-  if (z < ZONES.desertEnd) return c.setHex(0x4f7a3a).lerp(new THREE.Color(0x6a8a44), k);
-  const edge = THREE.MathUtils.clamp((ZONES.desertEnd + 12 - z) / 12, 0, 1);
-  return c.setHex(0xe9c98c).lerp(new THREE.Color(0xd8b070), k).lerp(new THREE.Color(0x6a8a44), edge);
-}
-
-/** A local (x, z) patch of the Festland, bent onto its sphere and coloured by groundColour. */
-function groundStrip(x0, x1, z0, z1, step, height = 0) {
-  const geometry = new THREE.PlaneGeometry(1, 1, Math.ceil((x1 - x0) / step), Math.ceil((z0 - z1) / step));
-  const pos = geometry.attributes.position, colours = new Float32Array(pos.count * 3), c = new THREE.Color(), p = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    const x = x0 + (pos.getX(i) + 0.5) * (x1 - x0), z = z0 - (pos.getY(i) + 0.5) * (z0 - z1);
-    landPoint(x, z, height, p);
-    pos.setXYZ(i, p.x, p.y, p.z);
-    groundColour(x, z, c).toArray(colours, i * 3);
-  }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-  geometry.computeVertexNormals();
-  return new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-}
-
 export class VolcanoRun {
   constructor(art) {
     this.level = makeVolcanoLevel();
@@ -98,8 +80,13 @@ export class VolcanoRun {
     // ground is drawn here, being 20 km round.
     this.world = buildScene(this.scene, { ...this.level, planets: [start], blocks: this.level.blocks.filter(b => b.planet === start) }, art);
     this.colliders = collidersFor(this.level);
+    this.colliders(land).push(...festlandColliders(this.level));
     this.particles = new Particles(this.scene, art.sparkle);
     this.fog = { day: new THREE.Fog(DAY.horizon, 120, 520), crater: new THREE.Fog(0x2a1f2a, 40, 170) };
+    this.light = { ambient: this.world.lights.ambient.intensity, sun: this.world.lights.sun.intensity };
+    // Trunks and crowns between the camera and Mirio open up (scene.js seeThrough).
+    this.seeFocus = { value: new THREE.Vector3() };
+    this.sway = { value: 0 };
     this.riverCourse = makeRiverCourse();
     this.#buildFestland();
 
@@ -159,7 +146,8 @@ export class VolcanoRun {
     this.dogOptions = { reducedMotion: false, speed: 0 };
 
     // The river, its log, and the waterfall at its end.
-    this.riverScene = new RiverScene(this.scene, this.riverCourse, (s, x, h, out) => landPoint(x, this.level.log.z - s, h, out));
+    // The river keeps its own flat frame: the ground under it is level by design (volcano-level.js).
+    this.riverScene = new RiverScene(this.scene, this.riverCourse, (s, x, h, out) => landLevel(x, this.level.log.z - s, h, out));
 
     // Glutzahn's crater: a flat top with its own right/forward axes.
     const ar = this.level.arena;
@@ -204,18 +192,13 @@ export class VolcanoRun {
     }
   }
 
-  /** The Festland: ground, day sky, far hills, platforms, ravine edges, desert and crater props. */
+  /** The Festland: ground and walls, day sky, far mountains, the forest, platforms, desert and crater props. */
   #buildFestland() {
     const L = this.level, outline = outlineMaterial(0.03);
-    // The ground, with a valley six metres down where the waterfall drops into its pool.
-    const lip = L.log.z - this.riverCourse.length, valley = lip - 80;
-    this.scene.add(groundStrip(-140, 140, 60, lip, 4), groundStrip(-140, 140, lip, valley, 4, -RIVER_SCENE.drop), groundStrip(-140, 140, valley, ZONES.arena - 120, 4));
-    const cliff = toon(0x6a5a4e);
-    for (const z of [lip, valley]) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(280, RIVER_SCENE.drop, 0.8).translate(0, -RIVER_SCENE.drop / 2, 0), cliff);
-      placeOn(wall, this.land, landDir(0, z), 0, new THREE.Vector3(0, 0, -1));
-      this.scene.add(wall);
-    }
+    const tier = deviceTier();
+    this.scene.add(buildGround({ tier }), buildBoulders());
+    this.forest = buildForest(L, { focus: this.seeFocus, sway: this.sway, tier });
+    this.scene.add(this.forest.group);
     const dome = new THREE.SphereGeometry(900, 32, 16), colours = [], top = new THREE.Color(DAY.top), low = new THREE.Color(DAY.horizon), c = new THREE.Color();
     for (let i = 0; i < dome.attributes.position.count; i++) {
       const y = dome.attributes.position.getY(i) / 900;
@@ -226,15 +209,9 @@ export class VolcanoRun {
     this.daySky.renderOrder = -20;
     this.scene.add(this.daySky);
 
-    // Far hills along the course, and the smoking volcano behind the Glutkessel.
-    const hills = [];
-    for (let i = 0; i < 26; i++) {
-      const side = i % 2 ? 1 : -1, z = 40 - i * 45, x = side * (170 + (i * 37) % 60);
-      hills.push(new THREE.ConeGeometry(40 + (i * 13) % 30, 50 + (i * 17) % 40, 7).translate(...landPoint(x, z, 20).toArray()));
-    }
-    this.scene.add(new THREE.Mesh(mergeGeometries(hills), new THREE.MeshLambertMaterial({ color: 0x9a8a9a })));
+    // The smoking volcano behind the Glutkessel (the ranges round the valley are the ground's own).
     const volcano = new THREE.Mesh(new THREE.ConeGeometry(120, 150, 16, 1, true).translate(0, 60, 0), new THREE.MeshLambertMaterial({ color: 0x4a3a44 }));
-    volcano.position.copy(landPoint(0, ZONES.arena - 260, 0));
+    volcano.position.copy(landPoint(0, ZONES.arena - 260, -10));
     this.scene.add(volcano);
 
     // The forest's floating platforms: bark-brown blocks with a mossy top.
@@ -246,45 +223,32 @@ export class VolcanoRun {
       placeOn(block, b.planet, b.dir, b.bottom, new THREE.Vector3(0, 0, -1));
       this.scene.add(block);
     }
-    // Each ravine's edges: a dark lip, so the gap reads as a drop.
-    const ravineEdge = toon(0x2a1c16);
-    for (const r of RAVINES) for (const z of [r.z0, r.z1]) {
-      const edge = new THREE.Mesh(new THREE.BoxGeometry(280, 0.5, 0.6), ravineEdge);
-      placeOn(edge, this.land, landDir(0, z), -0.2, new THREE.Vector3(0, 0, -1));
-      this.scene.add(edge);
-    }
-    // Desert: cacti and rocks, both solid.
-    const cactus = toon(0x4f9a5a), stone = toon(0xb89a78);
-    for (const k of L.cacti) {
-      const group = new THREE.Group();
-      group.add(withOutline(new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 2.2, 4, 10).translate(0, 1.4, 0), cactus), outline));
-      for (const side of [-1, 1]) {
-        const arm = withOutline(new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.8, 4, 8), cactus), outline);
-        arm.position.set(side * 0.6, 1.4 + side * 0.3, 0);
-        group.add(arm);
+    // Static props, each kind one mesh with one pen line: `shape(item)` is its local geometry.
+    const props = (items, material, place, shape) => {
+      const at = new THREE.Object3D(), parts = [];
+      for (const item of items) {
+        place(at, item);
+        at.updateMatrix();
+        parts.push(...shape(item).map(g => g.applyMatrix4(at.matrix)));
       }
-      group.scale.setScalar(k.scale);
-      placeOn(group, this.land, landDir(k.x, k.z), 0);
-      this.scene.add(group);
-      this.colliders(this.land).push({ kind: 'cyl', base: landPoint(k.x, k.z, -0.2), axis: landDir(k.x, k.z), radius: 0.5 * k.scale, height: 3 * k.scale });
-    }
-    for (const k of L.rocks) {
-      const rock = withOutline(new THREE.Mesh(new THREE.DodecahedronGeometry(1.2 * k.scale, 0).scale(1, 0.6, 1), stone), outline);
-      placeOn(rock, this.land, landDir(k.x, k.z), 0.3 * k.scale);
-      this.scene.add(rock);
-      this.colliders(this.land).push({ kind: 'cyl', base: landPoint(k.x, k.z, -0.2), axis: landDir(k.x, k.z), radius: 1.1 * k.scale, height: 1 * k.scale });
-    }
+      this.scene.add(withOutline(new THREE.Mesh(mergeGeometries(parts), material), outline));
+    };
+    // Desert: cacti and rocks (solid: festlandColliders), planted in the dunes.
+    props(L.cacti, toon(0x4f9a5a), (at, k) => {
+      placeOn(at, this.land, landDir(k.x, k.z), -0.15 * k.scale - plantedDepth(k.x, k.z, 0.4 * k.scale));
+      at.scale.setScalar(k.scale);
+    }, () => [new THREE.CapsuleGeometry(0.35, 2.2, 4, 10).translate(0, 1.4, 0),
+      ...[-1, 1].map(side => new THREE.CapsuleGeometry(0.22, 0.8, 4, 8).translate(side * 0.6, 1.4 + side * 0.3, 0))]);
+    props(L.rocks, toon(0xb89a78), (at, k) => placeOn(at, this.land, landDir(k.x, k.z), 0.2 * k.scale - plantedDepth(k.x, k.z, 1.1 * k.scale)),
+      (k) => [new THREE.DodecahedronGeometry(1.2 * k.scale, 0).scale(1, 0.6, 1)]);
     // The Glutkessel: a glowing rim and rocks round the crater.
     const rim = new THREE.Mesh(new THREE.TorusGeometry(L.arena.radius + 0.6, 0.18, 6, 64).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff7a3a }));
     placeOn(rim, this.land, L.arena.dir, L.arena.top + 0.05);
     this.scene.add(rim);
-    const ash = toon(0x4a3f48);
-    for (let i = 0; i < 18; i++) {
+    props(Array.from({ length: 18 }, (_, i) => i), toon(0x4a3f48), (at, i) => {
       const a = i / 18 * Math.PI * 2, rr = L.arena.radius + 3 + (i % 3);
-      const rock = withOutline(new THREE.Mesh(new THREE.DodecahedronGeometry(1.4 + (i % 2), 0).scale(1, 1.6, 1), ash), outline);
-      placeOn(rock, this.land, landDir(Math.cos(a) * rr, ZONES.arena + Math.sin(a) * rr), 0.8);
-      this.scene.add(rock);
-    }
+      placeOn(at, this.land, landDir(Math.cos(a) * rr, ZONES.arena + Math.sin(a) * rr), 0.8);
+    }, (i) => [new THREE.DodecahedronGeometry(1.4 + (i % 2), 0).scale(1, 1.6, 1)]);
   }
 
   reset() {
@@ -337,10 +301,10 @@ export class VolcanoRun {
     return out.copy(this.arena.center).addScaledVector(this.arena.right, x).addScaledVector(this.arena.forward, z).addScaledVector(this.arena.up, height);
   }
 
-  /** Mirio on the Festland as local (x, z) and height above its ground. */
+  /** Mirio on the Festland as local (x, z), height above its ground and above its sphere. */
   #local() {
-    const p = this.player.body.pos;
-    return { x: p.x, z: p.z, h: p.distanceTo(this.land.center) - this.land.radius };
+    const p = this.player.body.pos, rel = tmp2.subVectors(p, this.land.center), d = rel.length();
+    return { ...landXZ(rel.divideScalar(d)), h: heightAbove(p, this.land), level: d - this.land.radius };
   }
 
   /** How far along Damai's route Mirio is, or null when he is nowhere near it. */
@@ -466,12 +430,12 @@ export class VolcanoRun {
     }
   }
 
-  /** Stepping into a ravine is a fall: back to the last flag, two seconds on the clock. */
+  /** Dropping into a ravine is a fall: back to the last flag, two seconds on the clock. */
   #ravines(events) {
     const player = this.player;
-    if (!player.body.onGround || player.state !== 'play') return;
-    const { z, h } = this.#local();
-    if (h > 0.4 || !RAVINES.some(r => z < r.z0 && z > r.z1)) return;
+    if (player.state !== 'play') return;
+    const { x, z, level } = this.#local();
+    if (!RAVINES.some(r => z < r.z0 && z > r.z1) || level > rimHeight(x, z) - RAVINE_FALL) return;
     this.particles.burst(player.body.pos, { count: 16, color: [0x8a5a3c, 0xd9c7a0], speed: 4, size: 0.6, life: 0.6 });
     player.respawn();
     this.penalty += RAVINE_PENALTY;
@@ -631,6 +595,8 @@ export class VolcanoRun {
    */
   seek(progress) {
     const L = this.level;
+    // Screenshots only: seek({ view: { from: [x, y, z], to: [x, y, z] } }) holds the camera there; { view: null } lets go.
+    if (typeof progress === 'object') { this.view = progress?.view ?? null; return this.snapshot(); }
     if (progress < 0.1) return this.reset();
     this.fight = false;
     this.boss.reset();
@@ -696,6 +662,9 @@ export class VolcanoRun {
     goal.halo.scale.setScalar(6 + Math.sin(t * 3) * 0.6);
     this.particles.update(dt);
     this.world.update(dt, t, camera, this.player.body.pos);
+    if (this.view) { camera.position.set(...this.view.from); camera.up.set(0, 1, 0); camera.lookAt(...this.view.to); }
+    this.seeFocus.value.copy(this.view ? tmp.set(...this.view.to) : this.rig.focus);
+    this.sway.value = t;
 
     // Space round the Startstern, day over the Festland, dusk in the crater;
     // black over the waterfall until Mirio wakes.
@@ -706,11 +675,28 @@ export class VolcanoRun {
     this.daySky.position.copy(camera.position);
     this.daySky.material.color.setHex(crater ? 0x6a4a5a : 0xffffff);
     this.scene.fog = high ? null : crater ? this.fog.crater : this.fog.day;
+    // In the forest the haze turns green and closes in; the gorge keeps a little of it.
+    const wood = this.view ? 0 : this.#woodland(), day = this.fog.day, lights = this.world.lights;
+    day.color.setHex(DAY.horizon).lerp(WOOD_FOG, wood);
+    day.near = THREE.MathUtils.lerp(120, WOOD.near, wood);
+    day.far = THREE.MathUtils.lerp(520, WOOD.far, wood);
+    if (!crater) this.daySky.material.color.setHex(0xffffff).lerp(WOOD_SKY, wood);
+    lights.ambient.intensity = THREE.MathUtils.lerp(this.light.ambient, WOOD.ambient, wood);
+    lights.sun.intensity = THREE.MathUtils.lerp(this.light.sun, WOOD.sun, wood);
+    this.forest.shafts.material.opacity = reducedMotion ? 0.7 : 0.7 + Math.sin(t * 0.7) * 0.15;
     const fall = this.phase === 'river' ? (this.#river().fall ?? 0) : 0;
     const darkness = this.phase === 'dark' ? 1 : fall;
     this.darkness.position.copy(camera.position);
     this.darkness.material.opacity = darkness;
     this.darkness.visible = darkness > 0.01;
+  }
+
+  /** 0..1: how deep in the woods Mirio is (the river's gorge counts a little). */
+  #woodland() {
+    if (this.phase !== 'land' && this.phase !== 'river') return 0;
+    const z = this.phase === 'river' ? this.level.log.z - this.#river().s : this.#local().z;
+    const smooth01 = (a, b, v) => smooth(THREE.MathUtils.clamp((v - a) / (b - a), 0, 1));
+    return smooth01(ZONES.desertEnd + 10, ZONES.desertEnd - 12, z) * (1 - 0.6 * smooth01(ZONES.forestEnd + 5, ZONES.bank - 10, z));
   }
 
   #renderDamai(t, reducedMotion) {
@@ -729,8 +715,10 @@ export class VolcanoRun {
       placeOn(group, this.land, landDir(-3, ZONES.arena + this.level.arena.radius + 2), 0, DOWNSTREAM);
       animateDamai(this.damai, this.boss.defeated ? 'bark' : 'sit', t, this.dogOptions);
     } else {
+      // Running he follows the ground; hopping, his arc counts from the rims (route heights).
       group.visible = this.phase === 'land';
-      placeOn(group, this.land, landDir(dog.x, dog.z), dog.h, tmp.set(dog.facing[0], 0, dog.facing[1]));
+      const lift = dog.state === 'jump' ? dog.h - festlandHeight(dog.x, dog.z) : 0;
+      placeOn(group, this.land, landDir(dog.x, dog.z), lift, tmp.set(dog.facing[0], 0, dog.facing[1]));
       animateDamai(this.damai, dog.state, t, this.dogOptions);
     }
   }
@@ -814,7 +802,7 @@ export class VolcanoRun {
       forward: forward.toArray(), right: new THREE.Vector3().crossVectors(forward, b.up).normalize().toArray(),
       rocket: this.rocket.phase,
       defeated: this.enemies.defeated + this.arenaEnemies.defeated + [...this.plants, ...this.arenaPlants].filter(p => p.wilted).length,
-      checkpoint: this.world.flags.filter(f => f.reached).length, actionHint: '',
+      checkpoint: this.world.flags.filter(f => f.reached).length, actionHint: '', woods: this.#woodland() > 0.5,
     };
   }
 

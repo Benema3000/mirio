@@ -93,7 +93,7 @@ Pause provides help and separate time boards without leaving the current run.
 | **Blütenpfad** | One run through courtyard, tree house, glass house and cellar garden to a flower tower; three lantern seeds wait up high on the way | A/D or ←/→/stick move; Space/A jump; Shift/X air spin |
 | **Klangkugel** | Three connected pinball tables: pudding garden, cuckoo clock and moon concert; light note targets and shoot the bell lift | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
 | **Seifenstern** | Tilt floating paths beneath a soap bubble; balance over rainbow ribbons, inflate a foam bridge and reach the towel | WASD/arrows/stick tilt; hold Space/A/◎ to level and brake, or inflate the marked soap basin |
-| **Vulkanreise** | Miro's second world: a rocket from the tiny Startstern down to the flat Festland, Damai the pug through desert and forest, a log ride down the river and over the waterfall, Glutzahn's crater | Platformer controls, steer the log left and right; stomp tired Glutzahn in three stages |
+| **Vulkanreise** | Miro's second world: a rocket from the tiny Startstern down to the hilly Festland, Damai the pug through desert and forest, a log ride down the river and over the waterfall, Glutzahn's crater | Platformer controls, steer the log left and right; stomp tired Glutzahn in three stages |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
 keyboard/controller/touch controls and no game-over screen. Recovery adds a
@@ -124,12 +124,19 @@ are documented in `assets/README.md`.
   The whole table stays in view, including with reduced motion.
 - **Vulkanreise:** built from Miro's second set of drawings, in the style of
   the Planetenreise (`js/volcano-level.js`, `js/volcano-run.js`,
-  `js/volcano-creatures.js`, `js/damai.js`, the river in `js/river-rules.js`
-  and `js/river-scene.js`, fight rules in `js/glutzahn-rules.js`). It starts on
-  the Startstern, a tiny planet; Miro's rocket flies down to the Festland, a
-  planet so big it is flat to the eye. In the desert Damai the pug joins and
-  runs ahead, waiting and barking when Mirio falls behind. In the forest three
-  ravines are crossed on floating platforms (a fall costs +2 seconds), spring
+  `js/volcano-creatures.js`, `js/volcano-land.js`, `js/damai.js`, the river in
+  `js/river-rules.js` and `js/river-scene.js`, fight rules in
+  `js/glutzahn-rules.js`). It starts on the Startstern, a tiny planet; Miro's
+  rocket flies down to the Festland, a planet so big that one height function
+  on top of it makes its landscape: a valley over dunes and wooded hills,
+  walled in by sandstone mesas, cliffs and mountains that cannot be climbed.
+  The same function drives the physics (`planet.heightAt` in `js/world.js`)
+  and the ground mesh, and everything placed on the Festland stands on it. In
+  the desert Damai the pug joins and runs ahead, waiting and barking when
+  Mirio falls behind. The forest is dense and tall, its crowns over the path,
+  with ferns, bushes, mushrooms, fallen trunks and light through the leaves;
+  trunks and crowns between the camera and Mirio open up. Three ravines are
+  real chasms crossed on floating platforms (a fall costs +2 seconds), spring
   flowers bounce Mirio up to gems, Grummel walk (stomp or spin them) and
   Schnappblumen bite when you come close (stomp them from above). The
   Glutbeere on a ledge turns Mirio into Miro's big Mirio (a hit then only
@@ -421,7 +428,8 @@ The playground update adds:
 - `tests/mirio-kart-native-e2e.mjs`: a complete race through ordinary keyboard
   input, including a charged drift and its release.
 - `tests/mirio-volcano.test.mjs` (unit) and `tests/mirio-volcano-e2e.mjs`:
-  Glutzahn's fight rules and stages, the level's layout, and in the browser the
+  Glutzahn's fight rules and stages, the level's layout, the Festland's hills
+  (a walkable path, impassable edges, nothing floating or sunk), and in the browser the
   rocket to the Festland, Damai, a ravine fall, a spring, the Glutbeere, the
   log ride over the waterfall and the fight starting.
 - `tests/mirio-damai.test.mjs`, `tests/mirio-river.test.mjs`: Damai's guide
