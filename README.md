@@ -133,7 +133,10 @@ are documented in `assets/README.md`.
   flowers bounce Mirio up to gems, Grummel walk (stomp or spin them) and
   Schnappblumen bite when you come close (stomp them from above). The
   Glutbeere on a ledge turns Mirio into Miro's big Mirio (a hit then only
-  shrinks him back). At the river Mirio and Damai jump on a log: steer left
+  shrinks him back): the game and its clock stand still while the camera
+  swings round to his front, he grows in flickering steps with a flash, and
+  the camera swings back (`js/grow-cutscene.js`; with reduced motion he just
+  scales up). At the river Mirio and Damai jump on a log: steer left
   and right past rocks, branches and whirlpools (a bump costs +1 second), over
   the waterfall, everything goes dark, and Mirio wakes in the Glutkessel.
   Glutzahn breathes fire (announced, dodge sideways or jump) or spins a

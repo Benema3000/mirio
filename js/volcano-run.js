@@ -16,6 +16,7 @@ import { CameraRig } from './camera.js';
 import { DamaiGuide, animateDamai, buildDamai } from './damai.js';
 import { EnemySystem } from './enemies.js';
 import { GLUT, GlutzahnRules } from './glutzahn-rules.js';
+import { GrowCutscene } from './grow-cutscene.js';
 import { collidersFor } from './level.js';
 import { outlineMaterial, toon, withOutline } from './materials.js';
 import { BIG_MIRIO_LOOK, buildMirio } from './mirio-model.js';
@@ -109,6 +110,7 @@ export class VolcanoRun {
     this.big.group.scale.setScalar(BIG_SCALE);
     this.big.group.visible = false;
     this.scene.add(this.big.group);
+    this.grow = new GrowCutscene(this.scene, { small: this.small, big: this.big, player: this.player, particles: this.particles });
     // Every hit, from any creature, goes through the power-up first.
     const hurt = this.player.hurt.bind(this.player);
     this.player.hurt = (from) => {
@@ -311,8 +313,11 @@ export class VolcanoRun {
     return this.snapshot();
   }
 
-  #setBig(on) {
+  /** `grow`: the Glutbeere's cutscene plays (grow-cutscene.js). */
+  #setBig(on, grow = false) {
     this.powered = on;
+    this.grow.stop();
+    if (grow) this.grow.start();
     const model = on ? this.big : this.small;
     if (this.player.model === model) return;
     this.player.model.group.visible = false;
@@ -361,6 +366,9 @@ export class VolcanoRun {
   step(dt, controls = {}, input = null) {
     if (this.status !== 'playing' || !Number.isFinite(dt) || dt <= 0 || !this.rig) return [];
     dt = Math.min(dt, 0.1);
+    // ---- Grow cutscene: the world and the clock hold still (grow-cutscene.js).
+    if (this.grow.active) return this.grow.step(dt);
+    // ----
     this.time += dt;
     this.elapsed += dt;
     const events = [], player = this.player;
@@ -441,7 +449,7 @@ export class VolcanoRun {
       if (berry.taken || berry.pos.distanceTo(mid) > BERRY_RADIUS) continue;
       berry.taken = true;
       berry.group.visible = false;
-      this.#setBig(true);
+      this.#setBig(true, true);
       events.push({ type: 'star', kind: 'grow' });
       this.particles.burst(berry.pos, { count: 26, color: [0xff5a2a, 0xffd23f, 0xffffff], speed: 5, size: 0.6, life: 0.8 });
     }
@@ -631,6 +639,7 @@ export class VolcanoRun {
    */
   seek(progress) {
     const L = this.level;
+    this.grow.stop();
     if (progress < 0.1) return this.reset();
     this.fight = false;
     this.boss.reset();
@@ -668,10 +677,13 @@ export class VolcanoRun {
       this.rig.snap(this.player, this.player.facing);
       this.snap = false;
     }
+    // ---- Grow cutscene: it poses Mirio and holds the camera (grow-cutscene.js).
+    const growing = this.grow.render(camera, this.rig, { reducedMotion });
+    // ----
     const t = this.elapsed;
     this.riverScene.update(this.river, t, { reducedMotion });
     if (this.phase === 'river') this.#placeOnLog(t, reducedMotion);
-    else this.player.render(dt);
+    else if (!growing) this.player.render(dt);
     this.enemies.update(t, camera);
     this.arenaEnemies.update(t, camera);
     this.arenaEnemies.group.visible = this.phase === 'arena' && this.stage >= 2;
@@ -808,7 +820,8 @@ export class VolcanoRun {
     return {
       status: this.status, time: this.time, penalty: this.penalty, phase: this.phase, progress,
       collectibles: this.collected, totalCollectibles: this.world.bits.length + river.totalGems,
-      hearts: this.player.hearts, maxHearts: MAX_HEARTS, powered: this.powered, fight: this.fight, stage: this.stage,
+      hearts: this.player.hearts, maxHearts: MAX_HEARTS, powered: this.powered, cutscene: this.grow.active ? 'grow' : null,
+      fight: this.fight, stage: this.stage,
       boss: this.boss.snapshot(), river, damai: this.guide.snapshot(),
       planet: b.planet?.id ?? null, pos: b.pos.toArray(), grounded: b.onGround,
       forward: forward.toArray(), right: new THREE.Vector3().crossVectors(forward, b.up).normalize().toArray(),
