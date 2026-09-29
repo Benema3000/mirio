@@ -71,12 +71,21 @@ try{
     await gameTime(page,1.5);
     assert.ok((await run(page)).collectibles>gems,'the bounce collected no gems');
   });
-  await check('jumping onto the Glutbeere\'s ledge turns Mirio into Miro\'s big Mirio',async()=>{
+  await check('jumping onto the Glutbeere\'s ledge turns Mirio into Miro\'s big Mirio, in a cutscene that stops the clock',async()=>{
     await seek(page,.5);
     const berry=(await course(page)).berries[0].pos;
     await walkTo(page,land(berry[0],berry[2]+3.5),.5,20);
+    // Every frame's cutscene and clock, from before the pickup to after it.
+    await page.evaluate(()=>{const log=window.__grow=[];(function tick(){const r=window.__mirio.snapshot().chapterRun;log.push([r.cutscene,r.time]);if(!log.done)requestAnimationFrame(tick);})();});
     await walkTo(page,berry,.8,4,true);
-    await gameTime(page,.5);
+    await page.waitForFunction(()=>window.__grow.some(([c])=>c==='grow'),null,{timeout:30000});
+    await page.waitForFunction(()=>window.__mirio.snapshot().chapterRun.cutscene===null,null,{timeout:60000});
+    await gameTime(page,.3);
+    const log=await page.evaluate(()=>{window.__grow.done=true;return window.__grow;});
+    const during=log.filter(([c])=>c==='grow').map(([,t])=>t);
+    assert.ok(during.length>5,`only ${during.length} cutscene frames`);
+    assert.equal(Math.max(...during)-Math.min(...during),0,'the clock ran during the cutscene');
+    assert.ok(log.at(-1)[1]>during[0],'the clock did not run on afterwards');
     assert.ok((await run(page)).powered,'Mirio did not grow');
   });
   await check('the log turns into a river ride that Mirio steers, Damai aboard',async()=>{
