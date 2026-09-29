@@ -1,6 +1,6 @@
 // Local best times only; public entries are always explicitly submitted by
 // the player. No placeholder scores or cross-level comparisons are invented.
-import { courseFor, personalBestKey } from './course-version.js';
+import { COURSE, courseFor, personalBestKey } from './course-version.js';
 
 const LEVEL_IDS = new Set(['adventure', 'sky', 'ribbon', 'kart', 'marble', 'tilt', 'volcano']);
 const MAX_TIME_MS = 24 * 60 * 60 * 1000;
@@ -31,6 +31,11 @@ export function readPersonalBest(level, {course = courseFor(level)} = {}) {
   } catch { /* Private browsing still keeps a best for this session. */ }
   if (best !== null) memory.set(key, best);
   return best;
+}
+
+// A new layout resets competition, while earned world souvenirs stay earned.
+export function hasCompletedLevel(level) {
+  return Object.values(COURSE).some(course => readPersonalBest(level, {course}) !== null);
 }
 
 export function savePersonalBest(level, timeMs, {course = courseFor(level)} = {}) {

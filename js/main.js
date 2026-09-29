@@ -16,7 +16,7 @@ import { TiltRun } from './tilt-run.js';
 import { VolcanoRun } from './volcano-run.js';
 import { CHAPTERS, medalFor, MEDALS } from './chapters.js';
 import { MenuNavigation } from './menu-navigation.js';
-import { formatRunTime, readPersonalBest, savePersonalBest } from './time-records.js';
+import { formatRunTime, readPersonalBest, savePersonalBest, hasCompletedLevel } from './time-records.js';
 import { COURSE, courseFor } from './course-version.js';
 import { BonusPlayground } from './bonus-playground.js';
 import { DiscoveryGates } from './discovery-gates.js';
@@ -317,8 +317,7 @@ async function main() {
   let race = classicRace, branchRace = null, branchVisit = null;
   let discoveryQueued = false;
   const activeCourse = () => branchVisit ? COURSE.BRANCHES : courseFor(selectedLevel);
-  const completedLevels = () => Object.keys(CHAPTERS).filter(id => readPersonalBest(id) || readPersonalBest(id, {course: COURSE.LEGACY})
-    || (id === 'kart' && readPersonalBest(id, {course: COURSE.BRANCHES})));
+  const completedLevels = () => Object.keys(CHAPTERS).filter(hasCompletedLevel);
 
   function renderDiscoveryHud() {
     const exploring = state === 'play' && !fight.on;
@@ -1146,7 +1145,7 @@ async function main() {
       : selectedLevel === 'tilt' ? 'Weich gelandet!' : selectedLevel === 'volcano' ? 'Glutzahn ist besiegt!' : 'Der Blütenhof leuchtet!';
     $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ◇ ${run.collectibles} Ringe`
       : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} Inseln · ↗ ${run.shortcuts} Abkürzungen · ↺ ${run.recoveries} Landungen`
-      : selectedLevel === 'marble' ? `♪ ${run.notes} Noten · ${run.bumps} Bumper · ↺ ${run.recoveries} Rettungen`
+      : selectedLevel === 'marble' ? `♪ ${run.notes} Noten · ↗ ${run.toyShots} Rampen · ✦ ${run.maxCombo}er Kette · ↺ ${run.recoveries}`
       : selectedLevel === 'volcano' ? `◇ ${run.collectibles} Glitzersteine · ✦ ${run.defeated} Grummel und Schnappblumen`
       : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
     $('win-extra').textContent = selectedLevel === 'marble' ? 'Die drei Spieluhren singen zusammen.' : '';
@@ -1160,10 +1159,13 @@ async function main() {
   function handleChapterEvents(events) {
     for (const event of events ?? []) {
       if (selectedLevel === 'marble' && event.type === 'spring') hint('', 0);
-      if (event.type !== 'finish') sound.play(({flipper: 'click', 'flipper-hit': 'spring', 'ball-save': 'land', foam: 'spring', note: 'flag', 'marble-bumper': 'bump', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
+      if (selectedLevel === 'marble') sound.playPinball(event);
+      else if (event.type !== 'finish') sound.play(({foam: 'spring', note: 'flag', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
       if (event.penalty > 0) toast(`${selectedLevel === 'marble' ? 'Kuckuck! ' : ''}+${event.penalty} s`);
       else if (event.type === 'delivery') toast(`✉ ${event.deliveries} / ${chapterGame.snapshot().totalDeliveries}`);
       else if (event.type === 'note') toast(`♪ ${event.notes} / ${chapterGame.snapshot().totalNotes}`);
+      else if (event.type === 'pinball-toy' && event.stage === 'complete') toast('↺ Kugelschutz');
+      else if (event.type === 'pinball-combo') toast(`✦ ${event.combo}er Kette`);
       else if (event.type === 'foam') toast('Schaumsteg!');
       else if (event.type === 'bit' && event.kind === 'seed') toast(`✧ ${event.seeds} / ${chapterGame.snapshot().totalSeeds}`);
       else if (event.type === 'checkpoint' && selectedLevel === 'marble') toast(`♫ ${chapterGame.snapshot().roomName}`);
@@ -1684,6 +1686,7 @@ async function main() {
         hub: hub?.snapshot() ?? null,
         selectedLevel,
         cameraUp: camera.up.toArray(),
+        cameraView: {position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), fov: camera.fov, aspect: camera.aspect},
         chapterRun: chapterGame ? {...chapterGame.snapshot(), countdown: chapterCountdown} : null,
         paused,
         time: stats.time,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {MARBLE,MARBLE_BELLS,MARBLE_FLIPPERS,MarbleRules,PINBALL_PHASE,flipperSegment} from '../js/marble-rules.js';
+import {MARBLE,MARBLE_BELLS,MARBLE_FLIPPERS,MARBLE_TOYS,MARBLE_GUIDES,MarbleRules,PINBALL_PHASE,flipperSegment} from '../js/marble-rules.js';
 
 const HZ=120,FRAME=1/HZ;
 function stepFor(run,seconds,input={}){
@@ -115,4 +115,114 @@ test('reset clears completed rooms, lit targets, penalties and held bats',()=>{
   const run=new MarbleRules();run.seek(.99);stepFor(run,.3);assert.equal(run.snapshot().status,'finished');
   run.reset();const s=run.snapshot();assert.equal(s.notes,0);assert.equal(s.table,0);assert.equal(s.time,0);
   assert.equal(s.flipperLeft,false);assert.equal(s.status,'playing');assert.equal(s.served,true);
+});
+
+test('each table has a distinct elevated shot and physical guide layout',()=>{
+  assert.equal(MARBLE_TOYS?.length,3);
+  for(const toy of MARBLE_TOYS){
+    assert.ok(toy.path.some(point=>point.height>2));
+    assert.deepEqual(toy.path[0],{x:toy.mouth.x,y:toy.mouth.y,height:0});
+    assert.equal(toy.path.at(-1).height,0);
+    assert.ok(MARBLE_GUIDES.some(guide=>guide.table===toy.table));
+  }
+});
+
+test('a vine shot raises the ball, awards a note and keeps its growth after rescue',()=>{
+  const run=new MarbleRules();light(run,'rose-0');run.seek('vine');
+  const start=stepFor(run,.1),riding=run.snapshot();
+  assert.equal(start.filter(event=>event.type==='pinball-toy'&&event.stage==='start').length,1);
+  assert.equal(riding.toy.active,true);assert.ok(riding.height>0);
+  const paused=run.snapshot();run.step(0,{action:true});assert.deepEqual(run.snapshot(),paused);
+  const end=stepFor(run,3),complete=run.snapshot();
+  assert.equal(end.filter(event=>event.type==='pinball-toy'&&event.stage==='complete').length,1);
+  assert.equal(complete.toy.completions,1);assert.ok(complete.notes>=2);assert.ok(complete.saveTime>5);
+  run.rescue();assert.equal(run.snapshot().toy.completions,1);assert.equal(run.snapshot().toy.active,false);
+  assert.equal(run.snapshot().height,0);assert.equal(run.snapshot().toy.ready,true);
+  run.reset();assert.equal(run.snapshot().toy.completions,0);assert.equal(run.snapshot().toy.ready,false);
+});
+
+test('toy events carry table positions and captures ignore live flipper forces',()=>{
+  const first=new MarbleRules(),second=new MarbleRules();
+  for(const run of [first,second]){light(run,'rose-0');run.seek('vine');run.step(FRAME,{});}
+  const events=stepFor(first,.8,{flipperLeft:true,action:true});stepFor(second,.8,{});
+  for(const key of ['x','y','height'])assert.equal(first.snapshot()[key],second.snapshot()[key]);
+  assert.ok(events.every(event=>Number.isFinite(event.x)&&Number.isFinite(event.y)&&event.table===0));
+});
+
+test('one held flipper cradles; release timing aims the next stroke',()=>{
+  const shots=[];
+  for(const delay of [.05,.2]){
+    const run=new MarbleRules();stepFor(run,.5,{flipperLeft:true});run.seek('left');
+    const caught=stepFor(run,.4,{flipperLeft:true});
+    assert.equal(run.snapshot().cradled,'left');
+    assert.equal(caught.filter(event=>event.type==='pinball-cradle'&&event.stage==='catch').length,1);
+    const before=run.snapshot(),rest=stepFor(run,3,{flipperLeft:true});
+    assert.equal(rest.filter(event=>event.type==='pinball-cradle').length,0);
+    assert.equal(run.snapshot().x,before.x);assert.equal(run.snapshot().y,before.y);
+    stepFor(run,delay,{});assert.equal(run.snapshot().cradled,null);
+    const shot=stepFor(run,.3,{flipperLeft:true});
+    assert.ok(shot.some(event=>event.type==='flipper-hit'&&event.strong));assert.ok(run.snapshot().vy>20);
+    shots.push(run.snapshot().vx);
+  }
+  assert.ok(shots[0]-shots[1]>1.5,`early ${shots[0]}, late ${shots[1]}`);
+});
+
+test('a second held flipper releases a cradle into the forgiving two-bat mode',()=>{
+  const run=new MarbleRules();stepFor(run,.5,{flipperLeft:true});run.seek('left');
+  stepFor(run,.4,{flipperLeft:true});assert.equal(run.snapshot().cradled,'left');
+  stepFor(run,.3,{flipperLeft:true,flipperRight:true});
+  assert.equal(run.snapshot().cradled,null);assert.ok(run.snapshot().speed>0);
+  run.rescue();assert.equal(run.snapshot().cradled,null);assert.equal(run.snapshot().served,true);
+});
+
+test('clock scoop telegraphs its opening and stays open after the target bank drops',()=>{
+  const run=new MarbleRules();stepFor(run,3);light(run,'blue-0');
+  assert.equal(run.snapshot().toy.ready,true);assert.equal(run.snapshot().toy.open,false);
+  run.seek('cuckoo');assert.equal(run.step(FRAME,{}).some(event=>event.type==='pinball-toy'),false);
+  assert.ok(run.snapshot().vy<0,'the closed cuckoo door rebounds the shot');
+  while(!run.snapshot().toy.open)run.step(FRAME,{});
+  run.seek('cuckoo');assert.ok(run.step(FRAME,{}).some(event=>event.type==='pinball-toy'&&event.stage==='start'));
+  run.rescue();light(run,'blue-1');light(run,'blue-2');
+  for(let i=0;i<5*HZ;i++){run.step(FRAME,{});assert.equal(run.snapshot().toy.open,true);}
+});
+
+test('each elevated finishing branch awards the last target and reaches its bell once',()=>{
+  for(const [table,id,prefix]of [[0,'vine','rose'],[1,'cuckoo','blue'],[2,'orbit','gold']]){
+    const run=new MarbleRules();run.seek(table/3);light(run,`${prefix}-0`);light(run,`${prefix}-1`);
+    while(!run.snapshot().toy.open)run.step(FRAME,{});
+    run.seek(id);const events=stepFor(run,5);
+    assert.equal(events.filter(event=>event.type==='pinball-toy'&&event.stage==='complete').length,1);
+    assert.equal(run.snapshot().toyCompletions[table],1);assert.equal(run.snapshot().notes,(table+1)*3);
+    assert.equal(events.filter(event=>event.type===(table===2?'finish':'checkpoint')).length,1);
+  }
+});
+
+test('ordinary plunger and held flippers can reach all three optional toys',()=>{
+  const run=new MarbleRules(),toys=new Set(),hz=60;
+  for(let i=0;i<hz*150&&run.snapshot().status==='playing';i++){
+    const s=run.snapshot();
+    for(const event of run.step(1/hz,{jumpHeld:s.served&&s.plungerCharge<.85,
+      flipperLeft:!s.served,flipperRight:!s.served})){
+      if(event.type==='pinball-toy'&&event.stage==='complete')toys.add(event.id);
+    }
+  }
+  assert.equal(run.snapshot().status,'finished');assert.deepEqual([...toys].sort(),['cuckoo','orbit','vine']);
+  assert.equal(run.snapshot().toyShots,3);assert.equal(run.snapshot().recoveries,0);
+});
+
+test('quick target combinations extend the saver and report their highest chain',()=>{
+  const run=new MarbleRules();light(run,'rose-0');const events=light(run,'rose-1');
+  assert.equal(events.filter(event=>event.type==='pinball-combo'&&event.combo===2).length,1);
+  assert.equal(run.snapshot().maxCombo,2);assert.ok(run.snapshot().saveTime>5);
+  light(run,'rose-2');assert.equal(run.snapshot().maxCombo,3);assert.ok(run.snapshot().saveTime>8);
+  run.rescue();stepFor(run,7);assert.equal(run.snapshot().combo,0);assert.equal(run.snapshot().maxCombo,3);
+  run.reset();assert.equal(run.snapshot().maxCombo,0);
+});
+
+test('recovering during a captured path cancels its delayed reward',()=>{
+  const run=new MarbleRules();light(run,'rose-0');run.seek('vine');stepFor(run,.5);
+  assert.equal(run.snapshot().toy.active,true);run.rescue();const events=stepFor(run,4);
+  assert.equal(events.filter(event=>event.type==='pinball-toy').length,0);
+  assert.equal(run.snapshot().height,0);assert.equal(run.snapshot().notes,1);
+  assert.equal(run.snapshot().toyShots,0);assert.equal(run.snapshot().served,true);
 });
