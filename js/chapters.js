@@ -24,7 +24,7 @@ export const CHAPTERS = Object.freeze({
   kart: {name: 'Sternenrennen', short: 'Sternenrennen', eyebrow: '04 / AB INS KART',
     description: 'Das ganze Kartrennen, direkt ab Start: driften, Turbo holen und dem Kristall hinterher!',
     keys: '↑ Gas · ↓ Bremse · ← → lenken · Leertaste + lenken: driften',
-    touch: 'Links lenken · Gas & Bremse rechts · Zum Driften ↑ halten, loslassen: Turbo',
+    touch: 'Links lenken · links tippen: Hüpfen · Gas & Bremse rechts · Zum Driften ↑ halten, loslassen: Turbo',
     controller: 'Linker Stick lenken · RT Gas · LT Bremse · A halten + lenken: driften',
     goal: 'Hol dir den Kristall!', medal: [42000, 55000, 75000]},
   marble: {name: 'Klangkugel', short: 'Klangkugel', eyebrow: '05 / STERNENFLIPPER',

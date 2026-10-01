@@ -3,8 +3,8 @@
 import { Vector3 } from 'three';
 
 export const RACE_STYLE = Object.freeze({ CLASSIC: 'classic', PLAYGROUND: 'playground' });
-export const CLASSIC_ROAD_HALF_WIDTH = 5;
-export const MAIN_ROAD_HALF_WIDTH = 5.5;
+export const CLASSIC_ROAD_HALF_WIDTH = 6.5;
+export const MAIN_ROAD_HALF_WIDTH = 7;
 export const ROUTE = Object.freeze({ MAIN: 'main', WIND: 'wind', ORCHARD: 'orchard', CLOUD: 'cloud' });
 export const FORKS = Object.freeze([
   { id: ROUTE.WIND, from: 100, to: 205, side: 1, offset: 17, width: 4.7, rise: 5, color: 0xffca55, icon: '↗', name: 'Windrad', turbo: true },

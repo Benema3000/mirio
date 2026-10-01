@@ -3,7 +3,7 @@ import test from 'node:test';
 import {Vector3} from 'three';
 import {makeLevel} from '../js/level.js';
 import {Track} from '../js/kart.js';
-import {RouteNetwork, ROUTE, RACE_STYLE, MAIN_ROAD_HALF_WIDTH} from '../js/kart-routes.js';
+import {RouteNetwork, ROUTE, RACE_STYLE, MAIN_ROAD_HALF_WIDTH, CLASSIC_ROAD_HALF_WIDTH} from '../js/kart-routes.js';
 const base = new Track(makeLevel().course, {halfWidth:MAIN_ROAD_HALF_WIDTH});
 const routes = new RouteNetwork(base);
 const frame = () => ({pos:new Vector3(),tan:new Vector3(),up:new Vector3(),right:new Vector3()});
@@ -109,17 +109,17 @@ test('finish interpolation uses actual road progress when crossing at an angle',
 test('narrow forks taper from the main width instead of snapping drivers sideways', () => {
   for(const fork of routes.forks) {
     assert.equal(typeof fork.path.halfWidth,'function');
-    assert.equal(fork.path.halfWidth(fork.s0),5.5);
-    assert.equal(fork.path.halfWidth(fork.s1),5.5);
+    assert.equal(fork.path.halfWidth(fork.s0),MAIN_ROAD_HALF_WIDTH);
+    assert.equal(fork.path.halfWidth(fork.s1),MAIN_ROAD_HALF_WIDTH);
     assert.equal(fork.path.halfWidth((fork.s0+fork.s1)/2),fork.width);
-    assert.ok(fork.path.halfWidth(fork.s0+.1)>5.49);
+    assert.ok(fork.path.halfWidth(fork.s0+.1)>MAIN_ROAD_HALF_WIDTH-.01);
   }
 });
 
 test('classic network preserves a single road and never selects playground routes', () => {
   const track = new Track(makeLevel().course);
   const classic = new RouteNetwork(track, {routeStyle:RACE_STYLE.CLASSIC});
-  assert.equal(track.halfWidth(),5);
+  assert.equal(track.halfWidth(),CLASSIC_ROAD_HALF_WIDTH);
   assert.deepEqual(classic.forks,[]);
   const racer = {s:base.sAtPsi(100)+1,x:3,route:ROUTE.MAIN,turboMemory:4};
   assert.equal(classic.enter(racer,racer.s-2),null);

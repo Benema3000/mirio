@@ -748,6 +748,36 @@ test('paused gamepad menus retain navigation without leaking gameplay actions', 
   assert.deepEqual(input.menu, {x: 0, y: 0, confirm: false, back: false});
 });
 
+test('in the race a quick tap on the left hops, even while a thumb keeps steering', (t) => {
+  const { input, doc, elements } = testInput(t);
+  doc.body = eventTarget();
+  doc.body.classList.add('racing');
+  const touch = (name, id, x, timeStamp, y = 300) =>
+    elements.surface.emit(name, { pointerId: id, pointerType: 'touch', clientX: x, clientY: y, timeStamp, currentTarget: elements.surface });
+  // A held drag steers and never hops.
+  touch('pointerdown', 1, 120, 0);
+  touch('pointermove', 1, 170, 100);
+  touch('pointerup', 1, 170, 400);
+  assert.equal(input.consumeJump(), false, 'a steering drag is not a tap');
+  // A quick lift-and-tap of the steering thumb hops.
+  touch('pointerdown', 2, 120, 500);
+  touch('pointerup', 2, 122, 620);
+  assert.equal(input.consumeJump(), true);
+  // While the thumb keeps steering, a second finger's tap on the left hops.
+  touch('pointerdown', 3, 100, 800);
+  touch('pointermove', 3, 160, 900);
+  touch('pointerdown', 4, 300, 1000);
+  touch('pointerup', 4, 302, 1140);
+  assert.equal(input.consumeJump(), true);
+  touch('pointerup', 3, 160, 5000);
+  assert.equal(input.consumeJump(), false, 'releasing a long steer is not a tap');
+  // Outside the race a left tap just places the stick.
+  doc.body.classList.remove('racing');
+  touch('pointerdown', 5, 120, 6000);
+  touch('pointerup', 5, 122, 6150);
+  assert.equal(input.consumeJump(), false);
+});
+
 test('the kart can safely coast with empty controls and only charges drift on the road', () => {
   const coast = kartAt();
   driveFor(coast, 1, {}, straightRoad);

@@ -6,9 +6,13 @@
 // Touch layout: the left half of the screen is a floating thumb stick that
 // appears wherever the thumb lands; the right half drags the camera; three
 // round buttons jump, spin and ground-pound. In the race, gas and brake
-// buttons replace spin and ground-pound, and the stick only steers.
+// buttons replace spin and ground-pound, the stick only steers, and a quick
+// tap on the left half hops (a second finger while steering, or the steering
+// thumb lifted and tapped again).
 
 const STICK_RADIUS = 56;
+const TAP_MS = 260;
+const TAP_MOVE = 24;
 const MOUSE_TURN = 0.006;
 const TOUCH_TURN = 0.009;
 const KEY_TURN = 2.2;
@@ -56,6 +60,7 @@ export class Input {
     this._enabled = false;
     this.down = new Set();
     this.jumpQueued = false;
+    this.hopTouch = null;
     this.spinQueued = false;
     this.poundQueued = false;
     this.rideQueued = false;
@@ -134,6 +139,7 @@ export class Input {
     this.down.clear();
     this.releaseStick();
     this.dragPointer = null;
+    this.hopTouch = null;
     this.buttonJumpHeld = this.buttonPoundHeld = this.buttonGas = this.buttonBrake = this.jumpHeld = this.poundHeld = false;
     this.jumpQueued = this.spinQueued = this.poundQueued = false;
     this.rideQueued = false;
@@ -196,11 +202,13 @@ export class Input {
     if (e.pointerType === 'touch') this.onTouch();
     const isTouch = e.pointerType !== 'mouse';
     if (isTouch && e.clientX < window.innerWidth * 0.5 && this.stickTouch === null) {
-      this.stickTouch = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      this.stickTouch = { id: e.pointerId, x: e.clientX, y: e.clientY, at: e.timeStamp, tap: true };
       this.stick.style.left = `${e.clientX}px`;
       this.stick.style.top = `${e.clientY}px`;
       this.stick.classList.add('active');
       this.updateStick(e.clientX, e.clientY);
+    } else if (isTouch && e.clientX < window.innerWidth * 0.5 && document.body?.classList.contains('racing')) {
+      this.hopTouch ??= { id: e.pointerId, x: e.clientX, y: e.clientY, at: e.timeStamp, tap: true };
     } else if (this.dragPointer === null) {
       this.dragPointer = { id: e.pointerId, x: e.clientX, y: e.clientY, touch: isTouch };
     } else {
@@ -215,6 +223,11 @@ export class Input {
       this.updateStick(e.clientX, e.clientY);
       return;
     }
+    const h = this.hopTouch;
+    if (h && e.pointerId === h.id) {
+      if (Math.hypot(e.clientX - h.x, e.clientY - h.y) > TAP_MOVE) h.tap = false;
+      return;
+    }
     const d = this.dragPointer;
     if (!d || e.pointerId !== d.id) return;
     const speed = d.touch ? TOUCH_TURN : MOUSE_TURN;
@@ -225,7 +238,16 @@ export class Input {
   }
 
   pointerUp(e) {
-    if (this.stickTouch && e.pointerId === this.stickTouch.id) this.releaseStick();
+    const s = this.stickTouch;
+    if (s && e.pointerId === s.id) {
+      if (s.tap && e.timeStamp - s.at < TAP_MS && document.body?.classList.contains('racing')) this.jumpQueued = true;
+      this.releaseStick();
+    }
+    const h = this.hopTouch;
+    if (h && e.pointerId === h.id) {
+      this.hopTouch = null;
+      if (h.tap && e.timeStamp - h.at < TAP_MS) this.jumpQueued = true;
+    }
     if (this.dragPointer && e.pointerId === this.dragPointer.id) this.dragPointer = null;
   }
 
@@ -233,6 +255,7 @@ export class Input {
     let dx = x - this.stickTouch.x;
     let dy = y - this.stickTouch.y;
     const len = Math.hypot(dx, dy);
+    if (len > TAP_MOVE) this.stickTouch.tap = false;
     if (len > STICK_RADIUS) {
       dx *= STICK_RADIUS / len;
       dy *= STICK_RADIUS / len;

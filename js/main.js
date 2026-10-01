@@ -71,7 +71,7 @@ const HINTS = {
   creatures: 'Die kleinen Wächter kannst du von oben besiegen. Drehen macht sie schwindlig!',
   spring: 'Boing! Stampfe auf eine grosse Blüte, dann federt sie dich noch höher.',
   raceKeys: 'Gas: ↑ · Bremse: ↓ · Lenken: ← → · Driften: beim Lenken Leertaste halten, loslassen: Turbo!',
-  raceTouch: 'Links lenken · Gas · Zum Driften ↑ halten · Loslassen: Turbo!',
+  raceTouch: 'Links lenken · links tippen: Hüpfen · Gas · Zum Driften ↑ halten · Loslassen: Turbo!',
 };
 
 const $ = (id) => document.getElementById(id);
