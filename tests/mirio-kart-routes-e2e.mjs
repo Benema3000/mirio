@@ -45,50 +45,31 @@ try {
     Object.assign(r.rival,{s:r.player.s,x:limit,vx:0,route:'orchard'});
     const edgeSteer=r.aiControl(r.rival).steer;
     r.reset();r.skipTo(0);
-    Object.assign(r.rival,{v:15,charge:.4,drift:1,air:true});
-    r.slide(r.rival,.02,{steer:0,drift:1},[],false);
-    const airborneCharge=r.rival.charge;
-    r.reset();r.skipTo(0);
-    Object.assign(r.rival,{v:15,charge:1.09,drift:1});
-    r.slide(r.rival,.02,{steer:0,drift:1},[],false);
-    const heldMemory=r.rival.turboMemory;
-    r.slide(r.rival,.01,{steer:0,drift:0},[],false);
-    const releaseMemory=r.rival.turboMemory;
-    r.reset();r.skipTo(0);
     Object.assign(r.player,{s:.01,v:-5});
     r.stepRacer(r.player,.1,{brake:1,steer:0,throttle:0},[],true);
     const start=r.player.s;
     r.reset();r.skipTo(0);
     r.player.x=2.2;
-    return {edgeSteer,airborneCharge,heldMemory,releaseMemory,start};
+    return {edgeSteer,start};
   });
-  assert.deepEqual({
-    staysInside:review.edgeSteer<=0,
-    airborneCharge:review.airborneCharge,
-    heldMemory:review.heldMemory,
-    earnsRelease:review.releaseMemory>0,
-    start:review.start,
-  },{staysInside:true,airborneCharge:.4,heldMemory:0,earnsRelease:true,start:0});
-  console.log('ok rival branch boundaries, honest drift and reverse recovery');
+  assert.equal(review.start,0,'braking backwards past the start clamps to the grid');
+  assert.ok(review.edgeSteer<=0,'the rival must not steer over the branch edge');
+  console.log('ok rival branch boundaries and reverse recovery');
   await page.keyboard.down('ArrowUp');await wait(page,()=>window.__kartRace.player.v>10);
-  await page.keyboard.down('ArrowLeft');await page.keyboard.down('Space');
-  await wait(page,()=>window.__kartRace.player.drift!==0);await page.keyboard.up('ArrowLeft');
-  await wait(page,()=>window.__kartRace.player.charge>=1.1);await shot(page,'kart-orange-drift');
-  await page.keyboard.up('Space');await wait(page,()=>window.__kartRace.player.turbo>0);
-  assert.equal((await race(page)).bestDrift,2);await page.keyboard.up('ArrowUp');
-  console.log('ok keyboard orange drift and release');
+  await page.keyboard.down('Space');await wait(page,()=>window.__kartRace.player.air===true);
+  await shot(page,'kart-hop');
+  await page.keyboard.up('Space');await wait(page,()=>window.__kartRace.player.air===false);
+  await page.keyboard.up('ArrowUp');
+  console.log('ok keyboard hop and landing');
 
-  await page.evaluate(()=>{window.__kartRace.reset();window.__kartRace.skipTo(0);window.__kartPlay={charged:false,events:[],previews:[]};});
+  await page.evaluate(()=>{window.__kartRace.reset();window.__kartRace.skipTo(0);window.__kartPlay={events:[],previews:[]};});
   for(let segment=0;segment<30;segment++) {
     const result=await page.evaluate(()=>{
       const r=window.__kartRace,run=window.__kartPlay,dt=1/120;
       for(let i=0;i<240 && r.progress<.985;i++) {
         const s=r.snapshot(),k=r.player,target=s.nextFork?s.nextFork.side*2:0;
         let steer=Math.max(-1,Math.min(1,.75*s.road.curvature*k.v/2.4-k.yaw*1.5+(target-k.x)*.3));
-        const prepare=s.nextFork?.turbo && s.nextFork.s-k.s>12;
-        if(prepare&&!run.charged)steer=k.drift?-.26/.78:1;
-        if(k.charge>1.1)run.charged=true;
-        r.simulate(dt,{steer,throttle:1,brake:0,hold:prepare&&!run.charged,jump:false,spin:false},run.events);
+        r.simulate(dt,{steer,throttle:1,brake:0,jump:false,spin:false},run.events);
         r.animate(dt);r.updateCamera(window.__kartCamera,dt);
         const upcoming=r.snapshot().nextFork;
         if(upcoming && upcoming.s-r.player.s<18 && !run.previews.includes(upcoming.id)) {
@@ -109,12 +90,18 @@ try {
   await shot(page,'kart-branches-finish');console.log(`ok all branches, splits and toy bounces; finish ${completed.time.toFixed(2)}s`);
   await page.click('#again');await wait(page,()=>window.__kartRace.state==='race');
   assert.deepEqual((await race(page)).routes,[]);assert.deepEqual((await race(page)).splits,[]);
+  // Mid-road the kart misses the entrance; over on the fork's side it joins.
   await page.evaluate(()=>{
     const r=window.__kartRace,f=r.snapshot().forks[0];r.skipTo((f.s0-1-8.5)/(r.sFinish-8.5));
-    Object.assign(r.player,{x:2,turboMemory:0,v:16});r.simulate(.1,{throttle:1,steer:0},[]);r.animate(0);
+    Object.assign(r.player,{x:0,v:16});r.simulate(.1,{throttle:1,steer:0},[]);r.animate(0);
   });
-  assert.equal((await race(page)).route,'main');assert.equal((await race(page)).catches,1);
-  console.log('ok replay reset and useful lower-road catch');
+  assert.equal((await race(page)).route,'main');
+  await page.evaluate(()=>{
+    const r=window.__kartRace,f=r.snapshot().forks[0];r.skipTo((f.s0-1-8.5)/(r.sFinish-8.5));
+    Object.assign(r.player,{x:2,v:16});r.simulate(.1,{throttle:1,steer:0},[]);r.animate(0);
+  });
+  assert.equal((await race(page)).route,'wind');
+  console.log('ok replay reset and open fork entry');
 
   // Standard controller signals pass through the actual Input poller.
   await page.evaluate(()=>{
@@ -123,39 +110,38 @@ try {
     navigator.getGamepads=()=>[window.__pad];window.__pad.buttons[7]={value:1,pressed:true};
   });
   await wait(page,()=>window.__kartRace.player.v>10);
-  await page.evaluate(()=>{window.__pad.axes[0]=-.7;window.__pad.buttons[0]={value:1,pressed:true};});
-  await wait(page,()=>window.__kartRace.player.drift!==0);
-  await page.evaluate(()=>{window.__pad.axes[0]=.4;});
-  await wait(page,()=>window.__kartRace.player.charge>=.5);
+  await page.evaluate(()=>{window.__pad.axes[0]=-.7;});
+  await wait(page,()=>window.__kartRace.player.x<-0.3);
+  await page.evaluate(()=>{window.__pad.buttons[0]={value:1,pressed:true};});
+  await wait(page,()=>window.__kartRace.player.air===true);
   await page.evaluate(()=>{window.__pad.buttons[0]={value:0,pressed:false};window.__pad.axes[0]=0;});
-  await wait(page,()=>window.__kartRace.player.turbo>0);
+  await wait(page,()=>window.__kartRace.player.air===false);
   await page.evaluate(()=>{window.__pad.buttons[9]={value:1,pressed:true};});
   await wait(page,()=>window.__mirio.snapshot().paused);const paused=await race(page);
   await page.waitForTimeout(250);assert.equal((await race(page)).time,paused.time);
-  console.log('ok controller drift, release and pause');await desktop.close();
+  console.log('ok controller steer, hop and pause');await desktop.close();
   }
 
   const mobile=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,isMobile:true,hasTouch:true});
   const phone=await load(mobile);const client=await mobile.newCDPSession(phone);
   const center=async selector=>{const b=await phone.locator(selector).boundingBox();assert.ok(b);return{x:b.x+b.width/2,y:b.y+b.height/2};};
-  const gas=await center('#btn-gas'),jump=await center('#btn-jump'),stick={x:72,y:740};
+  const gas=await center('#btn-gas'),brake=await center('#btn-brake'),tap={x:80,y:500};
   await shot(phone,'kart-phone-layout');
-  for(const point of [gas,jump,stick])assert.ok(point.x>0&&point.x<390&&point.y>0&&point.y<844);
+  for(const point of [gas,brake,tap])assert.ok(point.x>0&&point.x<390&&point.y>0&&point.y<844);
   await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...gas,id:1}]});
   await wait(phone,()=>window.__kartRace.player.v>10);
+  // While the right thumb holds gas, a quick tap on the left half hops.
+  await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...gas,id:1},{...tap,id:2}]});
+  await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[{...gas,id:1}]});
+  await wait(phone,()=>window.__kartRace.player.air===true);await shot(phone,'kart-phone-hop');
+  await wait(phone,()=>window.__kartRace.player.air===false);
   await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...jump,id:1},{...stick,id:2}]});
-  await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...jump,id:1},{x:stick.x-30,y:stick.y,id:2}]});
-  await wait(phone,()=>window.__kartRace.player.drift!==0);
-  await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...jump,id:1},{x:stick.x+15,y:stick.y,id:2}]});
-  await wait(phone,()=>window.__kartRace.player.charge>=.5);await shot(phone,'kart-phone-drift');
-  await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await wait(phone,()=>window.__kartRace.player.turbo>0);
-  console.log('ok two-thumb touch drift and release at 390×844');
-  // Layout fixture only: real touch drift and release are verified above.
+  console.log('ok gas held on the right, left-half tap hops at 390×844');
+  // Layout fixture only: the real tap hop is verified above.
   await phone.evaluate(()=>{
     const r=window.__kartRace;
     r.skipTo((65-8.5)/(r.sFinish-8.5));
-    Object.assign(r.player,{x:0,v:15,vx:0,steer:0,boost:0,turbo:1.3});
+    Object.assign(r.player,{x:0,v:15,vx:0,steer:0,boost:1.3});
   });
   await wait(phone,()=>!document.querySelector('#race-route')?.hidden&&!document.querySelector('#race-technique').hidden);
   assert.ok(await phone.locator('#race-route').isVisible());
@@ -164,7 +150,7 @@ try {
     const box=await phone.locator(selector).boundingBox();
     assert.ok(box.x>=0&&box.x+box.width<=390&&box.y>=0&&box.y+box.height<=844,`${selector} leaves phone viewport`);
   }
-  await shot(phone,'kart-phone-fork-turbo');
-  console.log('ok fork guidance remains visible beside turbo on phone');await mobile.close();
+  await shot(phone,'kart-phone-fork-boost');
+  console.log('ok fork guidance remains visible beside boost on phone');await mobile.close();
   assert.deepEqual(errors,[]);
 } finally {await browser.close();}

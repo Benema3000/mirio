@@ -27,7 +27,7 @@ import {
   TERMINAL_FALL,
 } from '../js/world.js';
 import { RACE_BITS, Track } from '../js/kart.js';
-import { DRIVE, driftLevel, driveKart, newKart, slideOf } from '../js/kart-physics.js';
+import { DRIVE, driveKart, newKart, slideOf } from '../js/kart-physics.js';
 import { Player } from '../js/player.js';
 import { CameraRig } from '../js/camera.js';
 import { analogStick, Input } from '../js/input.js';
@@ -449,28 +449,6 @@ test('the kart grips in a turn, and slides when it brakes into one at speed', ()
   assert.ok(sliding.v < straight.v - 0.5, `sliding costs speed: ${sliding.v} vs ${straight.v}`);
 });
 
-test('the kart drifts with jump held and pays out a mini-turbo on release', () => {
-  const bend = { curvature: 0.12, slope: 0, limit: 100 };
-  assert.deepEqual(driveKart(kartAt(), { steer: 1, throttle: 1, hold: true }, bend, DT, { airborne: true }), [], 'no drift starts in the air');
-
-  const k = kartAt();
-  // Steer to start it, then let the arc and the bend match.
-  assert.deepEqual(driveFor(k, DRIVE.charge[1] + 0.1, (kart) => ({ steer: kart.drift ? 0 : 1, throttle: 1, hold: true }), bend), ['drift']);
-  assert.equal(driftLevel(k), 2);
-  assert.ok(slideOf(k) > 0.3, `a drift slides: ${slideOf(k)}`);
-  assert.deepEqual(driveKart(k, { steer: 1, throttle: 1, hold: false }, bend, DT), ['turbo']);
-  assert.equal(k.turbo, DRIVE.turbo[1]);
-  const plain = kartAt({ v: k.v, yaw: k.yaw, course: k.course });
-  driveFor(k, 0.5, GAS, wideRoad);
-  driveFor(plain, 0.5, GAS, wideRoad);
-  assert.ok(k.v > plain.v + 3, `the turbo should speed it up: ${k.v} vs ${plain.v}`);
-
-  const short = kartAt();
-  driveFor(short, DRIVE.charge[0] / 2, { steer: -1, throttle: 1, hold: true }, wideRoad);
-  assert.deepEqual(driveKart(short, { steer: 0, throttle: 1, hold: false }, wideRoad, DT), [], 'a short drift pays nothing');
-  assert.equal(short.turbo, 0);
-});
-
 test('the kart bounces off a kerb it hits head-on, and scrapes along one it touches', () => {
   const hit = kartAt({ x: KERB - 0.01, yaw: 0.6, course: 0.6 });
   assert.deepEqual(driveKart(hit, GAS, straightRoad, DT), ['bump']);
@@ -778,16 +756,15 @@ test('in the race a quick tap on the left hops, even while a thumb keeps steerin
   assert.equal(input.consumeJump(), false);
 });
 
-test('the kart can safely coast with empty controls and only charges drift on the road', () => {
+test('the kart can safely coast with empty controls, on the road and in the air', () => {
   const coast = kartAt();
   driveFor(coast, 1, {}, straightRoad);
   assert.ok(Object.values(coast).every((value) => typeof value !== 'number' || Number.isFinite(value)));
   assert.ok(coast.v < CRUISING && coast.v > 0);
-  const k = kartAt({ drift: 1, charge: 0.4 });
-  driveFor(k, 0.5, { steer: 0.2, hold: true }, wideRoad, { airborne: true });
-  assert.equal(k.charge, 0.4);
-  driveFor(k, 0.1, { steer: 0.2, hold: true, throttle: 1 }, wideRoad);
-  assert.ok(k.charge > 0.49);
+  const k = kartAt({ v: 16, yaw: 0.3, course: -0.2 });
+  driveFor(k, 0.5, { steer: 0.2 }, wideRoad, { airborne: true });
+  assert.equal(k.v, 16, 'a hop keeps its speed');
+  assert.ok(Number.isFinite(k.x) && Number.isFinite(k.s));
 });
 
 test('a planet with terrain: bodies stand on its hills, walk up gentle slopes and stop at steep ones', () => {

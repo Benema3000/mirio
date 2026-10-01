@@ -288,7 +288,7 @@ function norm(a) {
     assert.ok(await page.isVisible('#race-hud'));
   });
 
-  await check('the kart needs gas, steers, brakes, drifts with jump held, and crosses the finish', async () => {
+  await check('the kart needs gas, steers, brakes, hops on Space, and crosses the finish', async () => {
     await page.waitForTimeout(800);
     assert.ok((await snap(page)).race.speed < 0.5, 'the kart should stand until you give gas');
     const before = (await snap(page)).race.progress;
@@ -305,16 +305,14 @@ function norm(a) {
     await page.keyboard.down('ArrowDown');
     await until(page, () => window.__mirio.snapshot().race.speed < 1, null, 20000);
     await page.keyboard.up('ArrowDown');
-    // Gas again, then jump held while steering: a hop, then a drift, which ends on release.
+    // Gas again, then a Space tap: the kart leaves the ground and lands.
     await page.keyboard.down('ArrowUp');
     await until(page, () => window.__mirio.snapshot().race.speed > 10, null, 20000);
     await page.keyboard.down('Space');
-    await page.keyboard.down('ArrowRight');
-    await until(page, () => window.__mirio.snapshot().race.drift === 1, null, 20000);
-    await shot(page, 'd14-drift');
-    await page.keyboard.up('ArrowRight');
+    await until(page, () => window.__mirio.snapshot().race.height > 0.2, null, 20000);
     await page.keyboard.up('Space');
-    await until(page, () => window.__mirio.snapshot().race.drift === 0, null, 10000);
+    await shot(page, 'd14-hop');
+    await until(page, () => window.__mirio.snapshot().race.height < 0.05, null, 10000);
     await page.evaluate(() => window.__mirio.raceSkip(0.97));
     await until(page, () => window.__mirio.snapshot().race.state === 'finished', null, 60000);
     await page.keyboard.up('ArrowUp');

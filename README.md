@@ -52,11 +52,9 @@ and every bend can be taken on full gas; braking into a turn at speed
 breaks the grip and it slides (dust and a squeal). The road bends away
 underneath, so a kart that does not steer runs wide into the outer kerb and
 the inside of a bend is shorter. A gentle assist turns it part of the way
-with every bend and straightens it when the stick is let go. Holding jump,
-or gas and brake together, while steering hops into a drift: the stick
-tightens or widens the arc, the body turns into the bend, sparks at the
-rear wheels turn blue, then orange, and letting go fires a short or a long
-mini-turbo. Jump alone hops; a barrel roll off the ramp gives a boost. The
+with every bend and straightens it when the stick is let go. A quick tap —
+Space, the jump button or, on touch, the left half of the screen — hops the
+kart; a barrel roll off the ramp gives a boost. The
 camera sits behind the direction of travel, so steering turns the world. Boost pads, a ramp over a gap, Miro's floor blocks as obstacles, 77
 glitter stones, red-white kerbs you cannot fall past (hit head-on they bounce
 the kart off, touched at an angle it scrapes along), and a rubber-banded rival
@@ -88,7 +86,7 @@ Pause provides help and separate time boards without leaving the current run.
 | Level | What you play | Main controls |
 | --- | --- | --- |
 | **Planetenreise** | The original journey: meadow, ring lake, rocket to the moon, boss fight, kart race to the Zielplanet | Platformer and kart controls |
-| **Sternenrennen** | Three laps round the Zielplanet against Finster-Mirio: ramp, dash panels, blocks, drifts and mini-turbos | ↑ gas, ↓ brake, ← → steer; hold jump to drift, release for turbo; controller RT/LT/A |
+| **Sternenrennen** | Three laps round the Zielplanet against Finster-Mirio: ramp, dash panels and blocks | ↑ gas, ↓ brake, ← → steer, Space/↑-button/left-tap hops; controller RT/LT/A |
 | **Wolkenpost** | Fly through golden rings past floating islands, dodge balloons and throw three parcels to the islands' catchers | WASD/arrows/stick steer; Space/A roll; Shift/X throw at a catcher, turbo elsewhere |
 | **Blütenpfad** | One run through courtyard, tree house, glass house and cellar garden to a flower tower; three lantern seeds wait up high on the way | A/D or ←/→/stick move; Space/A jump; Shift/X air spin |
 | **Klangkugel** | Grow a garden ramp, wake a cuckoo machine and ride a comet orbit across three pinball tables | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
@@ -186,7 +184,7 @@ chorus also live here.
 
 A chequered gate beyond the clouds starts **Sternenwege**, the branching kart
 race: three separate roads, windmills, rolling fruit, cloud springs, rival
-routing, drift-turbo shortcut and split times. Pause or results can return to
+routing and split times. Pause or results can return to
 Wunderwiese with its activities, checkpoint and adventure record token intact.
 Replay stays in Sternenwege; result browsing never advances the adventure clock.
 The return gate rejoins the meadow and restores its earlier checkpoint.
@@ -209,7 +207,7 @@ stepping stones and race road.
   thin-platform collision checks, and a camera that stays outside planets.
 - **Controller:** standard gamepads use the left stick / D-pad to move, A to jump,
   X to spin, B to ground-pound, right stick for the camera, and Start to pause.
-  In the kart, RT is gas, LT is brake, and A while steering drifts. Keyboard and
+  In the kart, RT is gas, LT is brake, and A hops. Keyboard and
   touch controls remain available. Connect a controller and press a button to
   make it available to the browser; hardware mappings vary by browser/device.
 - **Sound:** sampled grass/stone footsteps, layered impacts and movement cues,
@@ -262,7 +260,7 @@ three.js and loads `js/main.js`.
 | `js/level.js` | The level as data: planets, lake, glitter stones (the collectables; `bits` in the code), tree stumps, trees, stones, blocks, hills, flags, plateau, rocket flight curve, boss arena, goal |
 | `js/boss.js` | Finster-Mirio: model (recoloured `buildMirio`), fight loop, shockwave, stomp and contact rules |
 | `js/kart.js` | The kart race: track spline and meshes, rocket karts, driver, rival AI, race camera |
-| `js/kart-physics.js` | How Mirio's kart drives, without a screen: heading, speed, drift and mini-turbo, kerbs |
+| `js/kart-physics.js` | How Mirio's kart drives, without a screen: heading, speed, slides, kerbs |
 | `api/scores.php`, `api/scores.inc` | The public high score list: tokens, points, name rules, the JSON file |
 | `js/scene.js` | Meshes and decoration: sky with twinkling and shooting stars, triplanar-textured planets with rim light, hills, trees and props with pen outlines, instanced grass tufts, flowers and pebbles, the arena, the goal star, particles; `world.update()` animates it all |
 | `js/water.js` | The ring lake: waves, fresnel, sparkles, foam along both shores and round every stepping stone, one draw call |
@@ -345,7 +343,7 @@ optional and only happens when the player submits a nickname.
   from the arena rim to the Zielplanet) and the kart (it stands without gas,
   pulls away with it, brakes and backs up, runs faster downhill; it turns, a
   bend runs it wide unless it steers, the inside line is shorter; it grips on
-  the gas and slides when braking into a turn; drifting charges a mini-turbo;
+  the gas and slides when braking into a turn;
   kerbs bounce or scrape; the race lasts 35–60 s on full gas).
 - `tests/mirio-e2e.mjs` plays every station of the level in real browsers,
   teleporting between them through the `?test` hook: desktop keyboard in
@@ -353,7 +351,7 @@ optional and only happens when the player submits a nickname.
   inside the page, checkpoint flag, falling in the lake and respawning,
   standing on a stone, the rocket countdown and flight, the moon jump, the
   floor blocks, the locked crystal, the boss fight to the end, the cutscene into
-  the kart, standing without gas, driving, braking to a stop and drifting, the finish, the win screen, a refused and an
+  the kart, standing without gas, driving, braking to a stop and hopping, the finish, the win screen, a refused and an
   accepted name on the high score list, replay, and no request except
   to the pinned three.js on jsDelivr),
   touch stick and buttons on a phone-sized screen (and the race's gas and
@@ -432,7 +430,7 @@ The playground update adds:
 - `tests/mirio-browser-smoke-e2e.mjs`: every mode through normal navigation,
   movement, paused clocks and returns; supports `BROWSER=webkit`.
 - `tests/mirio-kart-native-e2e.mjs`: a complete race through ordinary keyboard
-  input, including a charged drift and its release.
+  input, including a mid-race hop.
 - `tests/mirio-volcano.test.mjs` (unit) and `tests/mirio-volcano-e2e.mjs`:
   Glutzahn's fight rules and stages, the level's layout, the Festland's hills
   (a walkable path, impassable edges, nothing floating or sunk), and in the browser the

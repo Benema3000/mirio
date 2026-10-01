@@ -13,7 +13,7 @@
 // A kart never flies freely: it has a route, shared progress s, an offset x
 // across it and a height h above it. Rails keep it on the road; the ramp's
 // gap is crossed on a fixed arc. Mirio's kart is driven with gas and brake
-// and steered like a car, slides and drifts included (kart-physics.js); Finster-Mirio's
+// and steered like a car, slides included (kart-physics.js); Finster-Mirio's
 // just slides across the road to the line he wants. Mirio rides Miro's rocket lying on its side,
 // sitting in its porthole; Finster-Mirio (the boss, dyed as in boss.js)
 // races a dark copy.
@@ -27,7 +27,7 @@ import { canvasTexture } from './art.js';
 import { toon } from './materials.js';
 import { buildMirio } from './mirio-model.js';
 import { bigCrystalGeometry, buildRocket, gemGeometry } from './props.js';
-import { approachSpeed, crossingTime, DRIVE, driftLevel, driveKart, slideOf } from './kart-physics.js';
+import { approachSpeed, crossingTime, DRIVE, driveKart, slideOf } from './kart-physics.js';
 import { mulberry32 } from './world.js';
 import { RouteNetwork, ROUTE, RACE_STYLE, CLASSIC_ROAD_HALF_WIDTH, MAIN_ROAD_HALF_WIDTH } from './kart-routes.js';
 export { RACE_STYLE } from './kart-routes.js';
@@ -123,14 +123,13 @@ const WALL_KEEP = 0.8;
 const WALL_BOUNCE = 0.45;
 const SCRAPE = 3;
 const BUMP_COOLDOWN = 0.45;
-const WIND_MEMORY = 4.5;
 const ROUTE_JOIN = 12;
 const TOY = { reach: 2.5, height: 0.8, boost: 0.6, radius: 0.85, period: 3.5 };
 const WIND_PUSH = 0.2;
 const CLOUD_SPEED = 25;
 const SPLIT_PSI = [360, 720];
 const ROUTE_HINTS = {
-  [ROUTE.WIND]: '↗ Drift-Turbo → Windrad · ↑ Sprungweg',
+  [ROUTE.WIND]: '↗ Windrad · ↑ Sprungweg',
   [ROUTE.ORCHARD]: '↖ Enger Obstweg · ↑ Breiter Weg',
   [ROUTE.CLOUD]: '↗ Sprungwolken · ↑ Ruhiger Weg',
 };
@@ -147,8 +146,6 @@ const BLOCK_NUDGE = 3;
 const KART_BUMP_KEEP = 0.95;
 const LAND_SQUASH = 0.8;
 const TRICK_TIME = 0.55;
-// Drift sparks: while drifting, then charged for a blue and an orange mini-turbo.
-const SPARKS = [0xffe27a, 0x3fb4ff, 0xff7a1a];
 // After the line: stop this far past it (the rival a little behind), braking at least this hard.
 const STOP_AFTER = 15;
 const FINISH_DECEL = 7;
@@ -1059,12 +1056,9 @@ export class KartRace {
   #splitStations;
   #toys;
   #splits;
-  #bestDrift;
   #routeVisits;
-  #routeCatches;
   #toyBounces;
   #routeRotors;
-  #rivalSparks;
 
   constructor(scene, art, course, { routeStyle = RACE_STYLE.CLASSIC } = {}) {
     this.#routeStyle = routeStyle;
@@ -1093,19 +1087,6 @@ export class KartRace {
       this.group.add(r.kart.root, r.shadow);
     }
     this.aiLine = this.planAiLine();
-    this.sparks = [-1, 1].map((side) => {
-      const s = glowSprite(art.sparkle, 0xffffff, 1);
-      s.position.set(side * KART.rear.x * 0.9, 0.2, KART.rear.z - 0.35);
-      s.visible = false;
-      this.player.kart.body.add(s);
-      return s;
-    });
-    this.#rivalSparks = (routeStyle === RACE_STYLE.PLAYGROUND ? [-1, 1] : []).map(side => {
-      const spark = glowSprite(art.sparkle, 0xffffff, 0.8);
-      spark.position.set(side * KART.rear.x, 0.2, KART.rear.z - 0.3);
-      this.rival.kart.body.add(spark);
-      return spark;
-    });
     // Tyre dust while sliding: a few puffs, reused in turn.
     const puffMap = puffTexture();
     this.puffs = Array.from({ length: DUST.count }, () => {
@@ -1364,7 +1345,7 @@ export class KartRace {
       ctx.fillStyle = '#203042'; ctx.fillRect(0, 0, 384, 176);
       ctx.strokeStyle = `#${fork.color.toString(16)}`; ctx.lineWidth = 12; ctx.strokeRect(8, 8, 368, 160);
       ctx.textAlign = 'center'; ctx.fillStyle = '#fff7df';
-      ctx.font = 'bold 64px sans-serif'; ctx.fillText(fork.turbo ? 'Turbo ↗' : fork.icon, 192, 78);
+      ctx.font = 'bold 64px sans-serif'; ctx.fillText(fork.icon, 192, 78);
       ctx.font = 'bold 36px sans-serif'; ctx.fillText(fork.name, 192, 138);
       const billboard = new THREE.Sprite(new THREE.SpriteMaterial({map:canvasTexture(sign),depthTest:true}));
       billboard.scale.set(5.7, 2.6, 1);
@@ -1431,7 +1412,7 @@ export class KartRace {
   }
 
   #animateRouteToys(now) {
-    for (const rotor of this.#routeRotors) rotor.rotation.z = now * (this.player?.turboMemory > 0 ? 4 : 0.6);
+    for (const rotor of this.#routeRotors) rotor.rotation.z = now * 0.6;
     for (const toy of this.#toys) {
       if (!toy.mesh) continue;
       toy.x = this.#toyX(toy);
@@ -1463,12 +1444,11 @@ export class KartRace {
     const fork = this.#routes.forks.find(f => p.s < f.s0 && p.s > f.s0 - 45);
     return {
       routeStyle:this.#routeStyle, s:p.s, x:p.x, route:p.route, height:p.h, yaw:p.yaw, course:p.course,
-      turbo:p.turbo, charge:p.charge, turboMemory:p.turboMemory,
-      road:{...this.#routes.road(p.route,p.s),limit:this.#laneLimit(p)}, splits:[...this.#splits], bestDrift:this.#bestDrift,
-      routes:[...this.#routeVisits], catches:this.#routeCatches, bounces:this.#toyBounces,
+      road:{...this.#routes.road(p.route,p.s),limit:this.#laneLimit(p)}, splits:[...this.#splits],
+      routes:[...this.#routeVisits], bounces:this.#toyBounces,
       rival:{s:q.s,x:q.x,route:q.route},
       routeHint: fork ? ROUTE_HINTS[fork.id] : ROUTE_ACTIVE_HINTS[p.route] ?? '',
-      nextFork:fork ? {id:fork.id,s:fork.s0,side:fork.side,turbo:Boolean(fork.turbo)} : null,
+      nextFork:fork ? {id:fork.id,s:fork.s0,side:fork.side} : null,
       forks:this.#routes.forks.map(f=>({id:f.id,s0:f.s0,s1:f.s1,side:f.side})),
     };
   }
@@ -1499,9 +1479,8 @@ export class KartRace {
     this.countShown = 0;
     this.result = null;
     this.#splits = [];
-    this.#bestDrift = 0;
+
     this.#routeVisits = new Set();
-    this.#routeCatches = 0;
     this.#toyBounces = 0;
     this.lane = -1;
     for (const b of this.bits) b.taken = false;
@@ -1521,9 +1500,9 @@ export class KartRace {
   resetRacer(r, x) {
     Object.assign(r, {
       s: GRID.s, x, vx: 0, h: 0, vh: 0, v: 0, steer: 0, pace: 1,
-      yaw: 0, course: 0, drift: 0, charge: 0, turbo: 0, scraping: false, sliding: false, throttle: 0,
+      yaw: 0, course: 0, scraping: false, sliding: false, throttle: 0,
       air: false, flight: null, trick: 0, tricked: false, boost: 0, lastPad: null, bumpCool: 0,
-      route: ROUTE.MAIN, turboMemory: 0, chargeStage: 0, toyCooldown: 0,
+      route: ROUTE.MAIN, toyCooldown: 0,
       squash: 1, finished: false, finishTime: 0, cheer: 0,
     });
     r.kart.root.scale.setScalar(1);
@@ -1596,13 +1575,10 @@ export class KartRace {
     } else {
       const ctl = {
         steer: input.drive.steer,
-        // Once sliding, the jump button keeps gas: touch needs only two thumbs.
-        throttle: Math.max(input.drive.gas, this.player.drift && input.jumpHeld ? 1 : 0),
-        // Both pedals at once is a drift (the touch buttons have no third
-        // thumb for jump); the brake then does not brake.
+        throttle: input.drive.gas,
+        // Gas wins over the brake when both pedals are held.
         brake: input.drive.gas ? 0 : input.drive.brake,
         jump: input.consumeJump(),
-        hold: input.jumpHeld || (input.drive.gas > 0 && input.drive.brake > 0),
         spin: input.consumeSpin(),
       };
       this.simulate(dt, ctl, events);
@@ -1626,7 +1602,7 @@ export class KartRace {
     Object.assign(p, {
       s: GRID.s + clamp(fraction, 0, 1) * (this.sFinish - GRID.s),
       h: 0, vh: 0, air: false, flight: null, trick: 0, tricked: false, lastPad: null, finished: false,
-      yaw: 0, course: 0, drift: 0, charge: 0, route: ROUTE.MAIN, turboMemory: 0,
+      yaw: 0, course: 0, route: ROUTE.MAIN,
     });
     this.result = null;
     p.v = Math.max(p.v, DRIVE.cruise);
@@ -1758,12 +1734,7 @@ export class KartRace {
       if (Math.abs(target - p.x) < AI.apart - 0.5) target = clamp(p.x - away * AI.apart, -limit, limit);
     }
     const steer = clamp((target - r.x) * 0.5 - r.vx * 0.06, -1, 1);
-    const curve = this.#routes.road(r.route, r.s).curvature;
-    let drift = 0;
-    if (this.#routeStyle === RACE_STYLE.PLAYGROUND) {
-      drift = fork?.turbo ? (r.s < fork.s0 - 4 ? fork.side : 0) : Math.abs(curve) > 0.035 ? Math.sign(curve) : 0;
-    }
-    return { steer, drift, brake: false, jump: false, spin: Boolean(r.flight) && !r.tricked };
+    return { steer, brake: false, jump: false, spin: Boolean(r.flight) && !r.tricked };
   }
 
   /** After the line: roll into a lane and stop. */
@@ -1774,7 +1745,6 @@ export class KartRace {
   stepRacer(r, dt, ctl, events, mine) {
     const s0 = r.s;
     r.bumpCool = Math.max(0, r.bumpCool - dt);
-    r.turboMemory = Math.max(0, r.turboMemory - dt);
     r.toyCooldown = Math.max(0, r.toyCooldown - dt);
     r.boost = Math.max(0, r.boost - dt);
     if (r.route === ROUTE.WIND) r.boost = Math.max(r.boost, WIND_PUSH);
@@ -1785,8 +1755,7 @@ export class KartRace {
     else this.slide(r, dt, ctl, events, mine);
     const entry = this.#routes.enter(r, s0);
     if (entry && mine) {
-      if (entry.type === 'route') this.#routeVisits.add(entry.fork.id);
-      else this.#routeCatches++;
+      this.#routeVisits.add(entry.fork.id);
       events.push({ type: entry.type, name: entry.fork.name });
     }
     this.#routes.reconcile(r);
@@ -1811,27 +1780,18 @@ export class KartRace {
     const airborne = r.air || Boolean(r.flight);
     r.throttle = ctl.throttle;
     const slide = slideOf(r);
-    if (!r.sliding && !r.drift && slide > SLIDE_SOUND && r.v > 8) {
+    if (!r.sliding && slide > SLIDE_SOUND && r.v > 8) {
       r.sliding = true;
       events.push({ type: 'slide' });
     } else if (r.sliding && slide < SLIDE_SOUND / 2) {
       r.sliding = false;
     }
     for (const type of driveKart(r, ctl, road, dt, { boosting: r.boost > 0, airborne })) {
-      if (type !== 'bump') {
-        if (type === 'turbo') r.turboMemory = WIND_MEMORY;
-        events.push({ type });
-        continue;
-      }
       if (r.bumpCool <= 0) events.push({ type });
       r.bumpCool = BUMP_COOLDOWN;
       r.squash = 0.9;
     }
     r.s = start + (r.s - start) / metric;
-    const stage = driftLevel(r);
-    if (stage > r.chargeStage) events.push({ type: 'drift-charge', n: stage });
-    r.chargeStage = stage;
-    this.#bestDrift = Math.max(this.#bestDrift, stage);
   }
 
   /** Finster-Mirio's kart, and Mirio's after the line: slides across the road. */
@@ -1842,8 +1802,6 @@ export class KartRace {
       const room = Math.max(0.5, this.sStop - (mine ? 0 : 4) - r.s);
       r.v = Math.max(0, r.v - Math.max(FINISH_DECEL, (r.v * r.v) / (2 * room)) * dt);
       r.boost = 0;
-      r.turbo = 0;
-      r.drift = 0;
       r.throttle = 0;
       r.yaw = damp(r.yaw, 0, 4, dt);
       r.course = damp(r.course, 0, 4, dt);
@@ -1872,20 +1830,6 @@ export class KartRace {
       }
     }
     r.s += r.v * dt / this.#routes.metric(r.route, r.s);
-    if (!mine && !ctl.stop) {
-      if (ctl.drift && r.v > DRIVE.driftSpeed) {
-        r.drift = ctl.drift;
-        if (!r.air && !r.flight) r.charge += dt;
-      } else {
-        if (r.charge >= DRIVE.charge[0]) {
-          r.boost = DRIVE.turbo[0];
-          r.turboMemory = WIND_MEMORY;
-        }
-        r.drift = 0;
-        r.charge = 0;
-      }
-      r.yaw = damp(r.yaw, r.drift * DRIVE.driftAngle, 5, dt);
-    }
   }
 
   stepHeight(r, s0, ctl, events, mine, dt) {
@@ -2070,20 +2014,12 @@ export class KartRace {
 
     k.flame.visible = this.phase === 'countdown' || ((this.phase === 'race' || this.phase === 'finished') && (r.v > 0.5 || r.throttle > 0));
     let [width, length] = FLAME_IDLE;
-    if (r.boost > 0 || r.turbo > 0) [width, length] = FLAME_BOOST;
+    if (r.boost > 0) [width, length] = FLAME_BOOST;
     else if (r.throttle > 0) [width, length] = FLAME_GAS;
     const flicker = 0.85 + Math.sin(now * 53 + (r === this.player ? 0 : 2)) * 0.1 + Math.sin(now * 31) * 0.08;
     k.flame.scale.set(width, length * flicker, width);
 
     if (r === this.player) this.dust(r, dt);
-    const level = driftLevel(r);
-    const sparks = r === this.player ? this.sparks : this.#rivalSparks;
-    for (const [i, spark] of sparks.entries()) {
-      spark.visible = (r.drift !== 0 || r.turbo > 0) && !r.air;
-      if (!spark.visible) continue;
-      spark.material.color.set(r.turbo > 0 ? 0xfff1a3 : SPARKS[level]);
-      spark.scale.setScalar((0.35 + level * 0.25) * (0.75 + 0.25 * Math.sin(now * 40 + i * 2)));
-    }
   }
 
   /** Puffs from Mirio's rear wheels while he slides; they grow and fade where they were left. */
@@ -2150,9 +2086,9 @@ export class KartRace {
     // swings round to Mirio's front, over the middle of the road.
     const k = this.phase === 'finished' ? smoothstep(0.3, FINISH_VIEW.time, this.t) : 0;
     const angle = lerp(Math.PI, FINISH_VIEW.angle, k);
-    const boosting = p.boost > 0 || p.turbo > 0;
+    const boosting = p.boost > 0;
     const distance = lerp(CHASE.distance + (boosting && !reducedMotion ? CHASE.boostPull : 0), FINISH_VIEW.distance, k);
-    // Behind Mirio's direction of travel (in a drift or a slide his body
+    // Behind Mirio's direction of travel (in a slide his body
     // turns away from it, and that is what should show).
     const turn = p.course * (reducedMotion ? 0 : CHASE.heading) * (1 - k);
     const ahead = f.tan.clone().multiplyScalar(Math.cos(turn)).addScaledVector(side, Math.sin(turn));

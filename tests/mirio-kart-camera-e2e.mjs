@@ -29,7 +29,7 @@ async function verifyStyle(routeStyle) {
     race.reset(); race.skipTo(.18);
     const fork = race.snapshot().forks[0];
     if (fork) Object.assign(race.player,{route:fork.id,s:(fork.s0+fork.s1)/2});
-    Object.assign(race.player,{course:.6,boost:0,turbo:0,v:30}); race.animate(0);
+    Object.assign(race.player,{course:.6,boost:0,v:30}); race.animate(0);
     function pose({reducedMotion, boost}) {
       race.player.boost = boost; race.cam.fresh = true; race.cam.kick = 0;
       race.updateCamera(camera,1/60,{reducedMotion});
@@ -41,7 +41,7 @@ async function verifyStyle(routeStyle) {
   });
   assert.deepEqual(camera.calmBoost.offset,camera.calm.offset,'reduced motion removes boost camera pull');
   assert.ok(Math.hypot(...camera.calm.up.map((value,index) => value-camera.levelUp[index])) < VECTOR_TOLERANCE,'reduced motion keeps horizon level');
-  assert.equal(camera.calmBoost.kick,0,'reduced motion removes speed and turbo zoom');
+  assert.equal(camera.calmBoost.kick,0,'reduced motion removes speed and boost zoom');
   assert.notDeepEqual(camera.moving.offset,camera.calm.offset,'ordinary camera retains speed feedback');
   assert.deepEqual(errors,[]);
   console.log(`ok ${routeStyle} kart reduced-motion banking, chase and zoom`);

@@ -500,11 +500,7 @@ export class Sound {
         this.note(81, 0.2, { kind: 'mallet', bus: 'effects', vol: 0.2 });
         this.tone(880, 0.1, { vol: 0.06 });
         break;
-      case 'driftBlue':
-      case 'driftOrange':
-        // Distinct rising pairs announce charge without looking at the HUD.
-        this.chime(name === 'driftBlue' ? [76, 83] : [83, 91], {gap: .07, vol: .12});
-        break;
+
       case 'liftoff':
         this.duck(0.38, 1.8);
         this.chime([79, 84, 88, 91], { gap: 0.08, vol: 0.16 });

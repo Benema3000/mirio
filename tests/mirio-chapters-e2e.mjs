@@ -149,11 +149,11 @@ try{
     assert.equal((await snap(page)).chapterRun.seeds,0);
     await menu(page);
   });
-  await check('the kart has a direct menu entry and keeps its gas, steering and drift controls',async()=>{
+  await check('the kart has a direct menu entry and keeps its gas, steering and hop controls',async()=>{
     await choose(page,'kart');await until(page,()=>window.__mirio.snapshot().race.state==='race');
     assert.equal((await snap(page)).selectedLevel,'kart');assert.match(await page.textContent('#bits'),/\/ 77$/);
     await page.keyboard.down('ArrowUp');await until(page,()=>window.__mirio.snapshot().race.speed>8);
-    await page.keyboard.down('ArrowLeft');await page.keyboard.down('Space');await gameTime(page,.4);
+    await page.keyboard.down('ArrowLeft');await page.keyboard.down('Space');await until(page,()=>window.__mirio.snapshot().race.height>0.2);
     await page.keyboard.up('Space');await page.keyboard.up('ArrowLeft');await page.keyboard.up('ArrowUp');
     await shot(page,'chapter-kart');await menu(page);
   });

@@ -30,7 +30,7 @@ try {
       window.dispatchEvent(new KeyboardEvent(active?'keydown':'keyup',{code,key:code==='Space'?' ':code,bubbles:true}));
     };
     const clamp=x=>Math.max(-1,Math.min(1,x));
-    const driver=window.__nativeKart={done:false,drift:'waiting',side:0,samples:[],error:null};
+    const driver=window.__nativeKart={done:false,samples:[],error:null};
     let pulse=0,lastBucket=-1;
     function tick(){
       const snap=window.__mirio.snapshot(),r=snap.race;
@@ -44,18 +44,10 @@ try {
       }
       if(snap.state!=='race'){driver.error=`unexpected state ${snap.state}`;return;}
       const target=r.nextFork ? r.nextFork.side*2 : 0;
-      let steer=clamp(.75*r.road.curvature*r.speed/2.4-r.yaw*1.5+(target-r.x)*.3),hold=false;
-      // Prepare on the opening bend, release before the golden wind-road fork.
-      const prepare=r.nextFork?.turbo && r.nextFork.s-r.s>12;
-      if(prepare && driver.drift==='waiting')driver.drift='charging';
-      if(driver.drift==='charging'){
-        steer=r.drift ? -.26/.78 : 1;
-        hold=true;
-        if(r.charge>=1.1||!prepare){hold=false;driver.drift='released';}
-      }
+      let steer=clamp(.75*r.road.curvature*r.speed/2.4-r.yaw*1.5+(target-r.x)*.3);
       // Pulse ordinary left/right keys; the game's steering response smooths them.
       pulse+=steer;const turn=pulse>.5?1:pulse<-.5?-1:0;pulse-=turn;
-      press('ArrowUp',true);press('ArrowLeft',turn<0);press('ArrowRight',turn>0);press('Space',hold);
+      press('ArrowUp',true);press('ArrowLeft',turn<0);press('ArrowRight',turn>0);
       const bucket=Math.floor(r.progress*20);
       if(bucket!==lastBucket){driver.samples.push({progress:r.progress,time:snap.time,x:r.x,speed:r.speed,route:r.route});lastBucket=bucket;}
       requestAnimationFrame(tick);
@@ -80,11 +72,10 @@ try {
   assert.ok(result.done,'normal keyboard race did not finish');
   assert.equal(result.result.race.state,'finished');assert.ok(result.result.time>20);
   assert.equal(result.result.race.routeStyle,'playground');
-  assert.ok(result.result.race.bestDrift>=1);
   assert.deepEqual(result.result.race.routes,['wind','orchard','cloud']);
   assert.equal(result.result.race.splits.length,2);
   assert.ok(result.result.race.bounces>=2);
   assert.deepEqual(errors,[]);
   if(process.env.SHOTS)await page.screenshot({path:`${process.env.SHOTS}/native-finish.png`});
-  console.log(JSON.stringify({time:result.result.time,bestDrift:result.result.race.bestDrift,samples:result.samples,errors},null,2));
+  console.log(JSON.stringify({time:result.result.time,samples:result.samples,errors},null,2));
 } finally {await browser.close();}

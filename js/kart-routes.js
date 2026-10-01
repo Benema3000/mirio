@@ -7,7 +7,7 @@ export const CLASSIC_ROAD_HALF_WIDTH = 6.5;
 export const MAIN_ROAD_HALF_WIDTH = 7;
 export const ROUTE = Object.freeze({ MAIN: 'main', WIND: 'wind', ORCHARD: 'orchard', CLOUD: 'cloud' });
 export const FORKS = Object.freeze([
-  { id: ROUTE.WIND, from: 100, to: 205, side: 1, offset: 17, width: 4.7, rise: 5, color: 0xffca55, icon: '↗', name: 'Windrad', turbo: true },
+  { id: ROUTE.WIND, from: 100, to: 205, side: 1, offset: 17, width: 4.7, rise: 5, color: 0xffca55, icon: '↗', name: 'Windrad' },
   { id: ROUTE.ORCHARD, from: 390, to: 510, side: -1, offset: 19, width: 3.7, rise: -3, color: 0x7de0a3, icon: '↖', name: 'Obstgarten' },
   { id: ROUTE.CLOUD, from: 740, to: 875, side: 1, offset: 17, width: 4.7, rise: 7, color: 0x9cceff, icon: '↗', name: 'Wolkenweg' },
 ]);
@@ -123,14 +123,14 @@ export class RouteNetwork {
     return { curvature: this.#base.value(this.#base.curv, s), slope: this.#base.value(this.#base.slope, s) };
   }
 
-  // A failed wind launch stays on the useful lower road. No reset or time loss.
+  // A kart that has moved over to the fork's side when its entrance passes
+  // joins the fork; anyone else just stays on the lower road.
   enter(racer, previousS) {
     const forward = racer.s >= previousS;
     const fork = this.#forks.find(f => forward
       ? previousS < f.s0 && racer.s >= f.s0
       : previousS > f.s1 && racer.s <= f.s1);
     if (!fork || racer.route !== ROUTE.MAIN || racer.x * fork.side < ENTRY_LANE) return null;
-    if (forward && fork.turbo && racer.turboMemory <= 0) return { type: 'route-catch', fork };
     racer.route = fork.id;
     return { type: 'route', fork };
   }

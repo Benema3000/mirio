@@ -10,10 +10,7 @@
 // direction, positive = pointing right) and the tyres pull the direction it
 // travels (`course`) after it, quickly: a kart grips and goes where it
 // points, and every bend can be taken on full gas. Braking into a turn at
-// speed breaks the grip and the kart slides. A drift (jump held, or gas and
-// brake together, while steering) carves an arc the stick tightens or
-// widens, the body turned into the bend, and charges a mini-turbo that fires
-// when it is let go. Sliding scrubs off speed.
+// speed breaks the grip and the kart slides. Sliding scrubs off speed.
 //
 // The road bends underneath (curvature, positive = bending right): a kart
 // that does not steer runs wide towards the outer kerb, and the inside of a
@@ -34,7 +31,7 @@ export const DRIVE = {
   brake: 26,
   reverse: 7,
   reverseTop: 5,
-  // Boost pads and mini-turbos: extra pull, and the top speed while it lasts.
+  // Boost pads: extra pull, and the top speed while it lasts.
   boost: 34,
   boostTop: 26,
   // Steering: turn rate (rad/s), reached at `turnFullSpeed`; this share of it
@@ -50,27 +47,15 @@ export const DRIVE = {
   // into a turn at speed lets it lag, a slide.
   grip: 22,
   slideGrip: 2.5,
-  // Speed lost per second per unit of sideways slide, as a share of speed;
-  // a drift is meant to slide and loses only this share of that.
+  // Speed lost per second per unit of sideways slide, as a share of speed.
   scrub: 0.9,
-  driftScrub: 0.25,
   // Share of each bend the kart follows by itself, and how fast it
   // straightens without input.
   assist: 0.25,
   recenter: 1.2,
   maxYaw: 1.1,
-  // Drift: needs this speed; the arc turns this fast, plus or minus the
-  // stick's share; the body turns this far into it, following this fast.
-  driftSpeed: 7,
-  driftTurn: 0.26,
-  driftSteer: 0.78,
-  driftAngle: 0.45,
-  bodyFollow: 10,
-  // Seconds of drifting for a blue and an orange mini-turbo, and their length.
-  charge: [0.5, 1.1],
-  turbo: [0.8, 1.3],
-  turboKick: [2.5, 4.5],
-  releaseGrip: 0.6,
+  // Braking into a turn slides above this speed.
+  slideSpeed: 7,
   // Kerbs: faster than this into them bounces; slower scrapes along.
   wallHit: 4,
   wallKeep: 0.72,
@@ -88,12 +73,7 @@ export const DRIVE = {
 };
 
 export function newKart() {
-  return { s: 0, x: 0, v: 0, yaw: 0, course: 0, steer: 0, vx: 0, drift: 0, charge: 0, turbo: 0, scraping: false };
-}
-
-/** Mini-turbo level the current drift has charged: 0, 1 (blue) or 2 (orange). */
-export function driftLevel(k) {
-  return k.drift ? DRIVE.charge.filter((c) => k.charge >= c).length : 0;
+  return { s: 0, x: 0, v: 0, yaw: 0, course: 0, steer: 0, vx: 0, scraping: false };
 }
 
 /** How far the kart slides sideways: 0 = rolling straight, 1 = fully sideways. */
@@ -143,11 +123,11 @@ function nextSpeed(v, throttle, brake, slope, boosting, dt) {
 /**
  * One step of driving.
  *   k     kart state (newKart())
- *   ctl   { steer -1..1, throttle 0..1, brake 0..1, hold (jump held) }
+ *   ctl   { steer -1..1, throttle 0..1, brake 0..1 }
  *   road  { curvature, slope, limit (|x| the kerbs allow) }
  *   dt    seconds
  *   opts  { boosting (a dash panel), airborne (keeps its speed, turns less) }
- * Returns an array of event names: 'drift', 'turbo', 'bump'.
+ * Returns an array of event names: 'bump'.
  */
 export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false } = {}) {
   const events = [];
@@ -155,33 +135,11 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
   const brake = Math.max(0, Math.min(1, ctl.brake ?? 0));
   const steer = Math.max(-1, Math.min(1, ctl.steer ?? 0));
   k.steer += (steer - k.steer) * (1 - Math.exp(-DRIVE.steerResponse * dt));
-  k.turbo = Math.max(0, k.turbo - dt);
-
-  // Drifting: starts on the ground (after the hop that holding jump begins
-  // with) while steering at speed; ends on release, paying out the charge.
-  if (!k.drift && !airborne && ctl.hold && Math.abs(steer) > 0.35 && k.v > DRIVE.driftSpeed) {
-    k.drift = Math.sign(steer);
-    k.charge = 0;
-    events.push('drift');
-  }
-  if (k.drift && (!ctl.hold || k.v < DRIVE.driftSpeed * 0.6)) {
-    const level = driftLevel(k);
-    if (level > 0 && !ctl.hold) {
-      k.turbo = DRIVE.turbo[level - 1];
-      k.v = Math.max(k.v, Math.min(DRIVE.boostTop, k.v + DRIVE.turboKick[level - 1]));
-      k.course *= DRIVE.releaseGrip;
-      k.yaw = k.course;
-      events.push('turbo');
-    }
-    k.drift = 0;
-    k.charge = 0;
-  }
-  if (k.drift && !airborne) k.charge += dt;
 
   // Speed along the heading; sliding scrubs some off.
   if (!airborne) {
-    k.v = nextSpeed(k.v, throttle, brake, road.slope, boosting || k.turbo > 0, dt);
-    k.v -= DRIVE.scrub * (k.drift ? DRIVE.driftScrub : 1) * slideOf(k) * k.v * dt;
+    k.v = nextSpeed(k.v, throttle, brake, road.slope, boosting, dt);
+    k.v -= DRIVE.scrub * slideOf(k) * k.v * dt;
   }
 
   // Both angles are relative to the road, which bends away underneath.
@@ -190,26 +148,18 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
   const bend = road.curvature * along;
   const assist = DRIVE.assist * bend;
   const air = airborne ? DRIVE.airTurn : 1;
-  if (k.drift) {
-    // Follow the bend while the stick tightens or opens the sliding arc.
-    const carve = bend - assist + k.drift * DRIVE.driftTurn + DRIVE.driftSteer * k.steer;
-    const offset = k.yaw - k.course;
-    k.course = clampYaw(k.course + (carve * air + assist - bend) * dt);
-    k.yaw = clampYaw(k.course + offset + (k.drift * DRIVE.driftAngle - offset) * (1 - Math.exp(-DRIVE.bodyFollow * dt)));
-  } else {
-    // The stick turns the body: faster when braking, a little slower at top
-    // speed, the other way round when reversing. The tyres pull the travel
-    // direction after it, unless braking into the turn at speed.
-    const fade = Math.min(1, speed / DRIVE.turnFullSpeed) * (1 - (1 - DRIVE.turnAtTop) * Math.min(1, speed / DRIVE.top));
-    const braking = brake > 0 && k.v > 0.5;
-    let rate = k.steer * DRIVE.turn * fade * (braking ? DRIVE.brakeTurn : 1) * (k.v < 0 ? -1 : 1) * air + assist;
-    if (Math.abs(steer) < 0.1) rate -= DRIVE.recenter * k.yaw;
-    k.yaw = clampYaw(k.yaw + (rate - bend) * dt);
-    const sliding = braking && Math.abs(k.steer) > 0.3 && k.v > DRIVE.driftSpeed;
-    const grip = airborne ? 0 : sliding ? DRIVE.slideGrip : DRIVE.grip;
-    k.course = clampYaw(k.course - bend * dt);
-    k.course += (k.yaw - k.course) * (1 - Math.exp(-grip * dt));
-  }
+  // The stick turns the body: faster when braking, a little slower at top
+  // speed, the other way round when reversing. The tyres pull the travel
+  // direction after it, unless braking into the turn at speed.
+  const fade = Math.min(1, speed / DRIVE.turnFullSpeed) * (1 - (1 - DRIVE.turnAtTop) * Math.min(1, speed / DRIVE.top));
+  const braking = brake > 0 && k.v > 0.5;
+  let rate = k.steer * DRIVE.turn * fade * (braking ? DRIVE.brakeTurn : 1) * (k.v < 0 ? -1 : 1) * air + assist;
+  if (Math.abs(steer) < 0.1) rate -= DRIVE.recenter * k.yaw;
+  k.yaw = clampYaw(k.yaw + (rate - bend) * dt);
+  const sliding = braking && Math.abs(k.steer) > 0.3 && k.v > DRIVE.slideSpeed;
+  const grip = airborne ? 0 : sliding ? DRIVE.slideGrip : DRIVE.grip;
+  k.course = clampYaw(k.course - bend * dt);
+  k.course += (k.yaw - k.course) * (1 - Math.exp(-grip * dt));
 
   // Position: across the road along the travel direction plus any knock,
   // along it faster on the inside of a bend (its length is the centre line).
@@ -228,8 +178,6 @@ export function driveKart(k, ctl, road, dt, { boosting = false, airborne = false
       k.yaw = -k.yaw * DRIVE.wallBounce;
       k.course = -k.course * DRIVE.wallBounce;
       k.vx = -side * 3;
-      k.drift = 0;
-      k.charge = 0;
       events.push('bump');
     } else {
       if (k.course * side > 0) k.course *= Math.exp(-10 * dt);

@@ -23,17 +23,17 @@ test('each fork has separate physical roads and continuous reconnections', () =>
   }
 });
 
-test('wind shortcut rewards a recent release and catches an uncharged attempt on the lower road', () => {
-  const fork=routes.forks[0];
-  const racer={s:fork.s0+.1,x:2,route:ROUTE.MAIN,turboMemory:0};
-  assert.equal(routes.enter(racer,fork.s0-.1).type,'route-catch');
-  assert.equal(racer.route,ROUTE.MAIN);
-  racer.turboMemory=2;
-  assert.equal(routes.enter(racer,fork.s0-.1).type,'route');
-  assert.equal(racer.route,fork.id);
-  racer.s=fork.s1+.1;
-  assert.equal(routes.reconcile(racer).id,fork.id);
-  assert.equal(racer.route,ROUTE.MAIN);
+test('every fork joins for a kart on its side of the road and misses one mid-road', () => {
+  for (const fork of routes.forks) {
+    const racer={s:fork.s0+.1,x:fork.side*2,route:ROUTE.MAIN};
+    assert.equal(routes.enter(racer,fork.s0-.1).type,'route');
+    assert.equal(racer.route,fork.id);
+    racer.s=fork.s1+.1;
+    assert.equal(routes.reconcile(racer).id,fork.id);
+    assert.equal(racer.route,ROUTE.MAIN);
+  }
+  const mid={s:routes.forks[0].s0+.1,x:0,route:ROUTE.MAIN};
+  assert.equal(routes.enter(mid,routes.forks[0].s0-.1),null);
 });
 
 test('rivals on separated branches cannot hit each other; reverse travel rejoins safely', () => {
@@ -46,24 +46,18 @@ test('rivals on separated branches cannot hit each other; reverse travel rejoins
 
 import {DRIVE, driveKart, newKart} from '../js/kart-physics.js';
 test('ordinary steering can complete every branch without jumps in progress', () => {
-  const kart={...newKart(),route:ROUTE.MAIN,turboMemory:0};
+  const kart={...newKart(),route:ROUTE.MAIN};
   const visited=new Set(), finish=base.sAtPsi(1080), dt=1/120;
-  let elapsed=0, maxStep=0, charged=false;
+  let elapsed=0, maxStep=0;
   while(kart.s<finish && elapsed<120) {
     const fork=routes.forks.find(f=>kart.s<f.s0 && kart.s>f.s0-45);
     const target=fork?fork.side*2:0;
     const road={...routes.road(kart.route,kart.s),limit:3.8};
     const feed=(1-DRIVE.assist)*road.curvature*kart.v/DRIVE.turn;
     let steer=Math.max(-1,Math.min(1,feed-kart.yaw*1.5+(target-kart.x)*.3));
-    const prepare=fork?.turbo && fork.s0-kart.s>12;
-    if(prepare && !charged) steer=kart.drift?-DRIVE.driftTurn/DRIVE.driftSteer:1;
-    const hold=prepare && !charged;
-    if(kart.charge>DRIVE.charge[1]) charged=true;
     const before=kart.s, metric=routes.metric(kart.route,kart.s);
-    const events=driveKart(kart,{steer,throttle:1,hold},road,dt);
+    driveKart(kart,{steer,throttle:1},road,dt);
     kart.s=before+(kart.s-before)/metric;
-    kart.turboMemory=Math.max(0,kart.turboMemory-dt);
-    if(events.includes('turbo'))kart.turboMemory=4.5;
     const entry=routes.enter(kart,before);
     if(entry?.type==='route')visited.add(kart.route);
     routes.reconcile(kart);
@@ -75,16 +69,9 @@ test('ordinary steering can complete every branch without jumps in progress', ()
   assert.ok(elapsed<100);
 });
 
-test('releasing a drift preserves a faster ramp or dash-panel launch', () => {
-  const kart={...newKart(),v:34,drift:1,charge:1.2};
-  driveKart(kart,{hold:false,throttle:1},{curvature:0,slope:0,limit:100},1/120,{airborne:true});
-  assert.equal(kart.v,34);
-  assert.ok(kart.turbo>0);
-});
-
 test('backing into a fork from its far join follows that physical road', () => {
   for (const fork of routes.forks) {
-    const kart={route:ROUTE.MAIN,s:fork.s1-.01,x:fork.side*2,turboMemory:0};
+    const kart={route:ROUTE.MAIN,s:fork.s1-.01,x:fork.side*2};
     assert.equal(routes.enter(kart,fork.s1+.01)?.type,'route');
     assert.equal(kart.route,fork.id);
     routes.reconcile(kart);
@@ -121,7 +108,7 @@ test('classic network preserves a single road and never selects playground route
   const classic = new RouteNetwork(track, {routeStyle:RACE_STYLE.CLASSIC});
   assert.equal(track.halfWidth(),CLASSIC_ROAD_HALF_WIDTH);
   assert.deepEqual(classic.forks,[]);
-  const racer = {s:base.sAtPsi(100)+1,x:3,route:ROUTE.MAIN,turboMemory:4};
+  const racer = {s:base.sAtPsi(100)+1,x:3,route:ROUTE.MAIN};
   assert.equal(classic.enter(racer,racer.s-2),null);
   assert.equal(classic.path(ROUTE.WIND),track);
   assert.equal(classic.metric(ROUTE.MAIN,racer.s),1);

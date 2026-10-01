@@ -25,7 +25,6 @@ import { Boss } from './boss.js';
 import { CameraRig } from './camera.js';
 import { Input } from './input.js';
 import { KartRace, RACE_STYLE } from './kart.js';
-import { driftLevel } from './kart-physics.js';
 import { collidersFor, flightPoint, makeLevel } from './level.js';
 import { MAX_HEARTS, Player } from './player.js';
 import { QualityGovernor, tuneRenderer } from './quality.js';
@@ -70,8 +69,8 @@ const HINTS = {
   faint: 'Nochmal! Spring über die Schockwelle.',
   creatures: 'Die kleinen Wächter kannst du von oben besiegen. Drehen macht sie schwindlig!',
   spring: 'Boing! Stampfe auf eine grosse Blüte, dann federt sie dich noch höher.',
-  raceKeys: 'Gas: ↑ · Bremse: ↓ · Lenken: ← → · Driften: beim Lenken Leertaste halten, loslassen: Turbo!',
-  raceTouch: 'Links lenken · links tippen: Hüpfen · Gas · Zum Driften ↑ halten · Loslassen: Turbo!',
+  raceKeys: 'Gas: ↑ · Bremse: ↓ · Lenken: ← → · Leertaste: Hüpfen',
+  raceTouch: 'Links lenken · links tippen: Hüpfen · Gas & Bremse rechts',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -493,20 +492,14 @@ async function main() {
           sound.play('go');
           break;
         case 'route': toast(ev.name); break;
-        case 'route-catch': hint('↓ Hier geht’s weiter. Mit Drift-Turbo geht’s oben lang!', 5); break;
         case 'race-split': toast(`✧ ${ev.n} · ${formatRunTime(Math.round(ev.time * 1000))}`); sound.play('ring'); break;
         case 'race-bounce':
         case 'hop':
           sound.play('jump');
           break;
-        case 'drift-charge':
-          sound.play(ev.n === 2 ? 'driftOrange' : 'driftBlue');
-          break;
         case 'boost':
-        case 'turbo':
           sound.play('boost');
           break;
-        case 'drift':
         case 'slide':
           sound.play('skid');
           break;
@@ -657,11 +650,10 @@ async function main() {
       const routeHint = race.snapshot().routeHint;
       $('race-route').hidden = !branchVisit || !routeHint;
       $('race-route').textContent = routeHint ?? '';
-      const boost = race.player.boost > 0 || race.player.turbo > 0;
-      const charge = driftLevel(race.player);
-      $('race-technique').hidden = !boost && !race.player.drift;
-      $('race-technique').textContent = boost ? '✦ TURBO!' : charge === 2 ? 'SUPER-TURBO · Loslassen!' : charge === 1 ? 'TURBO BEREIT · Loslassen!' : 'DRIFT · Weiter halten …';
-      $('race-technique').dataset.charge = boost ? 'boost' : String(charge);
+      const boost = race.player.boost > 0;
+      $('race-technique').hidden = !boost;
+      $('race-technique').textContent = '✦ TURBO!';
+      $('race-technique').dataset.charge = 'boost';
       $('race-place').textContent = `${race.place}.`;
       $('race-time').textContent = formatTime(race.state === 'race' ? stats.raceTime : result?.time ?? 0);
     }
@@ -1123,7 +1115,6 @@ async function main() {
       ...(friends.size === 2 ? ['♡ Tierfreund'] : []),
       ...(garden.used.size === 3 ? ['❀ Blütenflieger'] : []),
       ...(biplane.distance >= 150 ? ['✈ Wiesenpilot'] : []),
-      ...(race.snapshot().bestDrift === 2 ? ['✦ Driftsonne'] : []),
       ...(race.snapshot().routes?.length === 3 ? ['↗ Wegefinder'] : []),
       ...(!branchVisit && discovery.snapshot().discovered ? ['✦ Wunderwiese entdeckt'] : []),
     ].map(text => { const badge = document.createElement('span'); badge.textContent = text; return badge; }));
@@ -1720,7 +1711,7 @@ async function main() {
         fight: fight.on,
         boss: { ...boss.snapshot(), pos: boss.position.toArray() },
         bubble: world.goal.bubble.visible,
-        race: { state: race.state, progress: race.progress, place: race.place, drift: race.player.drift, speed: race.player.v, ...race.snapshot() },
+        race: { state: race.state, progress: race.progress, place: race.place, speed: race.player.v, ...race.snapshot() },
         winVisible: !$('win').classList.contains('hidden'),
       }),
       layout: () => ({
