@@ -363,7 +363,7 @@ export class Sound {
   play(name) {
     if (!this.audible || this.muted) return;
     const now = this.ctx.currentTime;
-    const cooldown = PINBALL_COOLDOWNS[name] ?? { skid: 0.2, bump: 0.12, land: 0.08, bit: 0.035, ring: 0.08, planeBump: 0.2, planeBoost: 0.25 }[name] ?? 0;
+    const cooldown = PINBALL_COOLDOWNS[name] ?? { zap: 0.06, skid: 0.2, bump: 0.12, land: 0.08, bit: 0.035, ring: 0.08, planeBump: 0.2, planeBoost: 0.25 }[name] ?? 0;
     if (now - (this.cooldowns.get(name) ?? -10) < cooldown) return;
     this.cooldowns.set(name, now);
     const variation = 0.96 + Math.random() * 0.08;
@@ -474,6 +474,10 @@ export class Sound {
         this.sample('thump', { vol: 0.5, rate: 0.55 });
         this.noise(1, { vol: 0.14, from: 1400, to: 180 });
         this.chime([67, 72, 76, 79, 84], { gap: 0.12, at: 0.3, vol: 0.19 });
+        break;
+      case 'zap':
+        // The Raketenritt's star shot: a short bright chirp.
+        this.tone(1320 * variation, 0.09, { type: 'triangle', to: 660, vol: 0.05 });
         break;
       case 'spin':
         this.sample('swish', { vol: 0.28, rate: 1.15 });

@@ -333,6 +333,14 @@ export class HubWorld {
       // The Glutbeere on a little heap of ash.
       parts.push(ball(0, .35, 0, .5, 0x6a5e68, .3), ball(0, .95, 0, .36, 0xff5a2a), ball(.14, 1.32, 0, .16, 0x5fae4a, .06));
     }
+    if (spec.level === 'star') {
+      // A little Krakel: blue head on three arms.
+      parts.push(ball(0, 1.25, 0, .42, 0x1f5fb0));
+      for (let i = 0; i < 3; i++) {
+        const a = (i - 1) * .9;
+        parts.push(paint(new THREE.CylinderGeometry(.07, .09, 1.05, 6).rotateX(.35).translate(0, .52, .12).rotateY(a), 0x1f5fb0), ball(Math.sin(a) * .3, .12, Math.cos(a) * .3, .1, INK, .06));
+      }
+    }
     if (spec.level === 'tilt') {
       parts.push(paint(new THREE.TorusGeometry(.58, .075, 6, 24).translate(.18, 1.55, 0), spec.color),
         paint(new THREE.BoxGeometry(1.6, .12, .25).rotateZ(.16).translate(0, .8, 0), 0xe9a7c3), cone(0, .55, 0, .22, .4, GOLD, 3));
@@ -431,6 +439,20 @@ export class HubWorld {
           .rotateY(-a).translate(Math.cos(a) * (R + .9), 0, Math.sin(a) * (R + .9)).rotateZ(.25));
       }
       add(box(0, R + .5, 0, .12, 1.1, .12, INK), box(.45, R + .85, 0, .8, .45, .06, CREAM));
+    }
+    if (spec.level === 'star') {
+      // Miro's star on top, with its two dot eyes, and Krakel's arms reaching over the side.
+      const star = new THREE.Shape();
+      for (let i = 0; i < 8; i++) {
+        const a = Math.PI / 2 + i * Math.PI / 4, r = i % 2 ? .5 : 1.5;
+        if (!i) star.moveTo(Math.cos(a) * r, Math.sin(a) * r); else star.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      add(paint(new THREE.ExtrudeGeometry(star, {depth: .35, bevelEnabled: true, bevelSize: .12, bevelThickness: .12, bevelSegments: 2}).translate(0, 0, -.17).translate(0, R + 1.6, 0), GOLD));
+      add(ball(.18, R + 1.75, .33, .08, INK, .11), ball(.2, R + 1.45, .33, .08, INK, .11));
+      for (let i = 0; i < 3; i++) {
+        const a = i * 2.1 + .4;
+        add(paint(new THREE.TorusGeometry(R * .55, .16, 6, 16, Math.PI * .8).rotateY(a).translate(Math.sin(a) * R * .45, R * .55, Math.cos(a) * R * .45), 0x1f5fb0));
+      }
     }
     if (spec.level === 'volcano') {
       // A little volcano with a glowing top and a puff of smoke.

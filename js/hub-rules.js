@@ -62,7 +62,8 @@ function turn(from, to, degrees) {
 }
 
 // Scattered, not in a ring: one almost ahead, two a short run away, two round
-// the side, one on the far side, the Vulkanreise below the moon, and the race
+// the side, one on the far side, the Vulkanreise below the moon, the
+// Raketenritt low on the left, and the race
 // up on the moon, where the story starts it: round its underside from the
 // spring, where its planet has room.
 const pad = (level, label, lat, lon, color) => Object.freeze({level, label, planet: 'home', lat, lon, dir: hubDir(lat, lon), color});
@@ -76,6 +77,7 @@ export const HUB_PADS = Object.freeze([
   pad('ribbon', 'Blütenpfad', -2, 136, 0xe9a7c3),
   pad('tilt', 'Seifenstern', -34, 172, 0x94d6c4),
   pad('volcano', 'Vulkanreise', -12, 62, 0xf08a5a),
+  pad('star', 'Raketenritt', -25, -30, 0xf3d35a),
 ]);
 
 export const HUB_SPRINGS = Object.freeze([

@@ -332,15 +332,17 @@ export function raysCanvas(size = 256, rays = 12) {
 
 /** Loads Miro's drawings and prepares the shared textures. */
 export async function loadArt(base = 'img/') {
-  const [mirio, floor, rocket, mirioGross, grummel, grummelKlein, kreisel, schnappblume, glutzahn] = await Promise.all(
-    ['mirio.png', 'floor.png', 'rakete.png', 'mirio-gross.jpg', 'grummel.jpg', 'grummel-klein.jpg', 'kreisel.jpg', 'schnappblume.jpg', 'glutzahn.jpg']
+  const [mirio, floor, rocket, mirioGross, grummel, grummelKlein, kreisel, schnappblume, glutzahn, krakel, zischer, stern] = await Promise.all(
+    ['mirio.png', 'floor.png', 'rakete.png', 'mirio-gross.jpg', 'grummel.jpg', 'grummel-klein.jpg', 'kreisel.jpg', 'schnappblume.jpg', 'glutzahn.jpg',
+      'blaues-monster.jpg', 'raketen-wesen.jpg', 'stern.jpg']
       .map((f) => loadImage(base + f)),
   );
   const mirioInk = cropToInk(mirio);
   return {
     // rakete.png is jump_btn.png of the 2D game: Miro's rocket, upright.
-    // The rest are Miro's second set of drawings, for the Vulkanreise.
-    images: { mirio, floor, rocket, mirioGross, grummel, grummelKlein, kreisel, schnappblume, glutzahn },
+    // Then Miro's second set of drawings, for the Vulkanreise, and his
+    // third, for the Raketenritt: Krakel, the Zischer and the Riesenstern.
+    images: { mirio, floor, rocket, mirioGross, grummel, grummelKlein, kreisel, schnappblume, glutzahn, krakel, zischer, stern },
     mirioSticker: fillHoles(sticker(mirioInk, Math.round(mirioInk.height * 0.022))),
     floor: canvasTexture(floorCanvas(floor), { repeat: true }),
     grass: canvasTexture(scribbleCanvas({

@@ -14,6 +14,7 @@ import { RibbonRun } from './ribbon-run.js';
 import { MarbleRun } from './marble-run.js';
 import { TiltRun } from './tilt-run.js';
 import { VolcanoRun } from './volcano-run.js';
+import { StarRun } from './star-run.js';
 import { CHAPTERS, medalFor, MEDALS } from './chapters.js';
 import { MenuNavigation } from './menu-navigation.js';
 import { formatRunTime, readPersonalBest, savePersonalBest, hasCompletedLevel } from './time-records.js';
@@ -43,7 +44,7 @@ const MAX_FRAME = 1 / 15;
 const TEST_MODE = new URLSearchParams(location.search).has('test');
 // Focused level suites keep their old navigation fixture; real play starts in the hub.
 const TEST_MENU = TEST_MODE && new URLSearchParams(location.search).has('menu');
-const CHAPTER_TYPES = Object.freeze({sky: SkyFlight, ribbon: RibbonRun, marble: MarbleRun, tilt: TiltRun, volcano: VolcanoRun});
+const CHAPTER_TYPES = Object.freeze({sky: SkyFlight, ribbon: RibbonRun, marble: MarbleRun, tilt: TiltRun, volcano: VolcanoRun, star: StarRun});
 const SINGLE_ACTION_CLASS = 'chapter-single-action';
 const CHAPTER_MODE_CLASSES = [...Object.keys(CHAPTER_TYPES).map(id => `chapter-${id}`), SINGLE_ACTION_CLASS];
 
@@ -606,7 +607,9 @@ async function main() {
       $('bits').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} / ${run.totalDeliveries}`
         : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} / ${run.totalCheckpoints}`
         : selectedLevel === 'marble' ? `♪ ${run.notes} / ${run.totalNotes}`
-        : selectedLevel === 'volcano' ? `${run.collectibles} / ${run.totalCollectibles}` : `✧ ${run.seeds} / ${run.totalSeeds}`;
+        : selectedLevel === 'volcano' ? `${run.collectibles} / ${run.totalCollectibles}`
+        : selectedLevel === 'star' ? (['flight', 'landing'].includes(run.phase) ? `☄ ${run.asteroids} · ✦ ${run.zapped}` : `${run.stageName} · ${run.climb.tickles} / ${run.climb.tickleGoal}`)
+        : `✧ ${run.seeds} / ${run.totalSeeds}`;
       for (const id of ['ride-action', 'plane-hud', 'race-hud', 'boss-bar', 'trail-hud', 'magnet-hud']) $(id).hidden = true;
       $('chapter-hud').hidden = state !== 'chapter';
       $('chapter-timer').textContent = formatRunTime(Math.round(run.time * 1000));
@@ -1133,11 +1136,13 @@ async function main() {
     hint('', 0);
     const run = chapterGame.snapshot(), chapter = CHAPTERS[selectedLevel];
     $('win-title').textContent = selectedLevel === 'sky' ? 'Post ist da!' : selectedLevel === 'marble' ? 'Das Sternenkonzert!'
-      : selectedLevel === 'tilt' ? 'Weich gelandet!' : selectedLevel === 'volcano' ? 'Glutzahn ist besiegt!' : 'Der Blütenhof leuchtet!';
+      : selectedLevel === 'tilt' ? 'Weich gelandet!' : selectedLevel === 'volcano' ? 'Glutzahn ist besiegt!'
+      : selectedLevel === 'star' ? 'Krakel lacht!' : 'Der Blütenhof leuchtet!';
     $('win-stats').textContent = selectedLevel === 'sky' ? `✉ ${run.deliveries} Pakete · ◇ ${run.collectibles} Ringe`
       : selectedLevel === 'tilt' ? `⚑ ${run.checkpoint} Inseln · ↗ ${run.shortcuts} Abkürzungen · ↺ ${run.recoveries} Landungen`
       : selectedLevel === 'marble' ? `♪ ${run.notes} Noten · ↗ ${run.toyShots} Rampen · ✦ ${run.maxCombo}er Kette · ↺ ${run.recoveries}`
       : selectedLevel === 'volcano' ? `◇ ${run.collectibles} Glitzersteine · ✦ ${run.defeated} Grummel und Schnappblumen`
+      : selectedLevel === 'star' ? `☄ ${run.asteroids} Asteroiden · ✦ ${run.defeated} Zischer · ↺ ${run.shaken}× abgeschüttelt`
       : `✧ ${run.seeds} Laternensamen · ◇ ${run.collectibles} Glitzersteine`;
     $('win-extra').textContent = selectedLevel === 'marble' ? 'Die drei Spieluhren singen zusammen.' : '';
     $('win-badges').replaceChildren();
@@ -1151,7 +1156,7 @@ async function main() {
     for (const event of events ?? []) {
       if (selectedLevel === 'marble' && event.type === 'spring') hint('', 0);
       if (selectedLevel === 'marble') sound.playPinball(event);
-      else if (event.type !== 'finish') sound.play(({foam: 'spring', note: 'flag', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag'})[event.type] ?? event.type);
+      else if (event.type !== 'finish') sound.play(({foam: 'spring', note: 'flag', ring: 'ring', checkpoint: 'flag', spring: 'spring', boost: 'planeBoost', roll: 'spin', rescue: 'land', toss: 'spin', delivery: 'flag', 'parcel-return': 'land', chime: 'ring', choir: 'star', arrival: 'flag', tickle: 'bossHit', armDown: 'bossDown'})[event.type] ?? event.type);
       if (event.penalty > 0) toast(`${selectedLevel === 'marble' ? 'Kuckuck! ' : ''}+${event.penalty} s`);
       else if (event.type === 'delivery') toast(`✉ ${event.deliveries} / ${chapterGame.snapshot().totalDeliveries}`);
       else if (event.type === 'note') toast(`♪ ${event.notes} / ${chapterGame.snapshot().totalNotes}`);
@@ -1163,7 +1168,11 @@ async function main() {
       else if (event.type === 'checkpoint') toast('Checkpoint!');
       else if (event.type === 'star' && event.kind === 'grow') toast('Glutbeere! Mirio wird groß!');
       else if (event.type === 'bossHit') toast(event.hp > 0 ? `Treffer! Noch ${event.hp}` : 'Geschafft!');
+      else if (event.type === 'bossDown' && selectedLevel === 'star') toast('Krakel kichert! Der Kristall!');
       else if (event.type === 'bossDown') hint('Hol dir den Kristall!', 5);
+      else if (event.type === 'tickle') toast(event.left > 0 ? `Kitzel! Noch ${event.left}` : 'Hihihi!');
+      else if (event.type === 'armDown') toast(`Arm ${event.arms} von 3 ist eingerollt!`);
+      else if (event.type === 'arrive') hint('Der Riesenstern! Kletter an Krakels Armen hoch und kitzle ihn oben.', 7);
     }
   }
 
@@ -1538,7 +1547,8 @@ async function main() {
   function chapterFrame(dt, raw) {
     const runBefore = chapterGame.snapshot();
     if (state === 'chapter') {
-      sound.setScene(selectedLevel === 'sky' ? 'moon' : selectedLevel === 'volcano' && runBefore.fight ? 'boss' : 'explore');
+      sound.setScene(selectedLevel === 'sky' ? 'moon' : (selectedLevel === 'volcano' && runBefore.fight) || (selectedLevel === 'star' && ['climb', 'cheer'].includes(runBefore.phase)) ? 'boss'
+        : selectedLevel === 'star' ? 'moon' : 'explore');
       if (chapterCountdown > 0) {
         const number = Math.ceil(chapterCountdown);
         if (number !== countdownNumber) { countdownNumber = number; bigToast(String(number)); sound.play('beep'); }
