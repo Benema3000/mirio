@@ -49,12 +49,12 @@ export const CHAPTERS = Object.freeze({
     controller: 'Linker Stick laufen · A springen · X drehen · B stampfen',
     goal: 'Hol dir den Kristall!', medal: [240000, 420000, 720000]},
   star: {name: 'Der Raketenritt', short: 'Raketenritt', eyebrow: '08 / RIESENSTERN',
-    jumpIcon: '↑', jumpLabel: 'Rolle / Springen', actionIcon: '✦', actionLabel: 'Sternschuss / Wirbeln / Kitzeln',
-    description: 'Auf Miros Rakete durchs Asteroidenfeld, vorbei an den Zischern, bis zum Riesenstern. Dort wartet Krakel: Kletter seine drei Arme hoch, kitzle ihn und steig ihm auf den Kopf.',
-    keys: 'WASD / Pfeile lenken und klettern · Leertaste Rolle / springen · Shift Sternschuss / wirbeln / kitzeln',
-    touch: 'Links lenken und klettern · ↑ Rolle / springen · ✦ Sternschuss / wirbeln / kitzeln',
-    controller: 'Linker Stick lenken und klettern · A Rolle / springen · X Sternschuss / wirbeln / kitzeln',
-    goal: 'Kitzle Krakel!', medal: [110000, 150000, 220000]},
+    jumpIcon: '↑', jumpLabel: 'Rolle / Springen', actionIcon: '✦', actionLabel: 'Sternschuss / Drehen',
+    description: 'Auf Miros Rakete durchs Asteroidenfeld: Ringe geben Schwung, Sterne sprengen Felsen und verjagen die Zischer. Dann zu Fuss um den Riesenstern, durch Sternschnuppen bis zu Krakel. Kletter seine Arme hoch und stampfe auf die Leuchtflecken!',
+    keys: 'Rakete: WASD lenken · Leertaste Rolle · Shift Sternschuss · Zu Fuss: WASD laufen · Leertaste springen · Shift drehen · C stampfen',
+    touch: 'Rakete: links lenken · ↑ Rolle · ✦ Sternschuss · Zu Fuss: links laufen · ↑ springen · ✦ drehen · ⤓ stampfen',
+    controller: 'Rakete: Linker Stick lenken · A Rolle · X Sternschuss · Zu Fuss: A springen · X drehen · B stampfen',
+    goal: 'Hol dir den Kristall!', medal: [210000, 300000, 450000]},
 });
 
 export function medalFor(level, milliseconds) {

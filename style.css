@@ -662,7 +662,7 @@ body.flying #toast { top: max(130px, 18%); }
 #chapter-best { font-size: 9px; align-self: center; color: #bde5d8; text-align: right; white-space: pre-line; }
 #chapter-progress, #chapter-ability { grid-column: 1 / -1; width: 100%; }
 #chapter-ability { font-size: 10px; color: #c4dedc; }
-body.chapter-mode:not(.chapter-volcano) #btn-pound { display: none; }
+body.chapter-mode:not(.chapter-volcano):not(.chapter-star) #btn-pound { display: none; }
 body.hub-mode #hud > .pill { display: none; }
 body.hub-mode #hud { justify-content: flex-end; }
 /* What Mirio can do right here (a gate's name, a parcel to throw): big, in the hint's place. */

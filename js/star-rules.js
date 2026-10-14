@@ -1,172 +1,176 @@
-// Der Raketenritt: Miro's third set of drawings. Pure rules, no screen; the
-// scene is star-run.js.
+// Der Raketenritt's flight: Mirio on Miro's rocket, through the asteroids to
+// the Riesenstern. Pure rules, no screen; the scene is star-run.js, which
+// takes over on the star (star-level.js, krakel-rules.js).
 //
-//   flight  Mirio sits on Miro's rocket and flies through an asteroid field.
-//           Stars shot from the rocket break asteroids and chase off the
-//           Zischer (Miro's black one-eyed rocket creatures), who fly ahead
-//           and throw sparks back. A roll protects. Three checkpoints.
-//   landing The rocket comes down on the Riesenstern, Miro's star.
-//   climb   Krakel, Miro's blue monster, stands on the star on three long
-//           arms. Mirio climbs each arm from the claw to the shoulder: Krakel
-//           shakes waves down the arm (jump them, or slide back down), and
-//           Zischer hover in the way (whirl them off). At the shoulder a
-//           tickle spot glows; tickle it and the arm curls up. After three
-//           arms Krakel bows, and the last climb goes up over its head.
-//   cheer   Krakel laughs and gives up the crystal; the clock has stopped.
+// The lane is fast. Golden rings mark a line through it: each one fires a
+// burst of speed and adds to a chain. Three asteroid belts wall the lane off
+// but for one gap, where a ring waits; drifters swing across it. Stars shot
+// from the rocket break asteroids (big ones take three) and chase off the
+// Zischer (Miro's black one-eyed rocket creatures), who come in five waves,
+// hold in front of the rocket and throw sparks back. A roll protects; a
+// bump costs time and the chain. Three checkpoints.
 //
-// Flight positions: `s` along the route, `x` right, `y` up. Climb positions:
-// `s` from the claw up the arm, `x` across it, `z` above its surface.
+// Positions: `s` along the lane, `x` right, `y` up.
 
 export const FLIGHT = Object.freeze({
-  length: 1500, cruise: 27, slowSpeed: 14, width: 10, height: 6.5,
-  lateralSpeed: 10, verticalSpeed: 8,
-  checkpoints: Object.freeze([375, 750, 1125]),
+  length: 1850, cruise: 40, slowSpeed: 22, burstSpeed: 56, burst: 0.9, width: 11, height: 7,
+  lateralSpeed: 13, verticalSpeed: 10,
+  checkpoints: Object.freeze([460, 920, 1380]),
+  belts: Object.freeze([560, 1060, 1560]),
+  ringRadius: 2.6,
   // Stars fly this much faster than the rocket, for `shotLife` seconds.
-  shotSpeed: 75, shotLife: 1.15, shotCooldown: .16, shotReach: .9,
-  rollDuration: .8, rollCooldown: 2.2,
-  bumpPenalty: 2, rescuePenalty: 2, invulnerable: 1.6, slow: 1,
+  shotSpeed: 90, shotLife: 1, shotCooldown: 0.14, shotReach: 1,
+  rollDuration: 0.7, rollCooldown: 1.8,
+  bumpPenalty: 2, rescuePenalty: 2, invulnerable: 1.4, slow: 0.9,
   // Zischer arrive from far ahead, hold `hold` seconds in front, then leave.
-  zischerRadius: 1.25, zischerHold: 7, zischerAhead: 30, zischerArrive: 1.6,
-  sparkEvery: 2.4, sparkSpeed: 9, sparkRadius: .7,
-  step: 1 / 120, maxFrame: .25,
+  zischerRadius: 1.4, zischerHold: 5.5, zischerAhead: 34, zischerArrive: 1.3,
+  sparkEvery: 1.7, sparkSpeed: 12, sparkRadius: 0.7,
+  step: 1 / 120, maxFrame: 0.25,
 });
 
-export const LANDING = Object.freeze({duration: 3.6});
-
-export const CLIMB = Object.freeze({
-  speed: 3.8, backSpeed: 2.5, lateralSpeed: 4, width: 1.1,
-  jumpSpeed: 7.6, gravity: 22,
-  // Above this, a wave passes underneath.
-  waveClear: .45, waveSpeed: 11, waveWarning: .75, knockback: 5, stun: .5, invulnerable: 1,
-  // A Zischer wakes when Mirio is this far below it; a whirl reaches this far.
-  zischerWake: 8, whirlReach: 2.4, hitReach: 1, hitHeight: 1.2,
-  // Standing this close to the top is standing on the tickle spot.
-  spot: 1.2, tickleCooldown: .35,
-  // Seconds of the curling arm flinging Mirio to the next claw.
-  switchTime: 1.4, rescuePenalty: 2, cheer: 2.4,
-});
-
-/**
- * The four climbs: three arms, then the head. Lengths are along the arm in
- * metres and must match the shapes in star-run.js (krakelPath). Waves come
- * every `waveEvery` seconds; `zischer` are distances up the arm.
- */
-export const STAGES = Object.freeze([
-  Object.freeze({id: 'arm-left', name: 'Linker Arm', length: 27, waveEvery: 2.8, tickles: 3, zischer: Object.freeze([])}),
-  Object.freeze({id: 'arm-middle', name: 'Mittlerer Arm', length: 27, waveEvery: 2.4, tickles: 3, zischer: Object.freeze([14])}),
-  Object.freeze({id: 'arm-right', name: 'Rechter Arm', length: 27, waveEvery: 2.1, tickles: 4, zischer: Object.freeze([9, 18])}),
-  Object.freeze({id: 'head', name: 'Krakels Kopf', length: 19, waveEvery: 1.9, tickles: 5, zischer: Object.freeze([10])}),
-]);
-
-// Share of the progress bar each part takes.
-const SHARE = Object.freeze({flight: .55, landing: .05});
+export const LANDING = Object.freeze({ duration: 3.4 });
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const finite = v => (Number.isFinite(v) ? v : 0);
 const damp = (a, b, rate, dt) => a + (b - a) * (1 - Math.exp(-rate * dt));
+// Where each belt's gap (and its ring) is: [x, y].
+const GAPS = Object.freeze([[-6, 3], [7, -3.5], [0, 4.5]]);
 
-/** Asteroids and Zischer waves, laid out the same way every time. */
+/** Rings, asteroids (with the belts and drifters) and Zischer waves, the same every time. */
 export function makeStarCourse() {
-  const asteroids = [];
-  for (let i = 0; i < 46; i++) {
-    let s = 90 + i * 29.5;
-    // Nothing sits on a checkpoint, where a rescue puts the rocket back.
-    for (const checkpoint of FLIGHT.checkpoints) if (Math.abs(s - checkpoint) < 18) s = checkpoint + 20;
-    const big = i % 5 === 2;
-    const ramp = Math.min(1, i / 6);
-    asteroids.push({id: `asteroid-${i}`, s, big, hp: big ? 3 : 1, radius: big ? 2.6 : 1.3 + (i % 3) * .25,
-      x: clamp(Math.sin(i * 2.17) * 7.5 * ramp, -8.5, 8.5), y: clamp(Math.cos(i * 1.31) * 4.5 * ramp, -5, 5),
-      spin: .4 + (i % 4) * .2, drift: big ? .4 : .8, phase: i * 1.7});
+  const rings = [], asteroids = [], zischer = [];
+  const ring = (s, x, y) => rings.push({ id: `ring-${rings.length}`, s, x, y });
+  // The ring line weaves across the lane; in a belt it runs through the gap.
+  for (let i = 0, s = 70; s < FLIGHT.length - 40; i++, s += 30) {
+    if (FLIGHT.belts.some(b => Math.abs(b - s) < 15)) continue;
+    const ramp = Math.min(1, i / 4);
+    ring(s, Math.sin(s / 95) * 7.5 * ramp, Math.sin(s / 61) * 4 * ramp);
   }
-  const zischer = [];
-  for (const [wave, s] of [260, 640, 980, 1290].entries()) {
+  FLIGHT.belts.forEach((b, i) => ring(b, ...GAPS[i]));
+  rings.sort((a, b) => a.s - b.s);
+  const ringAt = s => rings.reduce((best, r) => (Math.abs(r.s - s) < Math.abs(best.s - s) ? r : best));
+  const add = (s, x, y, extra = {}) => asteroids.push({ id: `asteroid-${asteroids.length}`, s, x, y, big: false, hp: 1, radius: 1.4,
+    spin: 0.4 + (asteroids.length % 4) * 0.25, drift: 0.5, sweep: 0, phase: asteroids.length * 1.7, ...extra });
+  // Loose rocks, kept off the ring line and the checkpoints.
+  for (let i = 0, s = 120; s < FLIGHT.length - 60; i++, s += 21) {
+    if (FLIGHT.belts.some(b => Math.abs(b - s) < 30) || FLIGHT.checkpoints.some(c => Math.abs(c - s) < 20)) continue;
+    const r = ringAt(s), big = i % 6 === 3, kind = big ? { big, hp: 3, radius: 2.8, drift: 0.3 } : { radius: 1.2 + (i % 3) * 0.3 };
+    // Every fifth is a drifter, swinging right across the lane.
+    if (!big && i % 5 === 1) { add(s, 0, clamp(r.y - 2.5, -FLIGHT.height + 1, FLIGHT.height - 1), { sweep: 8, radius: 1.6 }); continue; }
+    // Beside the ring line, never on it: if the lane's edge is too close, the other side.
+    const clear = kind.radius + (kind.drift ?? 0.5) + FLIGHT.ringRadius + 0.8 + (i % 3) * 1.4;
+    let side = i % 2 ? 1 : -1;
+    if (Math.abs(r.x + side * clear) > FLIGHT.width - 1) side = -side;
+    add(s, r.x + side * clear, clamp(r.y + ((i % 4) - 1.5) * 1.2, -FLIGHT.height + 1, FLIGHT.height - 1), kind);
+  }
+  // Belts: a wall of rocks across the whole lane but for the gap round its ring.
+  FLIGHT.belts.forEach((b, i) => {
+    const [gx, gy] = GAPS[i];
+    for (let x = -FLIGHT.width; x <= FLIGHT.width + 0.01; x += 3.2) {
+      for (let y = -FLIGHT.height; y <= FLIGHT.height + 0.01; y += 3.2) {
+        if (Math.hypot(x - gx, y - gy) < 4.2) continue;
+        add(b + Math.abs(Math.round(x * 7 + y * 3)) % 3, x, y, { radius: 1.55, drift: 0.15, belt: true });
+      }
+    }
+  });
+  for (const [wave, s] of [280, 700, 840, 1220, 1650].entries()) {
     const count = wave === 0 ? 2 : 3;
     for (let k = 0; k < count; k++) {
-      zischer.push({id: `zischer-${wave}-${k}`, wave, s, x: (k - (count - 1) / 2) * 5.5, y: wave % 2 ? 2 : -1.5, phase: k * 2.1 + wave});
+      zischer.push({ id: `zischer-${wave}-${k}`, wave, s, x: (k - (count - 1) / 2) * 6, y: wave % 2 ? 2.5 : -1.5, phase: k * 2.1 + wave });
     }
   }
-  return {length: FLIGHT.length, checkpoints: FLIGHT.checkpoints, asteroids, zischer, stages: STAGES};
-}
-
-function freshClimb() {
-  return {stage: 0, s: 0, x: 0, z: 0, vz: 0, grounded: true, stun: 0, invulnerable: 0,
-    tickles: 0, tickleCooldown: 0, waveClock: 0, warning: 0, waves: [], zischer: [], switching: 0};
+  return { length: FLIGHT.length, checkpoints: FLIGHT.checkpoints, belts: FLIGHT.belts, rings, asteroids, zischer };
 }
 
 export function createStarRun() {
-  return {status: 'playing', phase: 'flight', time: 0, elapsed: 0, penalty: 0, phaseTime: 0,
-    // Flight
+  return {
+    status: 'playing', phase: 'flight', time: 0, elapsed: 0, penalty: 0, phaseTime: 0,
     s: 0, x: 0, y: 0, vx: 0, vy: 0, speed: FLIGHT.cruise, checkpoint: 0,
-    roll: 0, rollCooldown: 0, shotCooldown: 0, invulnerable: 0, slow: 0,
+    roll: 0, rollCooldown: 0, shotCooldown: 0, invulnerable: 0, slow: 0, burst: 0,
     shots: [], sparks: [], nextShot: 0, nextSpark: 0,
-    asteroidHp: new Map(), broken: new Set(), passed: new Set(),
+    asteroidHp: new Map(), broken: new Set(), passed: new Set(), ringsPassed: new Set(), ringsTaken: new Set(),
     zischerState: new Map(), chased: new Set(),
-    asteroids: 0, zapped: 0, bumps: 0, jumpHeld: false, actionHeld: false,
-    // Climb
-    climb: freshClimb(), armsDown: 0, shaken: 0, whirled: 0};
+    asteroids: 0, zapped: 0, bumps: 0, combo: 0, bestCombo: 0,
+  };
 }
 
-/** Where a flight asteroid is at `time`: it wobbles a little round its spot. */
+/** Where a flight asteroid is at `time`: it wobbles round its spot; a drifter swings across the lane. */
 export function asteroidPosition(asteroid, time) {
-  return {x: asteroid.x + Math.sin(time * .5 + asteroid.phase) * asteroid.drift,
-    y: asteroid.y + Math.cos(time * .4 + asteroid.phase) * asteroid.drift * .6};
+  return {
+    x: asteroid.x + Math.sin(time * 0.5 + asteroid.phase) * asteroid.drift + Math.sin(time * 0.9 + asteroid.phase) * asteroid.sweep,
+    y: asteroid.y + Math.cos(time * 0.4 + asteroid.phase) * asteroid.drift * 0.6,
+  };
 }
 
 /**
- * A flying Zischer's position and its route distance at `time`, or null when
- * it has not come yet or has flown off. They arrive from far ahead, hold a
- * fixed distance in front of the rocket and weave, then shoot away.
+ * A flying Zischer's position and its route distance, or null when it has
+ * not come yet or has flown off. They arrive from far ahead, hold a fixed
+ * distance in front of the rocket and weave, then shoot away.
  */
 export function zischerPosition(zischer, state, runS) {
   if (!state || state.gone) return null;
   const t = state.age;
-  const arrive = clamp(t / FLIGHT.zischerArrive, 0, 1), leave = clamp((t - FLIGHT.zischerHold) / 1.2, 0, 1);
-  const ahead = FLIGHT.zischerAhead + (1 - arrive) * 60 + leave * 90;
-  return {s: runS + ahead,
-    x: clamp(zischer.x + Math.sin(t * 1.3 + zischer.phase) * 2.2, -FLIGHT.width, FLIGHT.width),
-    y: clamp(zischer.y + Math.sin(t * 1.9 + zischer.phase) * 1.2, -FLIGHT.height, FLIGHT.height)};
+  const arrive = clamp(t / FLIGHT.zischerArrive, 0, 1), leave = clamp(t - FLIGHT.zischerHold, 0, 1);
+  return {
+    s: runS + FLIGHT.zischerAhead + (1 - arrive) * 70 + leave * 110,
+    x: clamp(zischer.x + Math.sin(t * 1.6 + zischer.phase) * 2.8, -FLIGHT.width, FLIGHT.width),
+    y: clamp(zischer.y + Math.sin(t * 2.2 + zischer.phase) * 1.5, -FLIGHT.height, FLIGHT.height),
+  };
 }
 
-function flightProgress(run, course) { return clamp(run.s / course.length, 0, 1); }
-
-function bump(run, events, penalty, from) {
+function bump(run, events, from) {
   run.slow = FLIGHT.slow;
+  run.burst = 0;
   run.invulnerable = FLIGHT.invulnerable;
-  run.time += penalty;
-  run.penalty += penalty;
+  run.time += FLIGHT.bumpPenalty;
+  run.penalty += FLIGHT.bumpPenalty;
   run.bumps++;
-  run.vx += (Math.sign(run.x - from.x) || 1) * 2;
-  events.push({type: 'planeBump', penalty});
+  run.combo = 0;
+  run.vx += (Math.sign(run.x - from.x) || 1) * 2.5;
+  events.push({ type: 'planeBump', penalty: FLIGHT.bumpPenalty });
 }
 
 function stepFlight(run, course, h, x, y, events) {
-  for (const key of ['roll', 'rollCooldown', 'shotCooldown', 'invulnerable', 'slow']) run[key] = Math.max(0, run[key] - h);
+  for (const key of ['roll', 'rollCooldown', 'shotCooldown', 'invulnerable', 'slow', 'burst']) run[key] = Math.max(0, run[key] - h);
   run.vx = damp(run.vx, x * FLIGHT.lateralSpeed, 12, h);
   run.vy = damp(run.vy, y * FLIGHT.verticalSpeed, 12, h);
   run.x = clamp(run.x + run.vx * h, -FLIGHT.width, FLIGHT.width);
   run.y = clamp(run.y + run.vy * h, -FLIGHT.height, FLIGHT.height);
-  run.speed = damp(run.speed, run.slow > 0 ? FLIGHT.slowSpeed : FLIGHT.cruise, 6, h);
+  run.speed = damp(run.speed, run.slow > 0 ? FLIGHT.slowSpeed : run.burst > 0 ? FLIGHT.burstSpeed : FLIGHT.cruise, 5, h);
   const before = run.s, advance = Math.min(run.speed * h, course.length - run.s);
   run.s += advance;
   const protectedNow = run.invulnerable > 0 || run.roll > 0;
+
+  // Rings: through one is a burst and the chain grows; past one breaks the chain.
+  for (const r of course.rings) {
+    if (run.ringsPassed.has(r.id) || r.s < before || r.s > run.s) continue;
+    run.ringsPassed.add(r.id);
+    if (Math.hypot(run.x - r.x, run.y - r.y) > FLIGHT.ringRadius) { run.combo = 0; continue; }
+    if (run.ringsTaken.has(r.id)) continue;
+    run.ringsTaken.add(r.id);
+    run.burst = FLIGHT.burst;
+    run.combo++;
+    run.bestCombo = Math.max(run.bestCombo, run.combo);
+    events.push({ type: 'ring', id: r.id, combo: run.combo });
+  }
 
   // Zischer: wake when their wave comes up, age, and throw sparks.
   for (const z of course.zischer) {
     let state = run.zischerState.get(z.id);
     if (!state && run.s >= z.s - 40 && !run.chased.has(z.id)) {
-      state = {age: 0, gone: false, sparkIn: 1.6 + z.phase % 1.2};
+      state = { age: 0, gone: false, sparkIn: 1.2 + z.phase % 1 };
       run.zischerState.set(z.id, state);
     }
     if (!state || state.gone) continue;
     state.age += h;
-    if (state.age > FLIGHT.zischerHold + 1.2) { state.gone = true; continue; }
+    if (state.age > FLIGHT.zischerHold + 1) { state.gone = true; continue; }
     state.sparkIn -= h;
-    const p = zischerPosition(z, state, run.s);
     if (state.sparkIn <= 0 && state.age < FLIGHT.zischerHold) {
       state.sparkIn = FLIGHT.sparkEvery;
+      const p = zischerPosition(z, state, run.s);
       // Thrown at where the rocket is now: easy to read and to dodge.
-      run.sparks.push({id: run.nextSpark++, s: p.s, x: p.x, y: p.y, tx: run.x, ty: run.y, from: p.s});
-      events.push({type: 'spark'});
+      run.sparks.push({ id: run.nextSpark++, s: p.s, x: p.x, y: p.y, tx: run.x, ty: run.y, from: p.s, cx: p.x, cy: p.y });
+      events.push({ type: 'spark' });
     }
   }
 
@@ -175,26 +179,26 @@ function stepFlight(run, course, h, x, y, events) {
     shot.s += (run.speed + FLIGHT.shotSpeed) * h;
     shot.life -= h;
     for (const a of course.asteroids) {
-      if (shot.life <= 0 || run.broken.has(a.id) || Math.abs(a.s - shot.s) > a.radius + 1.5) continue;
+      if (shot.life <= 0 || run.broken.has(a.id) || Math.abs(a.s - shot.s) > a.radius + 2) continue;
       const p = asteroidPosition(a, run.elapsed);
       if (Math.hypot(p.x - shot.x, p.y - shot.y) > a.radius + FLIGHT.shotReach) continue;
       shot.life = 0;
       const hp = (run.asteroidHp.get(a.id) ?? a.hp) - 1;
       run.asteroidHp.set(a.id, hp);
-      if (hp > 0) { events.push({type: 'bump', id: a.id, hp}); continue; }
+      if (hp > 0) { events.push({ type: 'bump', id: a.id, hp }); continue; }
       run.broken.add(a.id);
       run.asteroids++;
-      events.push({type: 'slam', id: a.id, big: a.big, asteroids: run.asteroids});
+      events.push({ type: 'slam', id: a.id, big: a.big, asteroids: run.asteroids });
     }
     for (const z of course.zischer) {
       const state = run.zischerState.get(z.id), p = zischerPosition(z, state, run.s);
-      if (shot.life <= 0 || !p || Math.abs(p.s - shot.s) > 2.5) continue;
+      if (shot.life <= 0 || !p || Math.abs(p.s - shot.s) > 3) continue;
       if (Math.hypot(p.x - shot.x, p.y - shot.y) > FLIGHT.zischerRadius + FLIGHT.shotReach) continue;
       shot.life = 0;
       state.gone = true;
       run.chased.add(z.id);
       run.zapped++;
-      events.push({type: 'enemyDefeat', id: z.id, zapped: run.zapped});
+      events.push({ type: 'enemyDefeat', id: z.id, zapped: run.zapped, at: p });
     }
   }
   run.shots = run.shots.filter(shot => shot.life > 0);
@@ -207,7 +211,7 @@ function stepFlight(run, course, h, x, y, events) {
     spark.cy = spark.y + (spark.ty - spark.y) * k;
     if (spark.s > run.s) continue;
     spark.done = true;
-    if (!protectedNow && Math.hypot(spark.cx - run.x, spark.cy - run.y) < FLIGHT.sparkRadius + .6) bump(run, events, FLIGHT.bumpPenalty, {x: spark.cx, y: spark.cy});
+    if (!protectedNow && Math.hypot(spark.cx - run.x, spark.cy - run.y) < FLIGHT.sparkRadius + 0.6) bump(run, events, { x: spark.cx, y: spark.cy });
   }
   run.sparks = run.sparks.filter(spark => !spark.done);
 
@@ -217,241 +221,96 @@ function stepFlight(run, course, h, x, y, events) {
     run.passed.add(a.id);
     if (run.broken.has(a.id) || run.invulnerable > 0 || run.roll > 0) continue;
     const p = asteroidPosition(a, run.elapsed);
-    if (Math.hypot(p.x - run.x, p.y - run.y) > a.radius + .7) continue;
-    bump(run, events, FLIGHT.bumpPenalty, p);
+    if (Math.hypot(p.x - run.x, p.y - run.y) > a.radius + 0.7) continue;
+    bump(run, events, p);
   }
   for (const [i, checkpoint] of course.checkpoints.entries()) {
     if (run.checkpoint >= i + 1 || checkpoint < before || run.s < checkpoint) continue;
     run.checkpoint = i + 1;
-    events.push({type: 'checkpoint', checkpoint: run.checkpoint});
+    events.push({ type: 'checkpoint', checkpoint: run.checkpoint });
   }
   if (run.s >= course.length) {
     run.phase = 'landing';
     run.phaseTime = 0;
     run.shots = [];
     run.sparks = [];
-    events.push({type: 'arrive'});
+    events.push({ type: 'arrive' });
   }
 }
 
-function stage(run, course) { return course.stages[run.climb.stage]; }
-
-function stepClimb(run, course, h, x, y, jump, action, events) {
-  const c = run.climb, st = stage(run, course);
-  if (c.switching > 0) {
-    c.switching = Math.max(0, c.switching - h);
-    if (c.switching === 0) events.push({type: 'land'});
-    return;
-  }
-  for (const key of ['stun', 'invulnerable', 'tickleCooldown', 'warning']) c[key] = Math.max(0, c[key] - h);
-
-  // Krakel's waves: a warning shudder, then a bulge running down the arm.
-  c.waveClock += h;
-  if (c.waveClock >= st.waveEvery && !c.warning) {
-    c.waveClock = 0;
-    c.warning = CLIMB.waveWarning;
-    c.pending = true;
-    events.push({type: 'roar'});
-  }
-  if (c.pending && c.warning === 0) {
-    c.pending = false;
-    c.waves.push({pos: st.length + 1});
-  }
-
-  if (c.stun === 0) {
-    const forward = y > 0 ? y * CLIMB.speed : y * CLIMB.backSpeed;
-    c.s = clamp(c.s + forward * h, 0, st.length);
-    c.x = clamp(c.x + x * CLIMB.lateralSpeed * h, -CLIMB.width, CLIMB.width);
-    if (jump && c.grounded) {
-      c.vz = CLIMB.jumpSpeed;
-      c.grounded = false;
-      events.push({type: 'jump'});
-    }
-  }
-  if (!c.grounded) {
-    c.vz -= CLIMB.gravity * h;
-    c.z += c.vz * h;
-    if (c.z <= 0) { c.z = 0; c.vz = 0; c.grounded = true; }
-  }
-
-  for (const wave of c.waves) {
-    const from = wave.pos;
-    wave.pos -= CLIMB.waveSpeed * h;
-    if (from < c.s || wave.pos > c.s) continue;
-    if (c.z >= CLIMB.waveClear || c.invulnerable > 0) continue;
-    c.s = Math.max(0, c.s - CLIMB.knockback);
-    c.stun = CLIMB.stun;
-    c.invulnerable = CLIMB.invulnerable;
-    c.vz = 4; c.grounded = false;
-    run.shaken++;
-    events.push({type: 'hurt', kind: 'wave'});
-  }
-  c.waves = c.waves.filter(wave => wave.pos > -1);
-
-  // Zischer hover on the arm, weaving across it, until whirled off.
-  for (const [i, at] of st.zischer.entries()) {
-    const z = c.zischer[i];
-    if (z.gone) continue;
-    if (!z.awake && c.s > at - CLIMB.zischerWake) { z.awake = true; events.push({type: 'enemyNotice'}); }
-    if (!z.awake) continue;
-    z.age += h;
-    z.x = Math.sin(z.age * 1.7) * CLIMB.width;
-    const ds = at - c.s;
-    if (action && Math.abs(ds) < CLIMB.whirlReach) {
-      z.gone = true;
-      run.whirled++;
-      events.push({type: 'enemyDefeat', kind: 'whirl'});
-      action = false;
-      continue;
-    }
-    if (c.invulnerable > 0 || Math.abs(ds) > CLIMB.hitReach || Math.abs(z.x - c.x) > CLIMB.hitReach || c.z > CLIMB.hitHeight) continue;
-    c.s = Math.max(0, c.s - CLIMB.knockback * .8);
-    c.stun = CLIMB.stun;
-    c.invulnerable = CLIMB.invulnerable;
-    run.shaken++;
-    events.push({type: 'hurt', kind: 'zischer'});
-  }
-
-  if (action && c.s >= st.length - CLIMB.spot && c.grounded && c.tickleCooldown === 0) {
-    c.tickleCooldown = CLIMB.tickleCooldown;
-    c.tickles++;
-    const left = st.tickles - c.tickles;
-    events.push({type: 'tickle', left, stage: c.stage});
-    if (left > 0) return;
-    if (c.stage === course.stages.length - 1) {
-      run.phase = 'cheer';
-      run.phaseTime = 0;
-      events.push({type: 'bossDown', final: true});
-      return;
-    }
-    run.armsDown++;
-    events.push({type: 'armDown', arms: run.armsDown});
-    const next = c.stage + 1;
-    Object.assign(c, freshClimb(), {stage: next, switching: CLIMB.switchTime});
-    c.zischer = course.stages[next].zischer.map(() => ({awake: false, gone: false, age: 0, x: 0}));
-  }
-}
-
-function startClimb(run, course) {
-  run.phase = 'climb';
-  run.phaseTime = 0;
-  run.climb = freshClimb();
-  run.climb.zischer = course.stages[0].zischer.map(() => ({awake: false, gone: false, age: 0, x: 0}));
-}
-
-/** One step of the chapter. Controls: {x, y, jump, action} as main.js passes them. */
-export function stepStarRun(run, course, dt, controls = {}) {
+/** One step of the flight and the landing. Controls: {x, y, jump, action} as main.js passes them. */
+export function stepStarFlight(run, course, dt, controls = {}) {
   const events = [];
-  if (run.status !== 'playing' || !Number.isFinite(dt) || dt <= 0) return events;
+  if (run.status !== 'playing' || !['flight', 'landing'].includes(run.phase) || !Number.isFinite(dt) || dt <= 0) return events;
   dt = Math.min(FLIGHT.maxFrame, dt);
   let x = clamp(finite(controls.x), -1, 1), y = clamp(finite(controls.y), -1, 1);
   const magnitude = Math.hypot(x, y);
   if (magnitude > 1) { x /= magnitude; y /= magnitude; }
-  let jump = Boolean(controls.jump), action = Boolean(controls.action);
   if (run.phase === 'flight') {
-    if (action && run.shotCooldown <= 0) {
+    if (controls.action && run.shotCooldown <= 0) {
       run.shotCooldown = FLIGHT.shotCooldown;
-      run.shots.push({id: run.nextShot++, s: run.s + 1.5, x: run.x, y: run.y, life: FLIGHT.shotLife});
-      events.push({type: 'zap'});
+      run.shots.push({ id: run.nextShot++, s: run.s + 1.5, x: run.x, y: run.y, life: FLIGHT.shotLife });
+      events.push({ type: 'zap' });
     }
-    if (jump && run.rollCooldown <= 0) {
+    if (controls.jump && run.rollCooldown <= 0) {
       run.roll = FLIGHT.rollDuration;
       run.rollCooldown = FLIGHT.rollCooldown;
-      events.push({type: 'spin'});
+      events.push({ type: 'spin' });
     }
   }
   const count = Math.ceil(dt / FLIGHT.step), h = dt / count;
-  for (let n = 0; n < count && run.status === 'playing'; n++) {
+  for (let n = 0; n < count && run.phase !== 'star'; n++) {
     run.elapsed += h;
     run.phaseTime += h;
-    if (run.phase !== 'cheer') run.time += h;
+    run.time += h;
     if (run.phase === 'flight') stepFlight(run, course, h, x, y, events);
-    else if (run.phase === 'landing') {
-      if (run.phaseTime >= LANDING.duration) { startClimb(run, course); events.push({type: 'land'}); }
-    } else if (run.phase === 'climb') {
-      stepClimb(run, course, h, x, y, jump, action, events);
-      // A press counts once, not once per physics step.
-      jump = action = false;
-    } else if (run.phase === 'cheer' && run.phaseTime >= CLIMB.cheer) {
-      run.status = 'finished';
-      events.push({type: 'finish', time: run.time});
-    }
+    else if (run.phaseTime >= LANDING.duration) { run.phase = 'star'; run.phaseTime = 0; events.push({ type: 'land' }); }
   }
   return events;
 }
 
-/** The rescue button: back to the last checkpoint, or to the claw of this arm. */
-export function rescueStarRun(run, course) {
-  if (run.status !== 'playing') return [];
-  if (run.phase === 'flight') {
-    run.s = course.checkpoints[run.checkpoint - 1] ?? 0;
-    run.x = run.y = run.vx = run.vy = 0;
-    run.speed = FLIGHT.cruise;
-    run.roll = run.slow = 0;
-    run.shots = [];
-    run.sparks = [];
-    run.invulnerable = 2;
-    run.passed = new Set(course.asteroids.filter(a => a.s < run.s).map(a => a.id));
-    for (const z of course.zischer) if (z.s < run.s) run.zischerState.set(z.id, {age: 99, gone: true, sparkIn: 0});
-      else if (!run.chased.has(z.id)) run.zischerState.delete(z.id);
-  } else if (run.phase === 'climb' && !run.climb.switching) {
-    const c = run.climb;
-    Object.assign(c, {s: 0, x: 0, z: 0, vz: 0, grounded: true, stun: 0, invulnerable: 1.5, waves: [], warning: 0, pending: false, waveClock: 0});
-  } else return [];
-  run.time += FLIGHT.rescuePenalty;
-  run.penalty += FLIGHT.rescuePenalty;
-  return [{type: 'checkpoint', rescued: true, penalty: FLIGHT.rescuePenalty}];
-}
-
-/**
- * Test navigation only: no rewards or finish. Progress below the flight's
- * share flies there; above it jumps to the climb stage that share covers.
- */
-export function seekStarRun(run, course, progress) {
-  progress = clamp(finite(progress), 0, .999);
-  run.status = 'playing';
+/** The rescue button in the flight: back to the last checkpoint, two seconds on. */
+export function rescueStarFlight(run, course) {
+  if (run.status !== 'playing' || run.phase !== 'flight') return [];
+  run.s = course.checkpoints[run.checkpoint - 1] ?? 0;
+  run.x = run.y = run.vx = run.vy = 0;
+  run.speed = FLIGHT.cruise;
+  run.roll = run.slow = run.burst = 0;
+  run.combo = 0;
   run.shots = [];
   run.sparks = [];
-  if (progress < SHARE.flight) {
-    run.phase = 'flight';
-    run.s = progress / SHARE.flight * course.length;
-    run.x = run.y = run.vx = run.vy = 0;
-    run.passed = new Set(course.asteroids.filter(a => a.s < run.s).map(a => a.id));
-    for (const z of course.zischer) if (z.s < run.s) run.zischerState.set(z.id, {age: 99, gone: true, sparkIn: 0});
-    return;
-  }
-  startClimb(run, course);
-  const climbShare = (progress - SHARE.flight - SHARE.landing) / (1 - SHARE.flight - SHARE.landing);
-  const index = clamp(Math.floor(climbShare * course.stages.length), 0, course.stages.length - 1);
-  run.climb.stage = index;
-  run.armsDown = Math.min(index, 3);
-  run.climb.zischer = course.stages[index].zischer.map(() => ({awake: false, gone: false, age: 0, x: 0}));
+  run.invulnerable = 2;
+  run.time += FLIGHT.rescuePenalty;
+  run.penalty += FLIGHT.rescuePenalty;
+  skipBehind(run, course);
+  return [{ type: 'checkpoint', rescued: true, penalty: FLIGHT.rescuePenalty }];
 }
 
-/** The whole chapter on one bar: flight, landing, then the four climbs. */
-export function starProgress(run, course) {
-  if (run.phase === 'flight') return flightProgress(run, course) * SHARE.flight;
-  if (run.phase === 'landing') return SHARE.flight + clamp(run.phaseTime / LANDING.duration, 0, 1) * SHARE.landing;
-  if (run.phase === 'cheer' || run.status === 'finished') return 1;
-  const c = run.climb, st = course.stages[c.stage], climbed = c.stage + clamp(c.s / st.length, 0, 1) * .9 + c.tickles / st.tickles * .1;
-  return SHARE.flight + SHARE.landing + climbed / course.stages.length * (1 - SHARE.flight - SHARE.landing);
+/** What lies behind run.s is passed; Zischer behind are gone, those ahead come again. */
+function skipBehind(run, course) {
+  run.passed = new Set(course.asteroids.filter(a => a.s < run.s).map(a => a.id));
+  run.ringsPassed = new Set(course.rings.filter(r => r.s < run.s).map(r => r.id));
+  for (const z of course.zischer) {
+    if (z.s < run.s) run.zischerState.set(z.id, { age: 99, gone: true, sparkIn: 0 });
+    else if (!run.chased.has(z.id)) run.zischerState.delete(z.id);
+  }
 }
 
-export function starSnapshot(run, course) {
-  const c = run.climb, st = course.stages[c.stage];
-  let actionHint = null;
-  if (run.phase === 'climb' && !c.switching) {
-    const nearZischer = st.zischer.some((at, i) => c.zischer[i]?.awake && !c.zischer[i].gone && Math.abs(at - c.s) < CLIMB.whirlReach);
-    if (nearZischer) actionHint = 'Wegwirbeln!';
-    else if (c.s >= st.length - CLIMB.spot) actionHint = `Kitzeln! ${st.tickles - c.tickles}×`;
-  }
-  return {status: run.status, phase: run.phase, time: run.time, elapsed: run.elapsed, penalty: run.penalty,
-    progress: starProgress(run, course),
-    distance: run.s, x: run.x, y: run.y, speed: run.speed, roll: run.roll, rollCooldown: run.rollCooldown,
+/** Test navigation only: no rewards, checkpoint credit or finish. */
+export function seekStarFlight(run, course, fraction) {
+  run.phase = 'flight';
+  run.s = clamp(finite(fraction), 0, 0.999) * course.length;
+  run.x = run.y = run.vx = run.vy = 0;
+  run.shots = [];
+  run.sparks = [];
+  skipBehind(run, course);
+}
+
+export function flightSnapshot(run, course) {
+  return {
+    distance: run.s, x: run.x, y: run.y, speed: run.speed, roll: run.roll, rollCooldown: run.rollCooldown, burst: run.burst,
     checkpoint: run.checkpoint, checkpoints: course.checkpoints.length,
     asteroids: run.asteroids, totalAsteroids: course.asteroids.length, zapped: run.zapped, bumps: run.bumps,
-    stage: c.stage, stageId: st.id, stageName: st.name, stages: course.stages.length, armsDown: run.armsDown,
-    climb: {s: c.s, x: c.x, z: c.z, length: st.length, tickles: c.tickles, tickleGoal: st.tickles,
-      waves: c.waves.map(w => w.pos), warning: c.warning, switching: c.switching, stun: c.stun, invulnerable: c.invulnerable},
-    shaken: run.shaken, whirled: run.whirled, defeated: run.zapped + run.whirled, actionHint};
+    rings: run.ringsTaken.size, totalRings: course.rings.length, combo: run.combo, bestCombo: run.bestCombo,
+  };
 }

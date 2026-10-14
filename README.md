@@ -93,7 +93,7 @@ Pause provides help and separate time boards without leaving the current run.
 | **Klangkugel** | Grow a garden ramp, wake a cuckoo machine and ride a comet orbit across three pinball tables | ←/A and →/D or LB/RB operate separate flippers; hold/release Space/controller A to launch, hold during play for both flippers; Shift/X nudges |
 | **Seifenstern** | Tilt floating paths beneath a soap bubble; balance over rainbow ribbons, inflate a foam bridge and reach the towel | WASD/arrows/stick tilt; hold Space/A/◎ to level and brake, or inflate the marked soap basin |
 | **Vulkanreise** | Miro's second world: a rocket from the tiny Startstern down to the hilly Festland, Damai the pug through desert and forest, a log ride down the river and over the waterfall, Glutzahn's crater | Platformer controls, steer the log left and right; stomp tired Glutzahn in three stages |
-| **Raketenritt** | Miro's third set of drawings: Mirio rides the rocket through an asteroid field past the Zischer to the Riesenstern, then climbs Krakel's three arms and its head | WASD/arrows/stick steer and climb; Space/A roll in the air, jump on Krakel; Shift/X shoots stars, whirls Zischer off and tickles |
+| **Raketenritt** | Miro's third set of drawings: on the rocket through rings, rock belts and Zischer to the Riesenstern, on foot round the star through meteor showers, then Krakel's fight on his three lumpy arms | Rocket: WASD/arrows/stick steer, Space/A roll, Shift/X shoot; on foot the platformer controls, C/B stamps |
 
 Flight and garden levels have a three-count start, checkpoint recoveries,
 keyboard/controller/touch controls and no game-over screen. Recovery adds a
@@ -158,25 +158,35 @@ are documented in `assets/README.md`.
   cap, no spots on the plant, a purple shell and an orange crest on Glutzahn,
   an orange spiky top.
 - **Raketenritt:** built from Miro's third set of drawings
-  (`js/star-rules.js`, `js/star-run.js`, `js/star-creatures.js`). Mirio sits
-  astride Miro's rocket and flies a 1.5 km lane through an asteroid field:
-  Shift / X / ✦ shoots little stars (a big asteroid takes three), Space / A
-  rolls through anything. Four times a wave of Zischer (the black one-eyed
-  rocket creatures) flies in ahead, weaves and throws sparks back; a star
-  chases one off. A bump costs +2 seconds. The Riesenstern, Miro's yellow
-  four-pointed star with his scribbled glow round it, grows ahead the whole
-  way; the rocket comes down on its face, where Krakel stands: the blue
-  monster, huge, its round head on three long lumpy arms. Mirio climbs each
-  arm from the claw: Krakel shudders, then shakes a wave down the arm (jump
-  it, or slide back down), and Zischer hover in the way (whirl them off with
-  Shift). At the shoulder a pink tickle spot glows; tickle it three or four
-  times and the arm curls up and flings Mirio to the next claw. After three
-  arms Krakel bows its head, and the last climb runs up over its face to the
-  top: five tickles and Krakel laughs and gives up the crystal. The rescue
-  button puts the rocket back at the last checkpoint, or Mirio at the claw of
-  his arm (+2 seconds). Krakel's face is Miro's ink lifted off the paper, the
-  Zischer's eye is cut out of the drawing, and the star's glow is his yellow
-  strokes alone; the asteroids, the lane and the crystal are our own.
+  (`js/star-rules.js` the flight, `js/star-level.js` the star,
+  `js/krakel-rules.js` the fight, `js/star-run.js` the scene,
+  `js/star-creatures.js` the figures). Mirio sits astride Miro's rocket and
+  flies a fast lane towards the Riesenstern: golden rings mark a line through
+  it, each one a burst of speed and one more in a chain; three rock belts wall
+  the lane off but for one gap with a ring in it; drifters swing across.
+  Shift / X / ✦ shoots little stars (a big rock takes three, a Zischer one),
+  Space / A rolls through anything, a bump costs +2 seconds and the chain.
+  The Riesenstern is Miro's yellow star made a planet: a round golden core
+  with four great points round its equator, his two dot eyes on the ground by
+  the pad where the rocket lands, and his scribbled yellow strokes as its
+  glow. From there Mirio goes on foot with the platformer's physics, south
+  round the star: gems, hills, Zischer to stomp or spin, two meteor showers
+  (each meteor shows where it lands), the Zackenwall to climb on steps or be
+  flung over by a spring flower, a floating island, crystal pillars, three
+  flags. Over the south pole a disc carries Krakel, Miro's blue monster: a
+  head the size of a house on three long lumpy arms. The arms are solid lumps
+  Mirio climbs. In each of three stages one arm glows at its elbow: climb it
+  and stamp on the glow (C / B / ⤓). Meanwhile Krakel spits ink blobs (each
+  lands where its mark is, and its splash sends a ring out to jump), and
+  while Mirio is on the glowing arm he shudders it and then shakes it: jump,
+  or be thrown off. Stage two brings Zischer, stage three a second blob. With
+  all three arms curled up the head comes down and hops round the disc after
+  Mirio, a ring at every landing; spring flowers grow so he can get up on it
+  while it sits dazed. Two stamps and Krakel gives up the crystal. A fence
+  keeps Mirio on the disc during the fight, and losing all hearts there puts
+  him back on its edge (+3 seconds). Krakel's face is Miro's ink lifted off
+  the paper, the Zischer's eye is cut out of the drawing, the star's glow is
+  his strokes alone; the rocks, rings, meteors, ink and crystal are our own.
 - **Seifenstern:** a bath-time world of soap paths over the bath water, soap
   bubbles drifting past. The stick tilts the whole world and gravity rolls the
   bubble; a steady camera watches from low behind. Broad bends reconnect with
@@ -296,7 +306,7 @@ three.js and loads `js/main.js`.
 | `js/ribbon-run.js`, `js/ribbon-rules.js` | Blütenpfad diorama and deterministic side-scroll physics |
 | `js/marble-run.js`, `js/marble-rules.js` | Pinball tables, flipper/ball physics and musical targets |
 | `js/tilt-run.js`, `js/tilt-rules.js`, `js/tilt-course.js` | Seifenstern scene, tilt physics and shared branching course |
-| `js/star-run.js`, `js/star-rules.js`, `js/star-creatures.js` | Raketenritt scene and camera, flight and climb rules, and Krakel, the Zischer and the Riesenstern from Miro's drawings |
+| `js/star-run.js`, `js/star-rules.js`, `js/star-level.js`, `js/krakel-rules.js`, `js/star-creatures.js` | Raketenritt scene and camera, flight rules, the star on foot, Krakel's fight, and Krakel, the Zischer and the Riesenstern from Miro's drawings |
 | `js/menu-navigation.js` | Controller focus, dialogs and settings navigation |
 | `api/times.php`, `api/times.inc` | Separate public time boards for every level |
 | `js/biplane-model.js` | The little plane Wolkenpost flies |
@@ -460,9 +470,11 @@ The playground update adds:
   rocket to the Festland, Damai, a ravine fall, a spring, the Glutbeere, the
   log ride over the waterfall and the fight starting.
 - `tests/mirio-star.test.mjs` (unit) and `tests/mirio-star-e2e.mjs`: the
-  asteroid field, shots and rolls, the Zischer, waves and whirls, tickles,
-  the rescue, the climbs matching Krakel's arms, a careful run to the finish
-  with its medal, and in the browser the flight, landing, climb and HUD.
+  lane (belt gaps, a clear ring line, bursts and chains, shots, bumps, rolls,
+  the rescue), Krakel's arms as a staircase with the glow in the open, stamps,
+  shudder and shake, ink and rings, the head stage, the star's flat arena and
+  its steps; in the browser the flight, the landing, Mirio on foot, and
+  climbing each glowing arm with the keyboard and stamping it.
 - `tests/mirio-damai.test.mjs`, `tests/mirio-river.test.mjs`: Damai's guide
   rules and the river ride's course and steering.
 - `tests/mirio-sky-post-e2e.mjs`: complete keyboard flight, all recipients,
